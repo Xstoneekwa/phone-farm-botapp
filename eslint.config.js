@@ -13,6 +13,7 @@ export default tseslint.config(
       ecmaVersion: 2022,
       globals: {
         __dirname: "readonly",
+        console: "readonly",
         process: "readonly",
         require: "readonly",
       },

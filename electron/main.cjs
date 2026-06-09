@@ -21,6 +21,10 @@ function createMainWindow() {
     },
   });
 
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    console.error("[BotApp] renderer load failed", { errorCode, errorDescription, validatedURL });
+  });
+
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
   });
@@ -41,10 +45,12 @@ function createMainWindow() {
     }
   });
 
+  const indexPath = path.join(__dirname, "../dist/index.html");
+
   if (isDev) {
     mainWindow.loadURL(devServerUrl);
   } else {
-    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    mainWindow.loadFile(indexPath);
   }
 }
 
