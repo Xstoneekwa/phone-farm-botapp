@@ -1,0 +1,37 @@
+{
+  "appId": "com.boostmybusinesses.botapp",
+  "productName": "BotApp",
+  "asar": true,
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "package.json",
+    "!**/.env",
+    "!**/.env.*",
+    "!**/*.log",
+    "!**/*.xml",
+    "!**/*.har",
+    "!**/logs/**",
+    "!**/raw-logs/**",
+    "!**/screenshots/**",
+    "!**/xml/**",
+    "!**/uploads/**",
+    "!**/runs/**",
+    "!**/instagram-worker-python/**",
+    "!**/phone-farm-worker/**",
+    "!**/supabase/**",
+    "!**/migrations/**"
+  ],
+  "mac": {
+    "category": "public.app-category.productivity",
+    "identity": null,
+    "target": [
+      {
+        "target": "dir"
+      }
+    ]
+  }
+}

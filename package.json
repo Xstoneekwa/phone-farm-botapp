@@ -4,26 +4,29 @@
   "private": true,
   "description": "Mock-first BotApp macOS desktop foundation for Phone Farm operations.",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "package:mac": "npm run build && electron-builder --mac --config electron-builder.json",
     "preview": "vite preview --host 127.0.0.1"
   },
-  "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
-    "react": "latest",
-    "react-dom": "latest"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@eslint/js": "latest",
+    "@vitejs/plugin-react": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "electron": "latest",
+    "electron-builder": "latest",
     "eslint": "latest",
     "eslint-plugin-react-hooks": "latest",
     "eslint-plugin-react-refresh": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
     "typescript-eslint": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "vite": "latest"
   }
 }

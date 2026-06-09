@@ -30,7 +30,10 @@ runs/
 *.dmg
 *.pkg
 *.app
+*.zip
+*.blockmap
 release/
+dist-electron/
 
 # Phone Farm source repos must not be embedded
 instagram-worker-python/
