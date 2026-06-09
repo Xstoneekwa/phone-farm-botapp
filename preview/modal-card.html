@@ -1,0 +1,62 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; background: var(--bg-canvas); font-family: var(--font-sans); padding: 16px; }
+  .card { background: white; border: 1px solid var(--border-subtle); border-radius: 10px; box-shadow: var(--shadow-md); overflow: hidden; }
+  .card-header { padding: 14px 16px 10px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: flex-start; justify-content: space-between; }
+  .card-eyebrow { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-secondary); margin-bottom: 2px; }
+  .card-title { font-size: 16px; font-weight: 600; color: var(--fg-primary); }
+  .card-desc { font-size: 12px; color: var(--fg-secondary); margin-top: 2px; }
+  .close-btn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border-default); background: white; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--fg-secondary); }
+  .card-body { padding: 14px 16px; }
+  /* Settings row */
+  .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { font-size: 13px; color: var(--fg-primary); }
+  .setting-value { font-size: 13px; font-family: var(--font-mono); color: var(--fg-secondary); }
+  .color-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .setting-right { display: flex; align-items: center; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="card" style="max-width:420px;">
+  <div class="card-header">
+    <div>
+      <div class="card-eyebrow">SYSTEM</div>
+      <div class="card-title">Appearance</div>
+      <div class="card-desc">Theme, colors, typography, and interface preferences.</div>
+    </div>
+    <div class="close-btn">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="card-eyebrow" style="margin-bottom:8px;">COLORS</div>
+    <div class="setting-row">
+      <span class="setting-label">Accent</span>
+      <div class="setting-right"><div class="color-dot" style="background:#6558F5;"></div><span class="setting-value">#6558F5</span></div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Background</span>
+      <div class="setting-right"><div class="color-dot" style="background:#F7F6F2;border:1px solid #E5E7EB;"></div><span class="setting-value">#F7F6F2</span></div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Sidebar</span>
+      <div class="setting-right"><div class="color-dot" style="background:#EBEBEE;border:1px solid #E5E7EB;"></div><span class="setting-value">#EBEBEE</span></div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Foreground</span>
+      <div class="setting-right"><div class="color-dot" style="background:#1F2328;"></div><span class="setting-value">#1F2328</span></div>
+    </div>
+    <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
+      <button style="font-size:12px;font-family:var(--font-sans);background:none;border:none;color:var(--fg-secondary);cursor:pointer;padding:0;">Reset to defaults</button>
+      <button style="font-size:13px;font-family:var(--font-sans);background:var(--accent);color:white;border:none;border-radius:6px;padding:6px 16px;cursor:pointer;font-weight:500;">Done</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

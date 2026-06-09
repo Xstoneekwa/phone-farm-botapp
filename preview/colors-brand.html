@@ -1,0 +1,49 @@
+<!-- @dsCard group="Colors" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; background: var(--bg-canvas); font-family: var(--font-sans); padding: 20px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .swatch { border-radius: 6px; overflow: hidden; box-shadow: var(--shadow-xs); flex: 1; min-width: 80px; }
+  .swatch-color { height: 52px; }
+  .swatch-info { background: white; padding: 8px 10px; }
+  .swatch-name { font-size: 11px; font-weight: 500; color: var(--fg-primary); }
+  .swatch-hex  { font-size: 10px; font-family: var(--font-mono); color: var(--fg-secondary); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="swatch">
+    <div class="swatch-color" style="background:#6558F5"></div>
+    <div class="swatch-info"><div class="swatch-name">Accent</div><div class="swatch-hex">#6558F5</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#5548E0"></div>
+    <div class="swatch-info"><div class="swatch-name">Accent Hover</div><div class="swatch-hex">#5548E0</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#EDE9FE"></div>
+    <div class="swatch-info"><div class="swatch-name">Accent Tint</div><div class="swatch-hex">#EDE9FE</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#F7F6F2; border: 1px solid #E5E7EB;"></div>
+    <div class="swatch-info"><div class="swatch-name">Canvas</div><div class="swatch-hex">#F7F6F2</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#EBEBEE; border: 1px solid #E5E7EB;"></div>
+    <div class="swatch-info"><div class="swatch-name">Sidebar</div><div class="swatch-hex">#EBEBEE</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#1F2328"></div>
+    <div class="swatch-info"><div class="swatch-name">Foreground</div><div class="swatch-hex">#1F2328</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#16181B"></div>
+    <div class="swatch-info"><div class="swatch-name">Rail</div><div class="swatch-hex">#16181B</div></div>
+  </div>
+</div>
+</body>
+</html>

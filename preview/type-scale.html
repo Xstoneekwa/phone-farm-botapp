@@ -1,0 +1,50 @@
+<!-- @dsCard group="Type" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; background: var(--bg-canvas); font-family: var(--font-sans); padding: 20px 24px; }
+  .row { display: flex; flex-direction: column; gap: 10px; }
+  .type-row { display: flex; align-items: baseline; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border-subtle); }
+  .type-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .meta { width: 140px; flex-shrink: 0; }
+  .meta-size { font-size: 10px; font-family: var(--font-mono); color: var(--fg-secondary); }
+  .meta-role { font-size: 10px; color: var(--fg-tertiary); margin-top: 1px; }
+  .sample { color: var(--fg-primary); }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="type-row">
+    <div class="meta"><div class="meta-size">20px / 600</div><div class="meta-role">Page title</div></div>
+    <div class="sample" style="font-size:20px;font-weight:600;letter-spacing:-0.02em;">API Gateway</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="meta-size">16px / 600</div><div class="meta-role">Section title</div></div>
+    <div class="sample" style="font-size:16px;font-weight:600;">Scoped API keys</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="meta-size">13px / 400</div><div class="meta-role">Body</div></div>
+    <div class="sample" style="font-size:13px;font-weight:400;color:var(--fg-primary);">Public access, scoped keys, webhooks, and audit for the stable external API.</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="meta-size">13px / 400</div><div class="meta-role">Body secondary</div></div>
+    <div class="sample" style="font-size:13px;font-weight:400;color:var(--fg-secondary);">When the bot restarts, the tunnel comes back up automatically.</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="meta-size">13px / 500</div><div class="meta-role">Data / numeric</div></div>
+    <div class="sample" style="font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;">55 F · 7 UF · 130 L · 0 DM · 4 Stories</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="meta-size">12px / 400</div><div class="meta-role">Monospace / code</div></div>
+    <div class="sample" style="font-size:12px;font-family:var(--font-mono);background:var(--bg-code);color:var(--bg-code-text);padding:4px 8px;border-radius:4px;display:inline;">https://mac2.bots.propulseachieve.com/v1</div>
+  </div>
+  <div class="type-row">
+    <div class="meta"><div class="meta-size">10px / 500</div><div class="meta-role">Section label</div></div>
+    <div class="sample" style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--fg-secondary);">API CONNECTION</div>
+  </div>
+</div>
+</body>
+</html>

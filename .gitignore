@@ -1,0 +1,39 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+.DS_Store
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.mobileprovision
+
+# Runtime artifacts never shipped with the app
+logs/
+raw-logs/
+screenshots/
+xml/
+uploads/
+runs/
+*.log
+*.xml
+*.har
+
+# Local packaging artifacts
+*.dmg
+*.pkg
+*.app
+release/
+
+# Phone Farm source repos must not be embedded
+instagram-worker-python/
+phone-farm-worker/
+supabase/
+migrations/

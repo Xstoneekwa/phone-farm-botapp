@@ -1,0 +1,124 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #F7F7F6; font-family: "Inter", system-ui, sans-serif; padding: 16px; display: flex; gap: 16px; }
+
+  /* Sidebar */
+  .sidebar { width: 200px; background: #111213; border-radius: 10px; padding: 10px 0; overflow: hidden; flex-shrink: 0; }
+  .brand-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 6px; }
+  .brand-icon { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg,#F58529,#DD2A7B,#6558F5); flex-shrink: 0; }
+  .brand-text { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+  .brand-sub  { font-size: 9px; color: #3A4050; }
+  .live-dot   { width: 6px; height: 6px; border-radius: 50%; background: #22C55E; margin-left: auto; box-shadow: 0 0 0 2px rgba(34,197,94,0.2); }
+
+  .group-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: #3A4050; padding: 6px 12px 3px; }
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 5px 6px; margin: 1px 6px; border-radius: 5px; font-size: 12px; color: #7A8090; cursor: pointer; }
+  .nav-item.active { background: rgba(255,255,255,0.11); color: #fff; }
+  .nav-item svg { flex-shrink: 0; }
+  .nav-badge { margin-left: auto; background: rgba(255,255,255,0.15); color: #fff; font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 8px; }
+
+  .stats-strip { border-top: 1px solid rgba(255,255,255,0.06); margin-top: 8px; padding: 8px 12px 4px; display: flex; gap: 0; }
+  .stat { flex: 1; text-align: center; }
+  .stat-val { font-size: 12px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat-lbl { font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em; color: #3A4050; margin-top: 2px; }
+  .operator-row { display: flex; align-items: center; gap: 7px; padding: 5px 4px; margin: 4px 8px 0; border-radius: 5px; }
+  .op-avatar { width: 20px; height: 20px; border-radius: 50%; background: #6558F5; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 9px; font-weight: 600; flex-shrink: 0; }
+  .op-name { font-size: 11px; color: #C8CDD8; font-weight: 500; }
+  .op-role { font-size: 9px; color: #3A4050; }
+
+  /* Top bar */
+  .topbar { background: #fff; border: 1px solid #E6E6E4; border-radius: 6px; display: flex; align-items: center; gap: 8px; padding: 5px 10px; margin-bottom: 8px; }
+  .breadcrumb { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #9EA3B0; flex: 1; }
+  .breadcrumb span.current { color: #0F1117; font-weight: 500; }
+  .search-btn { display: flex; align-items: center; gap: 6px; background: #F7F7F6; border: 1px solid #E6E6E4; border-radius: 5px; padding: 3px 8px; font-size: 11px; color: #9EA3B0; cursor: pointer; }
+  kbd { font-size: 9px; background: #ECECEB; border: 1px solid #E6E6E4; border-radius: 3px; padding: 1px 4px; font-family: inherit; }
+</style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="brand-row">
+      <div class="brand-icon"></div>
+      <div>
+        <div class="brand-text">BotApp</div>
+        <div class="brand-sub">Phone Farm OS</div>
+      </div>
+      <div class="live-dot"></div>
+    </div>
+
+    <!-- No group -->
+    <div class="nav-item active">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Overview
+    </div>
+
+    <div class="group-label">Operations</div>
+    <div class="nav-item">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Profiles <span class="nav-badge">202</span>
+    </div>
+    <div class="nav-item">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg>
+      Devices <span class="nav-badge">43</span>
+    </div>
+    <div class="nav-item">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      Targets
+    </div>
+    <div class="nav-item">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      DM Templates
+    </div>
+
+    <div class="group-label">Monitoring</div>
+    <div class="nav-item">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1" fill="currentColor"/><circle cx="3" cy="12" r="1" fill="currentColor"/><circle cx="3" cy="18" r="1" fill="currentColor"/></svg>
+      Activity Log
+    </div>
+    <div class="nav-item">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Notifications <span class="nav-badge" style="background:#DC2626">4</span>
+    </div>
+
+    <div class="group-label">Admin</div>
+    <div class="nav-item">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      API / Webhooks
+    </div>
+    <div class="nav-item">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </div>
+
+    <div class="stats-strip">
+      <div class="stat"><div class="stat-val" style="color:#22C55E">187</div><div class="stat-lbl">Profiles</div></div>
+      <div class="stat"><div class="stat-val" style="color:#6558F5">41</div><div class="stat-lbl">Devices</div></div>
+      <div class="stat"><div class="stat-val" style="color:#F87171">3</div><div class="stat-lbl">Incidents</div></div>
+    </div>
+    <div class="operator-row">
+      <div class="op-avatar">D</div>
+      <div><div class="op-name">Default</div><div class="op-role">Operator</div></div>
+    </div>
+  </div>
+
+  <!-- Right: topbar preview -->
+  <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;">
+    <div class="topbar">
+      <div class="breadcrumb">BotApp <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg> <span class="current">Overview</span></div>
+      <div class="search-btn">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Quick search…<kbd>⌘K</kbd>
+      </div>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5C6070" stroke-width="1.75" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    </div>
+    <div style="font-size:10px;color:#9EA3B0;line-height:1.6;padding:0 2px;">
+      <b style="color:#0F1117">v2 sidebar</b> — 220px, dark, grouped nav with section labels, counters, live status dot and operator strip at bottom.<br>
+      <b style="color:#0F1117">Top bar</b> — breadcrumb + ⌘K search palette + notification bell.
+    </div>
+  </div>
+</body>
+</html>

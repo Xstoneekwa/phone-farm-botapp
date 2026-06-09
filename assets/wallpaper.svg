@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900">
+  <defs>
+    <filter id="blur1" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="80"></feGaussianBlur>
+    </filter>
+    <filter id="blur2" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="100"></feGaussianBlur>
+    </filter>
+    <filter id="blur3" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="70"></feGaussianBlur>
+    </filter>
+  </defs>
+  
+  <rect width="1440" height="900" fill="#F7F6F2"></rect>
+  
+  <ellipse cx="960" cy="180" rx="380" ry="260" fill="#F2C4CE" opacity="0.55" filter="url(#blur1)" transform="rotate(-15 960 180)"></ellipse>
+  
+  <ellipse cx="280" cy="680" rx="340" ry="220" fill="#A8D5C2" opacity="0.45" filter="url(#blur2)" transform="rotate(20 280 680)"></ellipse>
+  
+  <ellipse cx="200" cy="240" rx="280" ry="200" fill="#C4B8F0" opacity="0.40" filter="url(#blur1)" transform="rotate(-25 200 240)"></ellipse>
+  
+  <ellipse cx="1220" cy="720" rx="300" ry="200" fill="#D4E8A0" opacity="0.38" filter="url(#blur3)" transform="rotate(10 1220 720)"></ellipse>
+  
+  <ellipse cx="700" cy="500" rx="260" ry="180" fill="#F5D8C0" opacity="0.30" filter="url(#blur2)" transform="rotate(5 700 500)"></ellipse>
+  
+  <ellipse cx="1360" cy="120" rx="220" ry="180" fill="#B8D4F0" opacity="0.35" filter="url(#blur1)" transform="rotate(-30 1360 120)"></ellipse>
+</svg>

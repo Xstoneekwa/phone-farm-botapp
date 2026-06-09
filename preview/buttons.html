@@ -1,0 +1,50 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; background: var(--bg-canvas); font-family: var(--font-sans); padding: 20px 24px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sep { width: 1px; height: 28px; background: var(--border-default); }
+  /* Primary button */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; font-family: var(--font-sans); line-height: 1; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-secondary { background: white; color: var(--fg-primary); border: 1px solid var(--border-default); }
+  .btn-ghost { background: transparent; color: var(--fg-primary); border: 1px solid var(--border-default); }
+  .btn-danger { background: white; color: #EF4444; border: 1px solid #FECACA; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 5px; }
+  .btn-icon { padding: 5px; border-radius: 5px; background: transparent; border: 1px solid var(--border-default); color: var(--fg-secondary); width: 28px; height: 28px; justify-content: center; }
+  /* Toggle */
+  .toggle-wrap { display: flex; align-items: center; gap: 8px; }
+  .toggle { width: 34px; height: 20px; border-radius: 10px; position: relative; cursor: pointer; }
+  .toggle-on { background: var(--accent); }
+  .toggle-off { background: #D1D5DB; }
+  .toggle-thumb { position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: left 0.15s; }
+  .toggle-on .toggle-thumb { left: 16px; }
+  .toggle-off .toggle-thumb { left: 2px; }
+  .toggle-label { font-size: 13px; color: var(--fg-primary); }
+</style>
+</head>
+<body>
+<div class="row">
+  <button class="btn btn-primary">+ API key</button>
+  <button class="btn btn-primary btn-sm">+ Add</button>
+  <button class="btn btn-secondary">Save webhook</button>
+  <button class="btn btn-secondary btn-sm">View logs</button>
+  <button class="btn btn-ghost btn-sm">Copy URL</button>
+  <button class="btn btn-danger btn-sm">Stop</button>
+  <button class="btn btn-danger btn-sm">Disconnect &amp; delete</button>
+  <div class="sep"></div>
+  <div class="toggle-wrap">
+    <div class="toggle toggle-on"><div class="toggle-thumb"></div></div>
+    <span class="toggle-label">Auto-start tunnel</span>
+  </div>
+  <div class="toggle-wrap">
+    <div class="toggle toggle-off"><div class="toggle-thumb"></div></div>
+    <span class="toggle-label" style="color:var(--fg-secondary)">WarmUp</span>
+  </div>
+</div>
+</body>
+</html>

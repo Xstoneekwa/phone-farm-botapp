@@ -1,0 +1,344 @@
+/**
+ * BotApp Design System — Design Tokens
+ * Boost My Businesses · BotApp macOS
+ *
+ * Usage: import this file first, then reference vars throughout your CSS.
+ * Actual app uses system-ui / SF Pro; for web prototypes use DM Sans (Google Fonts).
+ */
+
+/* ─── GOOGLE FONTS ───────────────────────────────────────────────────────────
+   v1 UI Kit  → DM Sans + DM Mono  (SF Pro substitute)
+   v2 UI Kit  → Inter + JetBrains Mono  (primary dashboard font)
+   Both sets loaded so either kit works standalone.
+──────────────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+
+  /* ══════════════════════════════════════════
+     BRAND COLORS
+  ══════════════════════════════════════════ */
+
+  --accent:           #6558F5;   /* Primary purple-blue accent */
+  --accent-hover:     #5548E0;   /* Hover/pressed accent */
+  --accent-active:    #4438D0;   /* Active/focus accent */
+  --accent-tint:      #EDE9FE;   /* Light accent bg (tinted surfaces) */
+  --accent-muted:     #A89FF8;   /* Muted/disabled accent text */
+
+
+  /* ══════════════════════════════════════════
+     BACKGROUND SYSTEM (MacOS Light — default theme)
+  ══════════════════════════════════════════ */
+
+  --bg-canvas:        #F7F6F2;   /* App canvas — warm cream/off-white */
+  --bg-surface:       #FFFFFF;   /* Cards, modals, popovers */
+  --bg-input:         #F0F0EB;   /* Inline text input backgrounds */
+  --bg-hover:         rgba(0,0,0,0.035); /* Row/item hover tint */
+  --bg-selected:      rgba(101,88,245,0.06); /* Selected row tint */
+
+  /* Nav rail (always dark, independent of theme) */
+  --bg-rail:          #16181B;   /* Dark nav rail background */
+  --bg-rail-hover:    rgba(255,255,255,0.08);
+  --bg-rail-active:   rgba(255,255,255,0.12);
+
+  /* Secondary sidebar panel */
+  --bg-sidebar:       #EBEBEE;   /* Light sidebar panel bg */
+
+  /* Code blocks */
+  --bg-code:          #1A1A2E;   /* Dark code block */
+  --bg-code-text:     #E2E8F0;   /* Code block text color */
+
+
+  /* ══════════════════════════════════════════
+     TEXT / FOREGROUND
+  ══════════════════════════════════════════ */
+
+  --fg-primary:       #1F2328;   /* Main body text */
+  --fg-secondary:     #6B7280;   /* Secondary / muted text */
+  --fg-tertiary:      #9CA3AF;   /* Placeholder / disabled text */
+  --fg-on-accent:     #FFFFFF;   /* Text on accent-colored backgrounds */
+  --fg-on-dark:       #FFFFFF;   /* Text on dark backgrounds */
+  --fg-on-code:       #E2E8F0;   /* Text inside code blocks */
+  --fg-link:          #6558F5;   /* Link / clickable text */
+
+
+  /* ══════════════════════════════════════════
+     BORDERS & DIVIDERS
+  ══════════════════════════════════════════ */
+
+  --border-subtle:    #ECECEC;   /* Very subtle dividers */
+  --border-default:   #E5E7EB;   /* Standard borders */
+  --border-strong:    #D1D5DB;   /* Emphasized borders */
+  --border-focus:     #6558F5;   /* Focus ring */
+
+
+  /* ══════════════════════════════════════════
+     STATUS COLORS
+  ══════════════════════════════════════════ */
+
+  /* Success / Connected / Active / Running */
+  --green:            #16A34A;
+  --green-bg:         #DCFCE7;
+  --green-text:       #166534;
+  --green-dot:        #22C55E;   /* Status indicator dot */
+
+  /* Error / Disconnected */
+  --red:              #EF4444;
+  --red-bg:           #FEE2E2;
+  --red-text:         #991B1B;
+  --red-dot:          #F87171;
+
+  /* Warning / Empty / Unknown */
+  --amber:            #D97706;
+  --amber-bg:         #FEF3C7;
+  --amber-text:       #92400E;
+
+  /* Info / Growth / Change (+N) */
+  --teal:             #0D9488;
+  --teal-bg:          #CCFBF1;
+  --teal-text:        #134E4A;
+
+  /* Neutral / Zero / No change */
+  --neutral-badge-bg:   #F3F4F6;
+  --neutral-badge-text: #6B7280;
+
+
+  /* ══════════════════════════════════════════
+     SEMANTIC ALIASES
+  ══════════════════════════════════════════ */
+
+  --color-primary:    var(--accent);
+  --color-success:    var(--green);
+  --color-error:      var(--red);
+  --color-warning:    var(--amber);
+  --color-info:       var(--teal);
+
+
+  /* ══════════════════════════════════════════
+     TYPOGRAPHY
+  ══════════════════════════════════════════ */
+
+  /* Font families */
+  /* v1 UI Kit — DM Sans (SF Pro substitute) */
+  --font-sans:        "DM Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-system:      system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:        "DM Mono", "SF Mono", Menlo, Monaco, "Cascadia Code", monospace;
+
+  /* v2 UI Kit — Inter + JetBrains Mono (dashboard) */
+  --font-inter:       "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-jbmono:      "JetBrains Mono", "SF Mono", Menlo, Monaco, monospace;
+
+  /* Font sizes */
+  --text-2xs:         10px;   /* Section labels (ALL CAPS) */
+  --text-xs:          11px;   /* Badge text, footnotes */
+  --text-sm:          12px;   /* Code, IDs, compact labels */
+  --text-base:        13px;   /* Body text — default */
+  --text-md:          14px;   /* Slightly larger body */
+  --text-lg:          16px;   /* Subheadings */
+  --text-xl:          18px;   /* Page titles */
+  --text-2xl:         20px;   /* Modal titles */
+  --text-3xl:         24px;   /* Large headings */
+
+  /* Font weights */
+  --weight-light:     300;
+  --weight-regular:   400;
+  --weight-medium:    500;
+  --weight-semibold:  600;
+  --weight-bold:      700;
+
+  /* Line heights */
+  --leading-none:     1;
+  --leading-tight:    1.2;
+  --leading-snug:     1.3;
+  --leading-normal:   1.4;
+  --leading-relaxed:  1.6;
+
+  /* Letter spacing */
+  --tracking-tighter: -0.02em;
+  --tracking-normal:  0em;
+  --tracking-wide:    0.04em;   /* Section labels */
+  --tracking-wider:   0.06em;   /* ALL CAPS labels */
+
+
+  /* ══════════════════════════════════════════
+     SPACING SCALE
+  ══════════════════════════════════════════ */
+
+  --space-0:   0px;
+  --space-px:  1px;
+  --space-0h:  2px;
+  --space-1:   4px;
+  --space-1h:  6px;
+  --space-2:   8px;
+  --space-2h:  10px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-7:   28px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-16:  64px;
+
+
+  /* ══════════════════════════════════════════
+     BORDER RADIUS
+  ══════════════════════════════════════════ */
+
+  --radius-xs:    3px;    /* Inline tags, tiny chips */
+  --radius-sm:    4px;    /* Small inputs, tags */
+  --radius-md:    6px;    /* Buttons, medium elements */
+  --radius-lg:    8px;    /* Cards, panels */
+  --radius-xl:    10px;   /* Large cards */
+  --radius-2xl:   12px;   /* Modals */
+  --radius-full:  9999px; /* Fully rounded pills */
+
+
+  /* ══════════════════════════════════════════
+     SHADOWS
+  ══════════════════════════════════════════ */
+
+  --shadow-xs:    0 1px 2px rgba(0,0,0,0.05);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:    0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05);
+  --shadow-lg:    0 8px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+  --shadow-modal: 0 16px 48px rgba(0,0,0,0.14), 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.06);
+
+
+  /* ══════════════════════════════════════════
+     TRANSITIONS
+  ══════════════════════════════════════════ */
+
+  --transition-fast:   80ms ease;
+  --transition-base:   150ms ease;
+  --transition-slow:   250ms ease;
+  --transition-modal:  200ms cubic-bezier(0.16, 1, 0.3, 1);
+
+
+  /* ══════════════════════════════════════════
+     LAYOUT CONSTANTS
+  ══════════════════════════════════════════ */
+
+  --nav-rail-width:    36px;    /* Dark icon-only nav rail */
+  --sidebar-width:     220px;   /* Secondary sidebar panel */
+  --row-height:        40px;    /* Table row height */
+  --header-height:     48px;    /* Page header height */
+  --modal-width:       640px;   /* Default modal width */
+
+  /* Z-index layers */
+  --z-dropdown:   100;
+  --z-sticky:     200;
+  --z-modal-bg:   300;
+  --z-modal:      400;
+  --z-toast:      500;
+}
+
+
+/* ──────────────────────────────────────────
+   SEMANTIC TYPOGRAPHY CLASSES
+────────────────────────────────────────── */
+
+.t-page-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  color: var(--fg-primary);
+  letter-spacing: var(--tracking-tighter);
+}
+
+.t-section-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-none);
+  color: var(--fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+}
+
+.t-body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
+  color: var(--fg-primary);
+}
+
+.t-body-secondary {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
+  color: var(--fg-secondary);
+}
+
+.t-data {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-primary);
+}
+
+.t-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  color: var(--fg-on-code);
+  background: var(--bg-code);
+  padding: var(--space-0h) var(--space-1h);
+  border-radius: var(--radius-xs);
+}
+
+.t-badge {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-none);
+}
+
+.t-description {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-relaxed);
+  color: var(--fg-secondary);
+}
+
+
+/* ──────────────────────────────────────────
+   MacOS DARK THEME OVERRIDES
+────────────────────────────────────────── */
+
+[data-theme="dark"] {
+  --bg-canvas:        #0F1012;
+  --bg-surface:       #1A1B1E;
+  --bg-input:         #252629;
+  --bg-sidebar:       #141517;
+  --bg-hover:         rgba(255,255,255,0.05);
+  --bg-selected:      rgba(101,88,245,0.15);
+
+  --fg-primary:       #F0F0EE;
+  --fg-secondary:     #8A8F98;
+  --fg-tertiary:      #5A5F68;
+
+  --border-subtle:    rgba(255,255,255,0.06);
+  --border-default:   rgba(255,255,255,0.10);
+  --border-strong:    rgba(255,255,255,0.16);
+}
+
+
+/* ──────────────────────────────────────────
+   LEGACY THEME OVERRIDES
+────────────────────────────────────────── */
+
+[data-theme="legacy"] {
+  --accent:           #6558F5;
+  --bg-canvas:        #B8C4D0;   /* Blue-grey canvas */
+  --bg-surface:       #D8E0E8;
+  --fg-primary:       #1A2030;
+  --color-info:       #0D9488;   /* Teal accent in Legacy */
+}

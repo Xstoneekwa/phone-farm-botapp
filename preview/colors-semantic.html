@@ -1,0 +1,64 @@
+<!-- @dsCard group="Colors" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; background: var(--bg-canvas); font-family: var(--font-sans); padding: 20px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 110px; }
+  .swatch { border-radius: 6px; overflow: hidden; box-shadow: var(--shadow-xs); }
+  .swatch-color { height: 40px; display: flex; align-items: center; padding: 0 10px; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 9999px; font-size: 11px; font-weight: 500; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .swatch-info { background: white; padding: 6px 10px; }
+  .swatch-name { font-size: 11px; font-weight: 500; color: var(--fg-primary); }
+  .swatch-hex  { font-size: 10px; font-family: var(--font-mono); color: var(--fg-secondary); }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="group">
+    <div class="swatch">
+      <div class="swatch-color" style="background:#DCFCE7;">
+        <span class="pill" style="background:#DCFCE7;color:#166534;border:1px solid #bbf7d0"><span class="dot" style="background:#22C55E"></span>Connected</span>
+      </div>
+      <div class="swatch-info"><div class="swatch-name">Success</div><div class="swatch-hex">#16A34A · bg #DCFCE7</div></div>
+    </div>
+  </div>
+  <div class="group">
+    <div class="swatch">
+      <div class="swatch-color" style="background:#FEE2E2;">
+        <span class="pill" style="background:#FEE2E2;color:#991B1B;border:1px solid #fecaca"><span class="dot" style="background:#F87171"></span>Disconnected</span>
+      </div>
+      <div class="swatch-info"><div class="swatch-name">Error</div><div class="swatch-hex">#EF4444 · bg #FEE2E2</div></div>
+    </div>
+  </div>
+  <div class="group">
+    <div class="swatch">
+      <div class="swatch-color" style="background:#FEF3C7;">
+        <span class="pill" style="background:#FEF3C7;color:#92400E;border:1px solid #fde68a">Empty</span>
+      </div>
+      <div class="swatch-info"><div class="swatch-name">Warning</div><div class="swatch-hex">#D97706 · bg #FEF3C7</div></div>
+    </div>
+  </div>
+  <div class="group">
+    <div class="swatch">
+      <div class="swatch-color" style="background:#CCFBF1;">
+        <span class="pill" style="background:#CCFBF1;color:#134E4A;border:1px solid #99f6e4">+54 ↑</span>
+      </div>
+      <div class="swatch-info"><div class="swatch-name">Growth</div><div class="swatch-hex">#0D9488 · bg #CCFBF1</div></div>
+    </div>
+  </div>
+  <div class="group">
+    <div class="swatch">
+      <div class="swatch-color" style="background:#F3F4F6;">
+        <span class="pill" style="background:#F3F4F6;color:#6B7280;border:1px solid #E5E7EB">0</span>
+      </div>
+      <div class="swatch-info"><div class="swatch-name">Neutral</div><div class="swatch-hex">#6B7280 · bg #F3F4F6</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

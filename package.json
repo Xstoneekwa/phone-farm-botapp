@@ -1,0 +1,29 @@
+{
+  "name": "botapp-mac-foundation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mock-first BotApp macOS desktop foundation for Phone Farm operations.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "typescript-eslint": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}

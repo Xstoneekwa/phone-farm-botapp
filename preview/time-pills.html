@@ -1,0 +1,27 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; background: var(--bg-canvas); font-family: var(--font-sans); padding: 20px 24px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 9999px; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; white-space: nowrap; }
+  .dark { background: #1F2328; color: #FFFFFF; }
+  .slot-label { font-size: 10px; color: var(--fg-secondary); text-align: center; margin-top: 4px; }
+  .item { display: flex; flex-direction: column; align-items: center; }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="item"><span class="pill dark">00:00–04:00</span><div class="slot-label">Night</div></div>
+  <div class="item"><span class="pill dark">04:00–08:00</span><div class="slot-label">Early AM</div></div>
+  <div class="item"><span class="pill dark">08:00–11:00</span><div class="slot-label">Morning</div></div>
+  <div class="item"><span class="pill dark">11:00–14:00</span><div class="slot-label">Midday</div></div>
+  <div class="item"><span class="pill dark">14:00–17:00</span><div class="slot-label">Afternoon</div></div>
+  <div class="item"><span class="pill dark">17:00–20:00</span><div class="slot-label">Evening</div></div>
+  <div class="item"><span class="pill dark">20:00–00:00</span><div class="slot-label">Night</div></div>
+</div>
+</body>
+</html>

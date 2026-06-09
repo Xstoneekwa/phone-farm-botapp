@@ -1,0 +1,74 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; background: var(--bg-canvas); font-family: var(--font-sans); padding: 16px 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+  .card { background: white; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
+  .device-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--fg-secondary); flex-shrink: 0; }
+  .device-body { flex: 1; min-width: 0; }
+  .device-name { font-size: 12px; font-weight: 600; color: var(--fg-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .device-id { font-size: 10px; font-family: var(--font-mono); color: var(--fg-secondary); }
+  .device-meta { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .profile-count { font-size: 10px; color: var(--fg-secondary); display: flex; align-items: center; gap: 3px; }
+  .status-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 9999px; font-size: 10px; font-weight: 500; }
+  .dot { width: 5px; height: 5px; border-radius: 50%; }
+  .refresh-btn { width: 20px; height: 20px; border-radius: 4px; border: 1px solid var(--border-subtle); background: white; display: flex; align-items: center; justify-content: center; color: var(--fg-secondary); flex-shrink: 0; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="card">
+    <div class="device-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg></div>
+    <div class="device-body">
+      <div class="device-name">Phone 1</div>
+      <div class="device-id">R39M10F3EHW</div>
+      <div class="device-meta">
+        <span class="profile-count"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 6</span>
+        <span class="status-badge" style="background:#DCFCE7;color:#166534;"><span class="dot" style="background:#22C55E"></span>Connected</span>
+      </div>
+    </div>
+    <div class="refresh-btn"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+  </div>
+  <div class="card">
+    <div class="device-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg></div>
+    <div class="device-body">
+      <div class="device-name">Phone 2</div>
+      <div class="device-id">R39M207FC0E</div>
+      <div class="device-meta">
+        <span class="profile-count"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 5</span>
+        <span class="status-badge" style="background:#DCFCE7;color:#166534;"><span class="dot" style="background:#22C55E"></span>Connected</span>
+      </div>
+    </div>
+    <div class="refresh-btn"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+  </div>
+  <div class="card">
+    <div class="device-icon" style="color:#9CA3AF;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"><rect x="5" y="2" width="14" height="20" rx="2"/></svg></div>
+    <div class="device-body">
+      <div class="device-name" style="color:var(--fg-secondary);">INACTIVE</div>
+      <div class="device-id">tkduwoa6mnhakf9d</div>
+      <div class="device-meta">
+        <span class="profile-count">0</span>
+        <span class="status-badge" style="background:#FEE2E2;color:#991B1B;"><span class="dot" style="background:#F87171"></span>Disconnected</span>
+      </div>
+    </div>
+    <div class="refresh-btn"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+  </div>
+  <div class="card">
+    <div class="device-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg></div>
+    <div class="device-body">
+      <div class="device-name">Phone 3</div>
+      <div class="device-id">R39M20CCJZF</div>
+      <div class="device-meta">
+        <span class="profile-count"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 5</span>
+        <span class="status-badge" style="background:#DCFCE7;color:#166534;"><span class="dot" style="background:#22C55E"></span>Connected</span>
+      </div>
+    </div>
+    <div class="refresh-btn"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+  </div>
+</div>
+</body>
+</html>

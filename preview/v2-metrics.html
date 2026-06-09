@@ -1,0 +1,56 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #F7F7F6; font-family: "Inter", system-ui, sans-serif; padding: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; }
+  .card { background: #fff; border: 1px solid #E6E6E4; border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .card-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: #9EA3B0; display: flex; align-items: center; justify-content: space-between; }
+  .card-value { font-size: 24px; font-weight: 700; color: #0F1117; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .card-sub   { font-size: 10px; color: #9EA3B0; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="card">
+    <div class="card-label">Active Profiles
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6558F5" stroke-width="1.75" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </div>
+    <div class="card-value">187</div>
+    <div class="card-sub">of 202 total</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Devices Online
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0D9488" stroke-width="1.75" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg>
+    </div>
+    <div class="card-value" style="color:#0D9488">41</div>
+    <div class="card-sub">2 offline</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Runs Today
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.75" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    </div>
+    <div class="card-value" style="color:#2563EB">1,247</div>
+    <div class="card-sub">+124 vs yesterday</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Action Required
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </div>
+    <div class="card-value" style="color:#DC2626">3</div>
+    <div class="card-sub">2 high priority</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Avg Latency
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </div>
+    <div class="card-value" style="color:#D97706;font-size:20px">142ms</div>
+    <div class="card-sub">API p50</div>
+  </div>
+</div>
+</body>
+</html>

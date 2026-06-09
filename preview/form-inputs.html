@@ -1,0 +1,67 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; background: var(--bg-canvas); font-family: var(--font-sans); padding: 20px 24px; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field-label { font-size: 11px; font-weight: 500; color: var(--fg-secondary); }
+  input[type=text], input[type=password] { border: 1px solid var(--border-default); background: var(--bg-input); border-radius: 5px; padding: 6px 10px; font-size: 13px; font-family: var(--font-sans); color: var(--fg-primary); outline: none; width: 100%; box-sizing: border-box; }
+  input[type=text]:focus, input[type=password]:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
+  input[type=text]::placeholder, input[type=password]::placeholder { color: var(--fg-tertiary); }
+  .row { display: flex; gap: 10px; align-items: center; }
+  /* Toggle */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: white; border: 1px solid var(--border-subtle); border-radius: 6px; }
+  .toggle-label { font-size: 13px; color: var(--fg-primary); }
+  .toggle-desc { font-size: 11px; color: var(--fg-secondary); margin-top: 1px; }
+  .toggle { width: 34px; height: 20px; border-radius: 10px; position: relative; cursor: pointer; flex-shrink: 0; }
+  .toggle-on { background: var(--accent); }
+  .toggle-off { background: #D1D5DB; }
+  .toggle-thumb { position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .toggle-on .toggle-thumb { left: 16px; }
+  .toggle-off .toggle-thumb { left: 2px; }
+  /* Color input */
+  .color-row { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: white; border: 1px solid var(--border-subtle); border-radius: 6px; }
+  .color-swatch { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; }
+  .color-label { font-size: 13px; color: var(--fg-primary); flex: 1; }
+  .color-hex { font-size: 12px; font-family: var(--font-mono); color: var(--fg-secondary); }
+</style>
+</head>
+<body>
+<div class="row" style="align-items: flex-start;">
+  <div class="col" style="flex: 1;">
+    <div class="field">
+      <div class="field-label">RAPID API KEY</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" placeholder="Paste Instagram RapidAPI key" style="flex:1;"/>
+        <span style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:500;padding:3px 8px;border-radius:9999px;">Empty</span>
+      </div>
+    </div>
+    <div class="field">
+      <input type="text" placeholder="Add operator (e.g. George)" />
+    </div>
+    <div class="field">
+      <input type="password" value="P26C4/P34C3" />
+    </div>
+  </div>
+  <div class="col" style="flex: 1;">
+    <div class="toggle-row">
+      <div><div class="toggle-label">Auto-start tunnel on bot launch</div><div class="toggle-desc">Tunnel comes back up automatically on restart</div></div>
+      <div class="toggle toggle-on"><div class="toggle-thumb"></div></div>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-label">WarmUp</div><div class="toggle-desc">Set and adjust warmups for accounts</div></div>
+      <div class="toggle toggle-off"><div class="toggle-thumb"></div></div>
+    </div>
+    <div class="color-row">
+      <div class="color-swatch" style="background:#6558F5;"></div>
+      <span class="color-label">Accent</span>
+      <span class="color-hex">#6558F5</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
