@@ -6,8 +6,8 @@ This handoff captures the current implementation checkpoint for future developer
 
 - Repository: BotApp workspace root
 - Branch: `botapp-mac-foundation`
-- Mode: mock-first macOS app foundation
-- Current checkpoint: Profiles toolbar drawers and developer documentation
+- Mode: local-data macOS app foundation, prepared for future secure relay
+- Current checkpoint: Profiles actions, settings, drawers, and phone-level View complete
 - Backend posture: no real backend calls, no Supabase direct access, no worker/device mutations
 
 ## Completed In This Checkpoint
@@ -18,25 +18,29 @@ This handoff captures the current implementation checkpoint for future developer
 - Search across username, display name, package, phone, platform, and timeslot.
 - Instagram/TikTok platform marks.
 - Compact operator-focused row layout.
-- 12-button toolbar per profile:
+- Phone-level View button in each phone group header:
+  - opens the live phone mirror for the device serial;
+  - focuses the existing phone view if already open;
+  - shows Android-style green open indicators.
+- Profile toolbar per account:
   - Stats
   - Logs / History
   - Targets
   - Start
   - Auto Login
+  - Check Login
   - Stop
-  - View
   - Settings
   - Filters
   - Assign Now
   - Archive
   - Delete
 
-All dangerous operations are preview-only.
+All write/action operations are prepared for the future secure relay only.
 
 ### Add Profile Drawer
 
-- Six-step mock wizard for adding an Instagram profile.
+- Six-step local wizard for adding an Instagram profile.
 - Captures package/device/profile metadata in preview mode.
 - Does not submit credentials or create real backend records.
 
@@ -44,11 +48,11 @@ All dangerous operations are preview-only.
 
 - Session rows with follower/following stats.
 - Follow-back and like-back state exposed as clear enabled/off badges.
-- Existing table retained as mock historical stats.
+- Existing table retained as local historical stats.
 
 ### Logs / History Drawer
 
-- Mock-live console experience.
+- Local live-style console experience.
 - Structured log levels, phases, sources, action status, run/request IDs.
 - Auto-scroll pause/resume.
 - New logs indicator.
@@ -79,7 +83,7 @@ All dangerous operations are preview-only.
   - Last used
   - Added
   - Actions
-- Mock add single, bulk add, archive/delete selected, reset, restore, refresh.
+- Local add single, bulk add, archive/delete selected, reset, restore, refresh.
 - CSV/JSON export of visible filtered rows with redaction.
 - No horizontal table scroll.
 - Dark readable hover state fixed for all target rows.
@@ -91,6 +95,15 @@ All dangerous operations are preview-only.
 - Electron packaging works through `npm run package:mac`.
 - Packaged renderer uses relative Vite base to avoid black screen in Electron.
 - `release/` and `dist/` remain build artifacts and should not be committed.
+
+### Phone-Level View
+
+- `electron/device-view-manager.cjs` owns `scrcpy` processes in the Electron main process.
+- `electron/preload.cjs` exposes a narrow `botappDeviceViews` IPC bridge.
+- `src/desktop/device-views.ts` is the renderer wrapper for opening/focusing/listing phone views.
+- `BOTAPP_SCRCPY_PATH` can point to a custom `scrcpy` binary.
+- `BOTAPP_DEVICE_SERIAL_MAP` can map local fixture phones to dev serials.
+- Product code must not hardcode ADB serials; duplicate opens focus the existing phone view.
 
 ## Contracts To Preserve
 
@@ -141,9 +154,9 @@ All exports or potentially sensitive display strings should go through `src/secu
 
 ## Known Quirks
 
-- Some mock confirmation actions still trigger the global preview modal/toast behavior, which can close a drawer. This is pre-existing.
-- Global `src/views/Targets.tsx` is still a simpler mock route and is separate from the per-profile Targets drawer.
-- Richest target mock data is currently on `prof_002`; other profiles use fallback target rows.
+- Some confirmation actions still trigger the global preview modal/toast behavior, which can close a drawer. This is pre-existing.
+- Global `src/views/Targets.tsx` is still a simpler local route and is separate from the per-profile Targets drawer.
+- Richest target fixture data is currently on `prof_002`; other profiles use fallback target rows.
 - No unit tests have been added for target FBR/filter logic yet.
 
 ## Validation Checklist
@@ -163,16 +176,20 @@ Before any checkpoint commit:
   - Stats opens
   - Logs opens and exports safely
   - Targets opens, has no horizontal scroll, hover is readable, avatars/fallback render
+  - Auto Login progress and code popup paths render
+  - Check Login confirmation shows safe readiness status and payload only
 
 ## Next Work
 
 Recommended next milestone:
 
-1. Start / Stop parity with dashboard admin safety semantics.
-2. Inspect Settings drawer against admin/client contracts.
-3. Inspect Filters drawer against admin/client contracts.
-4. Add unit tests for target filtering, FBR/performance labels, and redacted exports.
-5. Define the future BotApp API relay contract.
+`Devices tab`
+
+Profiles toolbar/settings/drawers are complete for this checkpoint. For future real actions or Devices work, inspect `boost-ai-frontend` first and document admin role, enabled/disabled states, modals/drawers, endpoints/API/RPC/tables, payloads, validations, and backend effects. BotApp should replicate the operator UX, prepare future relay payloads, and keep execution preview-only until the secure BotApp relay is validated.
+
+Archive/Delete are now modeled from the admin lifecycle route: archive schedules Trash after 30 days, delete means move to Trash with restore available for 30 days, and permanent delete remains pending/disabled in the admin dashboard.
+
+Check Login / Readiness is modeled from the admin readiness route: admin audience, safe readiness/client status, `login_provisioning` future run type, idempotency key, and no Growth session start.
 
 ## Files Most Relevant To This Checkpoint
 
@@ -181,7 +198,14 @@ Recommended next milestone:
 - `src/views/profiles/drawers/StatsDrawer.tsx`
 - `src/views/profiles/drawers/LogsDrawer.tsx`
 - `src/views/profiles/drawers/TargetsDrawer.tsx`
+- `src/views/profiles/AutoLoginFlowModal.tsx`
+- `src/views/profiles/auto-login-flow.ts`
+- `src/views/profiles/assign-now-flow.ts`
+- `src/views/profiles/lifecycle-flow.ts`
+- `src/views/profiles/readiness-now-flow.ts`
 - `src/views/profiles/profiles.css`
+- `src/desktop/device-views.ts`
+- `electron/device-view-manager.cjs`
 - `src/api/types.ts`
 - `src/data/profile-mock-data.ts`
 - `src/security/redaction.ts`

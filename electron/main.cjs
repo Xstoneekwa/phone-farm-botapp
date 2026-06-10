@@ -1,5 +1,8 @@
+/* global setTimeout */
+
 const { app, BrowserWindow, shell } = require("electron");
 const path = require("node:path");
+const { closeAllDeviceViews, registerDeviceViewIpc, runDeviceViewSelfTest } = require("./device-view-manager.cjs");
 
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.BOTAPP_DEV_SERVER_URL || "http://127.0.0.1:5173";
@@ -55,7 +58,22 @@ function createMainWindow() {
 }
 
 app.whenReady().then(() => {
+  registerDeviceViewIpc();
   createMainWindow();
+
+  if (process.env.BOTAPP_DEVICE_VIEW_SELF_TEST) {
+    setTimeout(() => {
+      runDeviceViewSelfTest()
+        .catch((error) => {
+          console.error("[BotApp device-view self-test]", error);
+        })
+        .finally(() => {
+          if (process.env.BOTAPP_DEVICE_VIEW_SELF_TEST_QUIT !== "0") {
+            app.quit();
+          }
+        });
+    }, 1500);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -68,4 +86,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  closeAllDeviceViews();
 });

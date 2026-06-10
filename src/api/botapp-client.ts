@@ -12,7 +12,7 @@ export type BotAppRequestOptions = {
 };
 
 export const futureApiConventions = {
-  authHeader: "Secure auth header managed outside the renderer bundle",
+  credentialBoundary: "Relay credentials are managed outside the renderer bundle",
   idempotencyHeader: "X-Idempotency-Key",
   requestHeader: "X-Request-Id",
   attributionHeader: "X-External-User-Id",

@@ -2,7 +2,7 @@
 
 BotApp is the macOS operator application for the Phone Farm system at Boost My Businesses. It provides a dense desktop control surface for phones, Instagram/TikTok profiles, runtime state, logs, target accounts, settings, and safety-gated actions.
 
-The current checkpoint delivers a complete **Profiles** experience with local data only. Operator UI labels are product-ready; write actions prepare admin-backed payloads and do **not** call the real backend until a secure BotApp API relay is validated.
+The current checkpoint delivers the complete **Profiles** workspace with local data only. Operator UI labels are product-ready; write actions prepare admin-backed payloads and do **not** call the real backend until a secure BotApp API relay is validated.
 
 ## Product vision
 
@@ -21,13 +21,18 @@ The renderer must never receive secrets, service-role credentials, raw device ar
 Profiles foundation (branch `botapp-mac-foundation`):
 
 - Profiles grouped by phone/device with search and platform filters
+- Phone-level View mirror through Electron IPC and `scrcpy`
 - Icon-only sidebar with hover labels and counters
-- Dense 12-button profile toolbar
+- Complete profile toolbar: Stats, Logs, Targets, Start, Auto Login, Check Login, Stop, Settings, Filters, Assign Now, Archive, Delete
 - **Add Profile** — six-step wizard with admin create contract payload
 - **Stats** — follow-back / like-back columns, Save Stats
 - **Logs / History** — live console simulation, pause/resume, filters, redacted TXT/JSON export
 - **Targets** — admin parity: stats, filters, add/bulk, archive, reset, restore, CSV/JSON, safe avatars
 - **Start / Stop** — eligibility, confirmation modals, payload preview
+- **Auto Login** — progress popup and verification-code popup prepared for `login_provisioning`
+- **Assign Now** — current assignment candidate and future relay payload
+- **Archive / Delete** — 30-day admin lifecycle policy (`scheduled_trash_at`, `scheduled_delete_at`)
+- **Check Login / Readiness** — admin readiness contract prepared for future `login_provisioning` relay
 - **Settings** — General, Schedule, Follow, DM, Followback, Sources, **Filters**
 - **Filters parity** — toolbar Filters drawer and Settings > Filters share `FilterSettingsPanel`
 - UI wording cleanup — no visible “mock” in operator labels
@@ -92,6 +97,10 @@ Never add to BotApp:
 
 Use `redactText()` / `redactRecord()` for exports and runtime strings.
 
+## Phone View
+
+Phone-level View requires `scrcpy` on operator Macs. BotApp resolves it from `BOTAPP_SCRCPY_PATH` first, then the normal `PATH`. Development can map fixture phone ids to local devices with `BOTAPP_DEVICE_SERIAL_MAP` JSON. The product must not hardcode ADB serials; one phone opens one mirror window, duplicate opens focus the existing view, and cleanup happens when the window closes.
+
 ## Future sync model
 
 ```text
@@ -118,6 +127,6 @@ BotApp renderer
 | `docs/profile-drawers.md` | Profiles toolbar drawers |
 | `docs/security.md` | No-leak rules and validation |
 | `docs/roadmap.md` | Checkpoint status and roadmap |
-| `src/desktop/README.md` | macOS packaging notes |
+| `src/desktop/README.md` | macOS packaging and phone-view notes |
 | `HANDOFF.md` | Current state for the next agent |
 | `SKILL.md` | Agent operating instructions |

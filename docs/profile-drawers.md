@@ -8,7 +8,7 @@ File: `src/views/profiles/drawers/AddProfileDrawer.tsx`
 
 Current behavior:
 
-- Six-step mock wizard.
+- Six-step local wizard.
 - Collects profile/platform/package/device metadata for preview.
 - Does not write backend data.
 - Does not store or expose credentials.
@@ -25,7 +25,7 @@ File: `src/views/profiles/drawers/StatsDrawer.tsx`
 
 Current behavior:
 
-- Displays mock session stats.
+- Displays local fixture session stats.
 - Shows follower/following, follow/unfollow/like/comment/DM/watch counts.
 - Shows follow-back and like-back state as clear enabled/off badges.
 
@@ -40,7 +40,7 @@ File: `src/views/profiles/drawers/LogsDrawer.tsx`
 
 Current behavior:
 
-- Mock-live structured log console.
+- Local live-style structured log console.
 - Auto-scroll with pause/resume.
 - New log indicator.
 - Level, phase, and errors-only filters.
@@ -62,11 +62,11 @@ Current behavior:
 - Admin parity table for CT/target accounts.
 - Stats cards for total, valid/eligible, archived, pending/review, and rejected.
 - Search and list filters.
-- Mock add single target.
-- Mock bulk import.
-- Mock archive/delete selected.
-- Mock reset to pending verification.
-- Mock restore from archived state.
+- Local add single target.
+- Local bulk import.
+- Local archive/delete selected.
+- Local reset to pending verification.
+- Local restore from archived state.
 - Redacted CSV/JSON export.
 - Safe avatar display with fallback initials.
 - No horizontal table scroll.
@@ -87,9 +87,9 @@ File: `src/views/profiles/drawers/SettingsDrawer.tsx`
 
 Current behavior:
 
-- Existing mock drawer with tabs and profile settings preview.
-- Reads local mock settings.
-- Confirmation remains mock-only.
+- Existing drawer with tabs and profile settings preview.
+- Reads local settings fixtures.
+- Confirmation prepares a future relay payload.
 
 Future integration:
 
@@ -120,14 +120,26 @@ Future integration:
 
 ## Toolbar Actions
 
-Preview-only actions currently include:
+Phone-level action:
+
+- View — lives in each phone group header, opens or focuses the phone mirror for that device serial through Electron device-view IPC and `scrcpy`.
+
+Account toolbar actions currently include:
 
 - Start
-- Auto Login
+- Auto Login — prepares the admin `Connect`/`login_provisioning` contract, opens a confirmation modal, then shows a progress modal with redacted process logs and a verification-code challenge modal when required.
 - Stop
-- View
-- Assign Now
-- Archive
-- Delete
+- Assign Now — prepares the admin `assignments/now` contract, opens a single confirmation modal, and previews the current assignment candidate without starting a run.
+- Archive — prepares the admin account lifecycle `archive` contract, shows the 30-day scheduled Trash policy, and previews the future relay payload without mutating `ig_accounts`.
+- Delete — prepares the admin account lifecycle `trash` contract, explains restore availability for 30 days and the pending permanent-delete cleanup, and previews the future relay payload without mutating `ig_accounts`.
+- Check Login — prepares the admin `readiness/now` contract for `login_provisioning`, shows safe readiness/client status, and previews the future relay payload without starting a Growth session.
 
-Next parity target is Start / Stop. These actions require admin/dashboard contract inspection before implementation because they have runtime and safety implications.
+Each action requires dashboard admin contract inspection before implementation because these buttons have different states, modals, payloads, validations, and backend effects. BotApp must prepare future secure-relay payloads without executing real mutations.
+
+Auto Login uses reusable UI/data concepts that can move later to the client dashboard: progress steps, process-log entries, code challenges, code-submit payloads, and final status are modeled separately from the BotApp screen. The current desktop flow does not call Supabase, does not launch workers, and does not execute device actions; the real branch must go through a secure relay.
+
+Assign Now mirrors the admin dashboard's one-click assignment repair path: no slot picker, no progress modal, and no run start. The future relay must call the admin-equivalent assignment endpoint/RPC chain and return only safe status/message data.
+
+Archive/Delete mirror the admin dashboard's account lifecycle route: `archive` writes an archived state and `scheduled_trash_at = now + 30 days`; `trash` writes a trashed state and `scheduled_delete_at = now + 30 days`; `restore` clears lifecycle timestamps. The current admin dashboard stores and displays the 30-day timestamps but does not expose a working permanent-delete action or cleanup job yet.
+
+Check Login / Readiness mirrors the admin dashboard's `readiness/now` route. The current desktop flow prepares an admin-audience payload for a future secure relay, keeps `requested_run_type = "login_provisioning"`, and displays only safe status, reason, next action, assignment availability, and expected preflight behavior. It does not call Supabase, create account run requests, launch workers, or read phone/device internals from the renderer.

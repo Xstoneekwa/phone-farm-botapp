@@ -2,7 +2,7 @@
 
 ## Latest checkpoint
 
-**Message:** `feat(botapp): complete settings drawers and developer documentation`
+**Message:** `feat(botapp): complete profiles actions settings and device view checkpoint`
 
 **Branch:** `botapp-mac-foundation`
 
@@ -10,12 +10,17 @@
 
 - Profiles phone groups with simplified summary (`profiles · running|ready|idle`)
 - Sidebar icon-only layout
-- 12-button profile toolbar
+- Complete profile toolbar
 - Add Profile six-step wizard
 - Stats drawer with follow-back / like-back columns
 - Logs / History live console, pause/resume, redacted exports
 - Targets drawer admin parity (no horizontal scroll)
 - Start / Stop eligibility and payload preview
+- View phone-level live mirror via Electron + `scrcpy`
+- Auto Login confirmation, progress modal, and verification-code modal
+- Assign Now assignment candidate and payload preview
+- Archive / Delete lifecycle confirmations with 30-day scheduled Trash/Delete policy
+- Check Login / Readiness confirmation and `login_provisioning` relay payload
 - Settings tabs: General, Schedule, Follow, DM, Followback, Sources, **Filters**
 - **Filters parity:** toolbar Filters = Settings > Filters (`FilterSettingsPanel`)
 - UI wording cleanup (no visible “mock” in operator labels)
@@ -36,30 +41,31 @@
 - Add Profile submit
 - Stats / logs / targets persistence
 - Settings and Filters save
-- Start / Stop / Auto Login / Assign / Archive / Delete execution
+- Start / Stop / Auto Login / Assign / Archive / Delete / Check Login execution
 - Device runtime actions
 - Avatar relay and CT validation
 - Realtime WebSocket log stream
 
-## Next milestone: Devices tab
+## Next milestone
 
-Build the Devices screen with admin parity intent:
+Profiles toolbar/settings/drawers are now checkpoint-complete. The next large chantier is **Devices tab**.
 
-- phone list and detail
-- active session / lock state
-- clone slots and buffer windows
-- readiness indicators
-- preview-only actions until relay exists
+Required order from here:
 
-Inspect admin dashboard device views before coding.
+1. Devices tab
+2. Polish remaining top-level routes (Overview, global Targets, Settings)
+3. BotApp API relay — read-only profiles, stats, logs, targets
+4. Guarded write paths (settings, filters, targets, runs)
+5. Realtime events through relay
+6. Focused tests: filter validation, target export redaction, run-control payloads, avatar sanitizer
 
-## Then
+Future write/action implementation rules remain:
 
-1. Polish remaining top-level routes (Overview, global Targets, Settings)
-2. BotApp API relay — read-only profiles, stats, logs, targets
-3. Guarded write paths (settings, filters, targets, runs)
-4. Realtime events through relay
-5. Focused tests: filter validation, target export redaction, run-control payloads, avatar sanitizer
+- inspect `boost-ai-frontend` first for admin/client contract parity;
+- route real reads/writes only through a secure BotApp API relay;
+- keep service-role credentials, DB access, worker dispatch, and device internals server-side;
+- keep operator UI free of “mock”, “mock only”, and “no backend action” wording;
+- preserve redaction for exports, logs, payload previews, and verification-code flows.
 
 ## Long-term production goals
 

@@ -30,8 +30,8 @@ export type ProfileToolbarAction =
   | "targets"
   | "play"
   | "auto_login"
+  | "check_readiness"
   | "stop"
-  | "view"
   | "settings"
   | "filters"
   | "assign_now"
@@ -42,12 +42,27 @@ export type ProfileRequirementState = {
   enabled: boolean;
   reason:
     | "ready"
+    | "already_connected"
+    | "already_assigned"
+    | "login_already_running"
+    | "assignment_already_running"
     | "missing_credentials"
+    | "credentials_inactive"
+    | "password_needs_update"
+    | "needs_2fa"
+    | "checkpoint_required"
+    | "assignment_missing"
     | "assignment_window_closed"
+    | "schedule_gate_blocked"
+    | "app_instance_missing"
+    | "phone_rest_active"
+    | "profile_not_ready"
     | "device_unavailable"
     | "no_assignment_slot"
+    | "phone_unavailable"
     | "runtime_blocked"
     | "login_status_not_ready"
+    | "status_blocked"
     | "eligibility_blocked";
   label: string;
   detail: string;
@@ -106,6 +121,326 @@ export type BotAppStopRunPayload = {
   };
 };
 
+export type ProfileCredentialStatus = CredentialStatus;
+
+export type ProfileLoginStatus =
+  | "ready"
+  | "connected"
+  | "missing_credentials"
+  | "challenge_required"
+  | "needs_2fa"
+  | "checkpoint"
+  | "password_invalid"
+  | "logged_out"
+  | "unknown";
+
+export type ProfileDashboardActionState =
+  | "idle"
+  | "pending"
+  | "running"
+  | "code_required"
+  | "blocked"
+  | "complete"
+  | "failed";
+
+export type ProfileAutoLoginRequirement = ProfileRequirementState;
+
+export type ProfileAutoLoginPayload = {
+  account_id: string;
+  action_type: "connect_now";
+  requested_by: string | null;
+  source: "BotApp";
+  device_id: string;
+  idempotency_key: string;
+  reason: string;
+  metadata_safe: {
+    account_username: string;
+    platform: BotProfile["platform"];
+    device_label: string;
+    assignment_state: BotProfile["assignmentState"];
+    credential_status: ProfileCredentialStatus;
+    login_status: ProfileLoginStatus;
+    timeslot: string;
+  };
+};
+
+export type ProfileAutoLoginProgressStep = {
+  id: "templates" | "placement" | "provision" | "persist" | "sync";
+  label: string;
+  detail: string;
+  status: "done" | "running" | "pending" | "failed";
+};
+
+export type ProfileAutoLoginProcessLogEntry = {
+  id: string;
+  timestamp: string;
+  phase: "TEMPLATES" | "DEVICE" | "PROVISION" | "PERSIST" | "SYNC" | "CODE" | "DONE" | "ERROR";
+  message: string;
+};
+
+export type ProfileAutoLoginChallenge = {
+  challenge_id: string;
+  account_id: string;
+  account_username: string;
+  code_type: "2fa" | "sms" | "email" | "whatsapp" | "authenticator" | "checkpoint" | "confirmation";
+  title: string;
+  help_text: string;
+};
+
+export type ProfileAutoLoginCodePayload = {
+  account_id: string;
+  challenge_id: string;
+  code: string;
+  code_type: ProfileAutoLoginChallenge["code_type"];
+  source: "BotApp";
+  requested_by: string | null;
+  idempotency_key: string;
+};
+
+export type ProfileAutoLoginFinalStatus =
+  | "prepared"
+  | "running"
+  | "code_required"
+  | "completed"
+  | "blocked"
+  | "failed";
+
+export type ProfileAutoLoginState = {
+  profileId: string;
+  username: string;
+  platform: BotProfile["platform"];
+  deviceLabel: string;
+  globalStatus: ProfileAutoLoginFinalStatus;
+  payload: ProfileAutoLoginPayload;
+  steps: ProfileAutoLoginProgressStep[];
+  processLog: ProfileAutoLoginProcessLogEntry[];
+  challenge: ProfileAutoLoginChallenge | null;
+};
+
+export type ProfileReadinessNowAudience = "admin" | "client";
+
+export type ProfileReadinessNowStatus =
+  | "ready"
+  | "needs_credentials"
+  | "needs_login_verification"
+  | "waiting_scheduled_assignment"
+  | "capacity_unavailable"
+  | "retry_later"
+  | "checking_connection";
+
+export type ProfileReadinessNowClientStatus =
+  | "connected_ready"
+  | "checking_connection"
+  | "action_required_2fa"
+  | "action_required_checkpoint"
+  | "update_password"
+  | "capacity_unavailable"
+  | "waiting_next_slot"
+  | "try_again_later";
+
+export type ProfileReadinessNowProjection = {
+  audience: ProfileReadinessNowAudience;
+  readiness_status: ProfileReadinessNowStatus;
+  client_status: ProfileReadinessNowClientStatus;
+  client_message: string;
+  preflight_request_created: false;
+  expected_preflight_request: boolean;
+  idempotent: false;
+  next_action: string;
+  reason: string;
+  assignment_status: "ready" | "missing" | "waiting_scheduled_assignment" | "blocked";
+  phone_available: boolean | null;
+  app_instance_available: boolean | null;
+  run_request_status: "prepared" | "not_prepared";
+};
+
+export type ProfileReadinessNowPayload = {
+  account_id: string;
+  audience: ProfileReadinessNowAudience;
+  requested_by: string | null;
+  source: "BotApp";
+  source_surface: "botapp_profiles_toolbar";
+  requested_run_type: "login_provisioning";
+  priority: 0;
+  idempotency_key: string;
+  metadata_safe: {
+    account_username: string;
+    platform: BotProfile["platform"];
+    device_label: string;
+    assignment_state: BotProfile["assignmentState"];
+    credential_status: ProfileCredentialStatus;
+    login_status: ProfileLoginStatus;
+    readiness_status: BotProfile["readiness"];
+    timeslot: string;
+    expected_effect: "check_login_readiness_without_growth_session";
+  };
+};
+
+export type ProfileReadinessNowState = {
+  profileId: string;
+  projection: ProfileReadinessNowProjection;
+  payload: ProfileReadinessNowPayload;
+  result: "prepared";
+};
+
+export type ProfileAssignNowRequirement = ProfileRequirementState;
+
+export type ProfileAssignmentSlot = {
+  starts_at: string;
+  ends_at: string;
+  slot_kind: string;
+  slot_kind_label: string;
+  available: boolean;
+  reason: string | null;
+};
+
+export type ProfileAssignmentGate = {
+  ok: boolean;
+  reason: string;
+  label: string;
+  detail: string;
+};
+
+export type ProfileAssignmentCandidate = {
+  account_id: string;
+  account_username: string;
+  platform: BotProfile["platform"];
+  device_id: string;
+  device_label: string;
+  safe_device_serial: string;
+  app_instance_label: string;
+  clone_slot: string;
+  current_slot: ProfileAssignmentSlot | null;
+  candidate_slot: ProfileAssignmentSlot | null;
+  schedule_gate: ProfileAssignmentGate;
+  warnings: string[];
+};
+
+export type ProfileAssignNowPayload = {
+  account_id: string;
+  device_id: string;
+  app_instance_id: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  slot_kind: string | null;
+  runtime_profile: string;
+  requested_by: string | null;
+  source: "BotApp";
+  idempotency_key: string;
+  metadata_safe: {
+    account_username: string;
+    platform: BotProfile["platform"];
+    device_label: string;
+    safe_device_serial: string;
+    app_instance_label: string;
+    clone_slot: string;
+    current_slot: string;
+    candidate_slot: string;
+    schedule_gate_reason: string;
+    assignment_state: BotProfile["assignmentState"];
+  };
+};
+
+export type ProfileAssignmentResult =
+  | "prepared"
+  | "assigned_now"
+  | "assignment_repaired"
+  | "already_assigned"
+  | "capacity_unavailable"
+  | "not_ready"
+  | "active_run_exists"
+  | "active_request_exists";
+
+export type ProfileAssignNowState = {
+  profileId: string;
+  candidate: ProfileAssignmentCandidate;
+  payload: ProfileAssignNowPayload;
+  result: ProfileAssignmentResult;
+};
+
+export type ProfileLifecycleStatus = "active" | "archived" | "trashed" | "deleted";
+
+export type ProfileLifecycleAction = "archive" | "trash" | "restore" | "permanent_delete";
+
+export type ProfileLifecycleRetentionPolicy = {
+  retentionDays: 30;
+  archiveToTrashAfterDays: 30;
+  trashToPermanentDeleteAfterDays: 30;
+  restoreUntil: string | null;
+  scheduledTrashAt: string | null;
+  scheduledDeleteAt: string | null;
+  permanentDeleteImplemented: boolean;
+  trashStatus: "trashed";
+};
+
+export type ProfileArchivePayload = {
+  account_id: string;
+  action: "archive";
+  requested_by: string | null;
+  source: "BotApp";
+  reason: string;
+  idempotency_key: string;
+  metadata_safe: {
+    account_username: string;
+    platform: BotProfile["platform"];
+    current_status: ProfileLifecycleStatus;
+    device_label: string;
+    active_run_warning: boolean;
+    scheduled_trash_at: string;
+  };
+};
+
+export type ProfileDeletePayload = {
+  account_id: string;
+  action: "trash";
+  requested_by: string | null;
+  source: "BotApp";
+  reason: string;
+  restore_until: string;
+  delete_after: string;
+  idempotency_key: string;
+  metadata_safe: {
+    account_username: string;
+    platform: BotProfile["platform"];
+    current_status: ProfileLifecycleStatus;
+    device_label: string;
+    active_run_warning: boolean;
+    trash_status: "trashed";
+  };
+};
+
+export type ProfileRestorePayload = {
+  account_id: string;
+  action: "restore";
+  requested_by: string | null;
+  source: "BotApp";
+  idempotency_key: string;
+};
+
+export type ProfileLifecycleResult =
+  | "prepared"
+  | "archived"
+  | "trashed"
+  | "restored"
+  | "permanent_delete_pending"
+  | "blocked";
+
+export type ProfileArchiveState = {
+  profileId: string;
+  lifecycleStatus: ProfileLifecycleStatus;
+  retentionPolicy: ProfileLifecycleRetentionPolicy;
+  payload: ProfileArchivePayload;
+  result: ProfileLifecycleResult;
+};
+
+export type ProfileDeleteState = {
+  profileId: string;
+  lifecycleStatus: ProfileLifecycleStatus;
+  retentionPolicy: ProfileLifecycleRetentionPolicy;
+  payload: ProfileDeletePayload;
+  result: ProfileLifecycleResult;
+};
+
 export type ProfileCounters = {
   follow: { current: number; max: number };
   unfollow: { current: number; max: number };
@@ -134,7 +469,7 @@ export type BotProfile = {
   counters: ProfileCounters;
   twoFactorEnabled: boolean;
   credentialStatus: CredentialStatus;
-  loginStatus: "ready" | "missing_credentials" | "challenge_required" | "unknown";
+  loginStatus: ProfileLoginStatus;
   deviceAvailability: "available" | "reserved" | "offline" | "maintenance";
   assignmentState: "assigned" | "reserved" | "missing_slot" | "blocked";
   entitlements: string[];
@@ -154,7 +489,13 @@ export type DeviceProfileGroup = {
   deviceId: string;
   deviceLabel: string;
   deviceSerial: string;
+  deviceSerialLabel: string;
+  deviceStatus: DeviceStatus;
   phoneStatus: "active" | "inactive" | "idle" | "running";
+  deviceView: {
+    available: boolean;
+    unavailableReason: string | null;
+  };
   summary: { total: number; normal: number; dual: number; other: number };
   profiles: BotProfile[];
 };

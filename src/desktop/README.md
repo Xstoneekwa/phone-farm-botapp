@@ -17,6 +17,21 @@ This build is UI-first with **local fixture data**. It does not call Supabase, I
 
 Start, stop, settings save, targets mutations, and Add Profile prepare admin-backed payloads and show confirmation/toast feedback only. Real execution requires a future **secure BotApp API relay**.
 
+## Phone View / scrcpy
+
+The phone-level View action is the one desktop integration in this checkpoint. It opens a live mirror window for the selected phone through Electron main-process IPC and `scrcpy`.
+
+Runtime rules:
+
+- `scrcpy` must be installed on operator Macs.
+- `BOTAPP_SCRCPY_PATH=/absolute/path/to/scrcpy` overrides PATH resolution.
+- `BOTAPP_DEVICE_SERIAL_MAP='{"phone_01":"adb-serial"}'` can map local fixture phone ids/labels to development devices.
+- Product source must not hardcode real ADB serials.
+- One phone opens one mirror view; duplicate opens focus the existing view.
+- Multiple phones can be mirrored at once.
+- Closing a mirror window cleans up the associated process.
+- The renderer only calls the narrow `botappDeviceViews` preload bridge; it does not spawn processes or access ADB directly.
+
 ## Bundle safety
 
 The packaged app must include only:

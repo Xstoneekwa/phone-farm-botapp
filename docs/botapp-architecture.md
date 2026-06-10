@@ -48,15 +48,17 @@ The renderer must **never** hold service-role keys, direct DB clients, or unrest
 - **Electron** — macOS desktop shell
 - **electron-builder** — `npm run package:mac` → `release/mac-arm64/BotApp.app`
 - **CSS tokens** — `src/design/tokens.css`, shared component styles
+- **scrcpy** — external binary used by the phone-level View action on operator Macs
 
 ### Repository layout
 
 ```text
 electron/                 # Main process, window lifecycle
 src/
-  api/                    # types.ts, mock-client.ts, botapp-client.ts (future)
+  api/                    # types.ts, local client, future relay client
   app/                    # App shell, routes, global modals/toasts
   data/                   # Deterministic fixtures (profile-mock-data.ts, mock-data.ts)
+  desktop/                # Renderer-safe desktop IPC wrappers
   design/components/      # Badge, Button, Card, Drawer, Input, Modal, Table, …
   layout/                 # Sidebar, TopBar
   security/               # redaction helpers
@@ -85,10 +87,26 @@ docs/                     # Developer documentation
 - phone/device groups with compact summary (`N profiles · running|ready|idle`)
 - platform filter chips (All / Instagram / TikTok)
 - search across username, package, phone, timeslot
-- dense **12-button toolbar** per profile row
+- dense profile toolbar per account row (View is phone-level, not account-level)
+- phone-level View button in each phone group header, backed by Electron device-view IPC and `scrcpy`
+- open phone views dock with Android-style green indicators
 - local drawer state for Stats, Logs, Targets, Settings, Filters
 - Add Profile wizard
 - Start/Stop confirmation modals with payload preview
+- Auto Login progress + verification-code modals
+- Assign Now, Archive/Delete lifecycle, and Check Login/Readiness confirmations
+
+### Phone View / scrcpy
+
+The phone mirror is owned by the Electron main process:
+
+- renderer calls `window.botappDeviceViews.*` from `src/desktop/device-views.ts`
+- preload exposes a narrow IPC bridge, not a generic shell bridge
+- main process starts one `scrcpy` process per phone serial and focuses the existing window on duplicate opens
+- `BOTAPP_SCRCPY_PATH` can point to a custom `scrcpy` binary
+- `BOTAPP_DEVICE_SERIAL_MAP` can map fixture phone ids/labels to local serials for development
+- no ADB serial is hardcoded into product source; fixture ids are labels only
+- process cleanup runs when the phone window closes or the app exits
 
 ### Shared Filters implementation
 
@@ -132,7 +150,7 @@ Replace or wrap `mockClient` with a real client when the relay is validated. Kee
 |---------|-------|
 | Profiles phone groups | Grouped by device; status badge; simplified summary |
 | Sidebar | Icon-only nav with hover labels and counters |
-| 12-button toolbar | Stats, Logs, Targets, Settings, Filters, Start, Stop, … |
+| Complete toolbar | Stats, Logs, Targets, Start, Auto Login, Check Login, Stop, Settings, Filters, Assign Now, Archive, Delete |
 | Add Profile | Six-step wizard; admin create contract payload |
 | Stats drawer | Follow-back / like-back columns; Save Stats |
 | Logs drawer | Live console simulation, pause/resume, filters, redacted export |
@@ -191,6 +209,10 @@ Never commit: `dist/`, `release/`, `.env*`, logs, screenshots, temp inspection f
 | Filters | `/settings/follow-filters` PATCH | shared panel + payload |
 | Sources | follow-sources settings | package-aware defaults |
 | Start/Stop | run request / stop relay | payload preview only |
+| Auto Login | `connect/now` / `login_provisioning` | progress and code UI, payload preview only |
+| Assign Now | `assignments/now` | candidate and payload preview only |
+| Archive/Delete | account lifecycle route | 30-day archive/trash policy preview only |
+| Check Login / Readiness | `readiness/now` / `login_provisioning` | readiness projection and payload preview only |
 | Avatars | sanitized proxy URL | `/avatars/*.svg` |
 
 Sync order recommended: **read-only API** → guarded writes → realtime events.
@@ -228,12 +250,24 @@ Workflow:
 
 ## 7. Immediate roadmap
 
-1. **Devices tab** — next UI milestone (phone detail, sessions, locks)
+Profiles toolbar/settings/drawers are complete for this checkpoint. The next large milestone is **Devices tab**.
+
+1. Devices tab
 2. Remaining top-level screens polish
 3. BotApp API relay — read-only profiles/stats/logs/targets
 4. Guarded write actions (settings, filters, targets, runs)
 5. Realtime log/event stream through relay
-6. Automated tests for filters validation, target export redaction, run-control payloads
+6. Automated tests for filters validation, target export redaction, run-control payloads, avatar sanitizer
+
+Each toolbar action must be inspected first in `boost-ai-frontend` before implementation: role, enabled/disabled states, modals/drawers, endpoints, RPC/tables, payloads, validations, and backend effects. BotApp should prepare future types/payloads but must not execute real mutations until the secure relay is validated.
+
+Auto Login mirrors the admin dashboard's `Connect`/`login_provisioning` contract as a desktop-prepared request: account id, action type, source, idempotency key, device assignment context, and safe metadata. Verification-code payloads are modeled separately and must be sent only through the future secure relay; BotApp must not log codes, passwords, token material, Vault identifiers, raw XML, screenshot paths, Supabase service credentials, worker invocations, or direct device login actions.
+
+Assign Now mirrors the admin dashboard's `assignments/now` contract as a desktop-prepared request: account id, target device label, safe serial label, candidate slot, schedule gate, runtime profile, idempotency key, and safe metadata. The real relay must keep `assign_account_slot`, app instance identifiers, phone device identifiers, and Supabase credentials server-side.
+
+Archive/Delete mirror the admin dashboard's account lifecycle contract as desktop-prepared requests. Archive maps to `action: "archive"` with `status = archived` and `scheduled_trash_at = now + 30 days`; Delete maps to `action: "trash"` with `status = trashed` and `scheduled_delete_at = now + 30 days`. Restore and permanent delete are modeled in types for future relay work, but BotApp does not call Supabase directly and the current admin permanent-delete action remains disabled/pending.
+
+Check Login / Readiness mirrors the admin dashboard's `readiness/now` contract as a desktop-prepared request: account id, admin audience, `login_provisioning` requested run type, idempotency key, and safe metadata. BotApp displays only safe readiness/client status, reason, next action, assignment availability, and future relay payload; the real backend must re-check credentials, lifecycle, assignment, phone/app availability, active runs, idempotency, and enqueue the preflight server-side.
 
 ---
 
