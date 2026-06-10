@@ -1,312 +1,189 @@
-# BotApp — Design Foundation Handoff
-> Boost My Businesses · Version 1.0 · May 2026  
-> Ready for implementation in Cursor / Codex / Claude Code
+# BotApp Handoff
 
----
+This handoff captures the current implementation checkpoint for future developers and agents working on BotApp.
 
-## 1. Screens Created
+## Project State
 
-### v1 UI Kit (`ui_kits/botapp/`) — macOS compact style
-| Screen | File | Description |
-|---|---|---|
-| Profiles | `ProfilesView.jsx` | Phone farm table — phones grouped, profiles with stats, time slots, actions |
-| Devices | `DevicesView.jsx` | Device grid with connection status, profile count, refresh |
-| Settings / Config | `SettingsView.jsx` | Instagram + TikTok platform config + General system settings |
-| API Gateway | `APIView.jsx` | Tunnel status, scoped keys, webhooks, recent API calls |
-| Appearance | (modal in `index.html`) | Theme picker + color overrides |
-| Operators | (modal in `index.html`) | Multi-operator profile management |
-| Bin | (inline in `index.html`) | Archived profiles with search |
+- Repository: BotApp workspace root
+- Branch: `botapp-mac-foundation`
+- Mode: mock-first macOS app foundation
+- Current checkpoint: Profiles toolbar drawers and developer documentation
+- Backend posture: no real backend calls, no Supabase direct access, no worker/device mutations
 
-### v2 UI Kit (`ui_kits/botapp-v2/`) — full ops dashboard
-| Screen | File | Description |
-|---|---|---|
-| Overview | `Overview.jsx` | KPI cards, action-required panel, live feed, platform status |
-| Profiles | `ProfilesV2.jsx` | Sortable table, device groups, bulk select, status filter |
-| Devices | `DevicesV2.jsx` | Grid + list toggle, battery level, model info |
-| Activity Log | `ActivityLog.jsx` | Full audit trail, level filter (INFO/WARN/ERROR/DEBUG) |
-| Targets | `Targets.jsx` | Follow-target management, quality scores, approve/reject |
-| DM Templates | `DMTemplates.jsx` | Template list + editor, reply-rate stats, variable insertion |
-| Notifications | `NotificationsView.jsx` | Incident feed, priority filter, inline actions (2FA, reauth) |
-| API / Webhooks | `APIKeysView.jsx` | Scoped keys, webhook endpoints, recent calls table |
-| Settings | `SettingsV2.jsx` | Section-nav: General / Instagram / TikTok / Appearance / Operators / Advanced |
+## Completed In This Checkpoint
 
----
+### Profiles Screen
 
-## 2. Design System Components
+- Phone-first grouping with profile rows assigned to devices.
+- Search across username, display name, package, phone, platform, and timeslot.
+- Instagram/TikTok platform marks.
+- Compact operator-focused row layout.
+- 12-button toolbar per profile:
+  - Stats
+  - Logs / History
+  - Targets
+  - Start
+  - Auto Login
+  - Stop
+  - View
+  - Settings
+  - Filters
+  - Assign Now
+  - Archive
+  - Delete
 
-### Foundations (`Design.jsx` — v2 / `colors_and_type.css` — tokens)
-- `DS` — all design tokens object (colors, radii, shadows, font stacks)
-- `IP` — full Lucide-compatible SVG path map (40+ icons)
-- `Ico` — SVG icon renderer
+All dangerous operations are preview-only.
 
-### Primitives
-| Component | Description |
-|---|---|
-| `Badge` | 20+ preset types: running, idle, offline, error, ok, failed, twofa, checkpoint, connected, disconnected, active, paused, valid, invalid, review, archived, pro, starter, enabled, disabled |
-| `Avatar` | Initials avatar, deterministic color from name |
-| `Btn` | Variants: `primary`, `secondary`, `ghost`, `danger`, `dangerFill` · Sizes: `xs`, `sm`, `md`, `lg` · Optional icon prop |
-| `Card` | White surface, 1px border, 8px radius, configurable padding |
-| `SLabel` | All-caps section label (10px / 600 / 0.07em tracking) |
-| `Input` | Text input, optional leading icon, focus ring |
-| `Toggle` | Animated on/off, sizes `sm` / `md` |
-| `Skel` | Skeleton loading pulse |
-| `Mono` | JetBrains Mono span for IDs / logs / code |
-| `Toasts` | Toast system — `toast.success()` / `.error()` / `.info()` |
-| `ConfirmModal` | Confirm dialog with danger variant |
-| `EmptyState` | Icon + title + message + optional action |
+### Add Profile Drawer
 
-### Layout
-| Component | Description |
-|---|---|
-| `PageHdr` | Consistent page header: title, subtitle, badge slot, actions slot |
-| `Th / Td / TRow` | Styled table primitives with hover state |
-| `SidebarV2` | 220px dark sidebar, grouped nav, counters, live dot, operator strip |
-| `TopBar` | Breadcrumb + ⌘K command palette button + notification bell |
-| `CommandPalette` | Fuzzy-search overlay, keyboard navigation (↑↓ / Enter / Esc) |
+- Six-step mock wizard for adding an Instagram profile.
+- Captures package/device/profile metadata in preview mode.
+- Does not submit credentials or create real backend records.
 
----
+### Stats Drawer
 
-## 3. Fonts (Final)
+- Session rows with follower/following stats.
+- Follow-back and like-back state exposed as clear enabled/off badges.
+- Existing table retained as mock historical stats.
 
-```css
-/* UI / Interface */
---font-sans:    "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+### Logs / History Drawer
 
-/* Logs, IDs, API paths, code blocks */
---font-mono:    "JetBrains Mono", "SF Mono", Menlo, Monaco, monospace;
-```
+- Mock-live console experience.
+- Structured log levels, phases, sources, action status, run/request IDs.
+- Auto-scroll pause/resume.
+- New logs indicator.
+- Search, level filter, phase filter, errors-only mode.
+- Clear/refresh controls.
+- Redacted TXT and JSON export.
+- No local log file reads.
 
-**Google Fonts import:**
-```
-Inter: 300 / 400 / 500 / 600 / 700
-JetBrains Mono: 400 / 500
-```
+### Targets Drawer
 
-**Usage rules:**
-- All UI text → Inter
-- Serials, API keys, endpoints, timestamps, log events → JetBrains Mono
-- Numbers in tables → `font-variant-numeric: tabular-nums` with Inter
+- Aligned with the dashboard admin target contract.
+- Stats cards: total, valid/eligible, archived, pending/review, rejected.
+- Search and list filters:
+  - All
+  - Active / valid
+  - Pending / review
+  - Rejected
+  - Archived / deleted
+- Admin-style columns:
+  - checkbox
+  - Username with avatar/fallback
+  - Verification
+  - Eligibility
+  - Followers
+  - Perf
+  - FBR
+  - Sent
+  - Last used
+  - Added
+  - Actions
+- Mock add single, bulk add, archive/delete selected, reset, restore, refresh.
+- CSV/JSON export of visible filtered rows with redaction.
+- No horizontal table scroll.
+- Dark readable hover state fixed for all target rows.
+- Avatars use safe relative mock assets only; future real avatars must come through a relay/proxy.
 
----
+### Packaging
 
-## 4. Colors
+- Vite build works.
+- Electron packaging works through `npm run package:mac`.
+- Packaged renderer uses relative Vite base to avoid black screen in Electron.
+- `release/` and `dist/` remain build artifacts and should not be committed.
 
-### Brand
-| Token | Value | Usage |
-|---|---|---|
-| `--accent` | `#6558F5` | Buttons, toggles, focus rings, links, active nav |
-| `--accent-hover` | `#5548E0` | Button hover |
-| `--accent-light` | `#EDE9FE` | Tinted backgrounds, selected rows, active badge bg |
-| `--accent-muted` | `#A89FF8` | Disabled accent text |
-| `--bg-canvas` | `#F7F7F6` | App background — warm off-white |
-| `--bg-surface` | `#FFFFFF` | Cards, modals, panels |
-| `--bg-input` | `#F2F2F0` | Text input backgrounds |
-| `--bg-sidebar` | `#111213` | Dark nav sidebar |
-| `--fg-primary` | `#0F1117` | Main body text |
-| `--fg-secondary` | `#5C6070` | Secondary / muted text |
-| `--fg-tertiary` | `#9EA3B0` | Placeholders, timestamps, metadata |
-| `--border` | `#E6E6E4` | Dividers, card borders |
+## Contracts To Preserve
 
-### Semantic / Status
-| State | Text | Background | Dot |
-|---|---|---|---|
-| Success / Connected / Running | `#166534` | `#DCFCE7` | `#22C55E` |
-| Error / Disconnected / Failed | `#991B1B` | `#FEE2E2` | `#F87171` |
-| Warning / Paused / Checkpoint | `#92400E` | `#FEF3C7` | `#FBBF24` |
-| Growth / Change | `#134E4A` | `#CCFBF1` | — |
-| Info / API | `#1E40AF` | `#DBEAFE` | — |
-| Neutral / Idle / Zero | `#6B7280` | `#F3F4F6` | — |
-| Accent / Pro / Selected | `#4338CA` | `#EDE9FE` | — |
+### Target / CT Contract
 
-### IG × BotApp Gradient (icon + decorative use)
-```css
-background: linear-gradient(135deg, #F58529, #DD2A7B, #8134AF, #6558F5);
-```
+BotApp types intentionally mirror the dashboard admin target model:
 
----
+- `status`
+- `verification`
+- `eligibility` / quality
+- `performance`
+- `archivedAt`
+- `deletedAt`
+- reset to `pending_verification`
+- restore from archived state
 
-## 5. Component Variants
+Future real CT validation must use the admin-backed flow:
 
-### Buttons
-```
-primary     → #6558F5 bg, white text
-secondary   → white bg, #0F1117 text, #E6E6E4 border
-ghost       → transparent bg, #5C6070 text, #E6E6E4 border
-danger      → white bg, #DC2626 text, #FECACA border
-dangerFill  → #DC2626 bg, white text
+- `ig_targets`
+- `ct_target_verification_jobs`
+- `ct_target_audit_events`
+- admin route equivalent of `/api/instagram-dashboard/targets`
+- admin route equivalent of `/api/instagram-dashboard/targets/reset`
 
-Sizes: xs (3px/8px, r4), sm (5px/10px, r5), md (6px/14px, r6), lg (8px/18px, r7)
-```
+BotApp should call a secure BotApp API relay. The renderer must not validate CTs directly, scrape Instagram, or connect to Supabase.
 
-### Badges (all fully rounded, `border-radius: 9999px`)
-```
-running      → #DCFCE7 bg / #166534 text / #22C55E dot
-idle         → #F3F4F6 bg / #6B7280 text
-offline      → #FEE2E2 bg / #991B1B text / #F87171 dot
-error        → #FEE2E2 bg / #991B1B text / #F87171 dot
-twofa        → #FEF3C7 bg / #92400E text
-checkpoint   → #FFEDD5 bg / #9A3412 text
-connected    → #DCFCE7 bg / #166534 text / #22C55E dot
-disconnected → #FEE2E2 bg / #991B1B text / #F87171 dot
-active       → #DCFCE7 bg / #166534 text
-paused       → #FEF3C7 bg / #92400E text
-valid        → #DCFCE7 bg / #166534 text
-invalid      → #FEE2E2 bg / #991B1B text
-review       → #FEF3C7 bg / #92400E text
-archived     → #F3F4F6 bg / #6B7280 text
-pro          → #EDE9FE bg / #4338CA text
-enabled      → #DCFCE7 bg / #166534 text
-disabled     → #F3F4F6 bg / #6B7280 text
-```
+### Avatar Contract
 
-### Cards
-```
-Default  → white bg, 1px solid #E6E6E4 border, 8px radius, 14px/16px padding
-Modal    → white bg, 12px radius, shadow: 0 16px 48px rgba(0,0,0,0.14)
-Code     → #1A1A2C bg, JetBrains Mono, #CBD5E1 text
-```
+- BotApp type field: `ProfileTarget.avatarUrl`.
+- Admin equivalent: `avatar_url`.
+- Current mock accepts `/avatars/*.svg`.
+- Future production should use a same-origin relay endpoint such as `/api/botapp/instagram-dashboard/avatar?kind=target&id=...`.
+- Raw external avatar URLs must not be fetched directly by the renderer.
 
-### Tables
-```
-Header row  → #FAFAF9 bg, 10px/500/uppercase/0.05em, #9EA3B0, 32px height
-Data row    → 38–40px height, hover → #FAFAF8, 1px solid #F0F0EE bottom border
-Group header → #F7F7F6 bg, 1px solid #E6E6E4 top/bottom, 32px height
-```
+## Security Invariants
 
-### Toggles
-```
-ON  → #6558F5 track, white thumb, left: w-thumb-offset
-OFF → #D1D5DB track, white thumb, left: 2px
-Sizes: sm (28×16), md (34×20)
-Transition: 150ms ease
-```
+Never introduce:
 
-### Time Pills (profile slots)
-```
-Background: #111213 (dark)
-Text: white, JetBrains Mono, 11px/500
-Padding: 4px 10px, border-radius: 9999px
-Format: HH:MM–HH:MM  e.g. "17:00–20:00"
-```
+- Supabase service role in desktop app.
+- Direct Supabase client in renderer.
+- Password display.
+- Full Vault UUIDs or secret refs.
+- Raw XML, screenshots, local artifact paths, HAR content, or raw logs in UI/export.
+- Real backend mutations from mock buttons.
+- Direct worker dispatch or ADB/device operations from these preview flows.
 
-### Modals
-```
-Backdrop: rgba(0,0,0,0.3) + backdrop-filter: blur(4–8px)
-Box: white, 12px radius, 0 16px 48px rgba(0,0,0,0.14) shadow
-Animation: scale(0.97)+translateY(-8px) → scale(1)+translateY(0), 150–200ms
-Width: 400–560px depending on content
-```
+All exports or potentially sensitive display strings should go through `src/security/redaction.ts`.
 
----
+## Known Quirks
 
-## 6. Approximations to Replace Later
+- Some mock confirmation actions still trigger the global preview modal/toast behavior, which can close a drawer. This is pre-existing.
+- Global `src/views/Targets.tsx` is still a simpler mock route and is separate from the per-profile Targets drawer.
+- Richest target mock data is currently on `prof_002`; other profiles use fallback target rows.
+- No unit tests have been added for target FBR/filter logic yet.
 
-| Item | Current state | To replace with |
-|---|---|---|
-| **App icon** | Temporary SVG — IG gradient + bolt shape | Real SVG/PNG from designer |
-| **Wallpaper blobs** | Hand-drawn SVG ellipses with blur filters | Real brand illustration |
-| **Instagram icon** | Inline SVG gradient rectangle | Official IG brand asset (if licensed) |
-| **TikTok icon** | Unicode ♪ on black square | Official TT brand asset |
-| **Profile avatar images** | None — color dot only | Real profile photo thumbnails from API |
-| **Device model data** | Hardcoded Samsung A32/A52 | Real from Android ADB `getprop ro.product.model` |
-| **Battery level** | Hardcoded fake values | Real from ADB `dumpsys battery` |
-| **Live feed** | Static fake data | WebSocket / SSE stream from backend |
-| **Activity log** | Hardcoded 20 entries | Paginated API endpoint |
-| **Follower/follow stats** | Hardcoded snapshot values | Real from bot session data |
-| **Target quality scores** | Fake 12–92 range | Real scoring algorithm output |
+## Validation Checklist
 
----
+Before any checkpoint commit:
 
-## 7. Developer Recommendations
+- `npm run lint`
+- `npm run build`
+- `npm run package:mac`
+- `git diff --check`
+- no-leak scan on added diff lines
+- no-leak scan on untracked source/docs/public files
+- no-leak scan on packaged `app.asar`
+- UI smoke test:
+  - Profiles loads
+  - Add Profile opens
+  - Stats opens
+  - Logs opens and exports safely
+  - Targets opens, has no horizontal scroll, hover is readable, avatars/fallback render
 
-### Tech stack fit
-This design system is optimized for **Electron + React** (macOS) or a **React web dashboard**. All components are written as plain React with inline styles — no CSS framework dependency. Easy to port to:
-- **Tailwind CSS** — map tokens to Tailwind config
-- **shadcn/ui** — use as a style reference; replace primitives with shadcn equivalents
-- **Electron** — drop `index.html` directly, swap Google Fonts for local Inter/JetBrains Mono
+## Next Work
 
-### Token migration
-Copy `colors_and_type.css` CSS custom properties into your framework's token system:
-```js
-// tailwind.config.js
-colors: {
-  accent:   '#6558F5',
-  canvas:   '#F7F7F6',
-  surface:  '#FFFFFF',
-  fg1:      '#0F1117',
-  fg2:      '#5C6070',
-  fg3:      '#9EA3B0',
-  border:   '#E6E6E4',
-  // ... etc
-}
-```
+Recommended next milestone:
 
-### Icon system
-All icons are inlined Lucide paths in `Design.jsx` (`IP` object). In production:
-```bash
-npm install lucide-react
-```
-Replace `<Ico n="users"/>` with `<Users size={14}/>` — same visual output.
+1. Start / Stop parity with dashboard admin safety semantics.
+2. Inspect Settings drawer against admin/client contracts.
+3. Inspect Filters drawer against admin/client contracts.
+4. Add unit tests for target filtering, FBR/performance labels, and redacted exports.
+5. Define the future BotApp API relay contract.
 
-### Font loading (production)
-```html
-<!-- Self-hosted recommended for Electron / offline use -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-```
-Or install locally:
-```bash
-npm install @fontsource/inter @fontsource/jetbrains-mono
-```
-```js
-import '@fontsource/inter/variable.css';
-import '@fontsource/jetbrains-mono';
-```
+## Files Most Relevant To This Checkpoint
 
-### State management
-The prototypes use local React state only. For production:
-- **Bot session data** → Zustand or Jotai store, polling every 5–10s
-- **Notifications/incidents** → WebSocket or SSE, store in Zustand with `unread` counter
-- **Devices** → ADB bridge polling, reconnect logic with exponential backoff
-- **Activity log** → Paginated REST, virtualized list (react-virtual) for 10k+ rows
-
-### Component file structure (suggested)
-```
-src/
-├── design/
-│   ├── tokens.ts          ← CSS vars → JS constants
-│   ├── icons.tsx          ← Lucide icon re-exports
-│   └── components/
-│       ├── Badge.tsx
-│       ├── Btn.tsx
-│       ├── Card.tsx
-│       ├── Toggle.tsx
-│       ├── Input.tsx
-│       ├── Table.tsx      ← Th, Td, TRow
-│       ├── Modal.tsx
-│       ├── Toast.tsx
-│       └── EmptyState.tsx
-├── layout/
-│   ├── Sidebar.tsx
-│   └── TopBar.tsx
-└── views/
-    ├── Overview.tsx
-    ├── Profiles.tsx
-    ├── Devices.tsx
-    ├── ActivityLog.tsx
-    ├── Targets.tsx
-    ├── DMTemplates.tsx
-    ├── Notifications.tsx
-    ├── APIKeys.tsx
-    └── Settings.tsx
-```
-
-### Passing to Cursor / Claude Code
-The most effective prompt:
-> "Read `README.md` and `SKILL.md` in this design system project, then implement [screen name] using the tokens from `colors_and_type.css`, the component patterns from `ui_kits/botapp-v2/Design.jsx`, and the layout from `ui_kits/botapp-v2/[ViewFile].jsx`. Use Inter + JetBrains Mono. Replace fake data with real API calls to `[your endpoint]`."
-
-Give the agent access to:
-1. `README.md` — product context
-2. `colors_and_type.css` — all tokens
-3. `ui_kits/botapp-v2/Design.jsx` — component API
-4. The specific `*View.jsx` being implemented — layout reference
+- `src/views/profiles/ProfilesView.tsx`
+- `src/views/profiles/drawers/AddProfileDrawer.tsx`
+- `src/views/profiles/drawers/StatsDrawer.tsx`
+- `src/views/profiles/drawers/LogsDrawer.tsx`
+- `src/views/profiles/drawers/TargetsDrawer.tsx`
+- `src/views/profiles/profiles.css`
+- `src/api/types.ts`
+- `src/data/profile-mock-data.ts`
+- `src/security/redaction.ts`
+- `electron-builder.json`
+- `vite.config.ts`

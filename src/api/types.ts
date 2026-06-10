@@ -118,8 +118,8 @@ export type ProfileStatsRow = {
   sessionDate: string;
   followers: number;
   following: number;
-  followBack: "ok" | "pending" | "none";
-  likeBack: "ok" | "pending" | "none";
+  followBackEnabled: boolean;
+  likeBackEnabled: boolean;
   follow: { current: number; target: number };
   unfollow: { current: number; target: number };
   like: { current: number; target: number };
@@ -129,30 +129,91 @@ export type ProfileStatsRow = {
   totalInteractions: number;
 };
 
+export type ProfileLogLevel = "debug" | "info" | "success" | "warning" | "error";
+export type ProfileLogPhase = "preflight" | "login" | "follow" | "mute" | "like" | "dm" | "unfollow" | "recovery" | "state_machine" | "api" | "device";
+export type ProfileLogActionStatus = "started" | "skipped" | "succeeded" | "failed" | "recovered";
+export type ProfileLogSource = "worker" | "botapp" | "dashboard" | "api" | "device";
+export type ProfileLogExportFormat = "txt" | "json";
+export type ProfileLogStreamState = "mock_live" | "paused" | "disconnected";
+
 export type ProfileLogEntry = {
+  id: string;
+  accountId: string;
   timestamp: string;
-  level: "INFO" | "DEBUG" | "WARN" | "ERROR";
+  level: ProfileLogLevel;
+  phase: ProfileLogPhase;
+  event: string;
   message: string;
-  source?: string;
+  reason?: string;
+  targetUsername?: string;
+  actionStatus?: ProfileLogActionStatus;
+  durationMs?: number;
+  source: ProfileLogSource;
+  runId?: string;
+  requestId?: string;
 };
+
+export type ProfileTargetStatus = "pending_verification" | "valid" | "rejected" | "review" | "duplicate" | "active" | "archived" | "deleted";
+export type ProfileTargetVerification = "pending" | "found" | "not_found" | "unavailable" | "rate_limited" | "provider_error";
+export type ProfileTargetEligibility =
+  | "unknown"
+  | "eligible"
+  | "rejected_low_followers"
+  | "rejected_verified"
+  | "rejected_private"
+  | "rejected_not_found"
+  | "review_provider_unavailable"
+  | "review_username_changed";
+export type ProfileTargetPerformance = "good" | "avg" | "bad" | "insufficient_data" | "pending" | "not_applicable";
+export type ProfileTargetSource = "manual_single" | "manual_bulk" | "admin" | "client" | "botapp" | "automation" | "backend" | "future_discovery";
+export type ProfileTargetListFilter = "all" | "active" | "pending" | "rejected" | "archived";
+export type ProfileTargetExportFormat = "csv" | "json";
 
 export type ProfileTarget = {
-  index: number;
+  id: string;
+  accountId: string;
   username: string;
-  dateAdded: string | null;
-  followers: number;
-  followbackRatio: number;
-  totalFollow: number;
-  status: "approved" | "review" | "archived";
+  canonicalUsername?: string | null;
+  avatarUrl?: string | null;
+  status: ProfileTargetStatus;
+  verification: ProfileTargetVerification;
+  verificationReason?: string | null;
+  eligibility: ProfileTargetEligibility;
+  followersCount: number | null;
+  isVerified?: boolean | null;
+  isPrivate?: boolean | null;
+  performance: ProfileTargetPerformance;
+  followbackRatio: number | null;
+  followsSent: number | null;
+  followbacks: number | null;
+  lastUsedAt: string | null;
+  lastSelectedAt?: string | null;
+  lastSuccessfulCandidateAt?: string | null;
+  lastExhaustedAt?: string | null;
+  exhaustionReason?: string | null;
+  cooldownUntil?: string | null;
+  metricsUpdatedAt?: string | null;
+  addedAt: string;
+  source: ProfileTargetSource;
+  batchId?: string | null;
+  archivedAt?: string | null;
+  deletedAt?: string | null;
+  reason?: string | null;
+  syncStatus?: "synced" | "pending" | "failed" | "unknown";
 };
 
-export type ProfileTargetGroup = {
-  id: string;
-  label: string;
-  sourceType: string;
-  enabled: boolean;
-  sourceList: string;
-  targets: ProfileTarget[];
+export type ProfileTargetFilters = {
+  query: string;
+  listFilter: ProfileTargetListFilter;
+};
+
+export type ProfileTargetBulkImportResult = {
+  totalSubmitted: number;
+  acceptedForVerification: number;
+  invalid: number;
+  duplicates: number;
+  alreadyExisting: number;
+  normalizedUsernames: string[];
 };
 
 export type CredentialStatus = "active" | "missing" | "needs_update";
@@ -358,7 +419,7 @@ export type BotAppClient = {
   listDeviceProfileGroups(): Promise<ApiResult<DeviceProfileGroup[]>>;
   getProfileStats(profileId: string): Promise<ApiResult<ProfileStatsRow[]>>;
   getProfileLogs(profileId: string): Promise<ApiResult<ProfileLogEntry[]>>;
-  getProfileTargets(profileId: string): Promise<ApiResult<ProfileTargetGroup[]>>;
+  getProfileTargets(profileId: string): Promise<ApiResult<ProfileTarget[]>>;
   getProfileSettings(profileId: string): Promise<ApiResult<ProfileSettings>>;
   getProfileFilters(profileId: string): Promise<ApiResult<ProfileFilters>>;
   listDevices(): Promise<ApiResult<Device[]>>;

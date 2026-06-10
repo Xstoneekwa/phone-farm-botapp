@@ -7,6 +7,7 @@ export function Drawer({
   footer,
   onClose,
   wide = false,
+  panelClassName = "",
 }: {
   title: string;
   subtitle?: string;
@@ -14,10 +15,11 @@ export function Drawer({
   footer?: React.ReactNode;
   onClose: () => void;
   wide?: boolean;
+  panelClassName?: string;
 }) {
   return (
     <div className="drawer-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className={`drawer-panel${wide ? " drawer-panel-wide" : ""}`} onClick={(event) => event.stopPropagation()}>
+      <div className={`drawer-panel${wide ? " drawer-panel-wide" : ""}${panelClassName ? ` ${panelClassName}` : ""}`} onClick={(event) => event.stopPropagation()}>
         <header className="drawer-header">
           <div>
             <div className="drawer-kicker">{title}</div>

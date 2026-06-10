@@ -93,7 +93,7 @@ export function App() {
   let view: React.ReactNode;
   if (loading) view = <div className="empty-state"><strong>Loading mock data</strong><span>No backend connection is required.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
-  else if (active === "profiles") view = <Profiles groups={data.profileGroups} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} />;
+  else if (active === "profiles") view = <Profiles groups={data.profileGroups} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message) => pushToast(message, "success")} />;
   else if (active === "account") view = <AccountDetail profile={selectedProfile} onAction={requestAction} />;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} />;
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;

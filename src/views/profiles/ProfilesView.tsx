@@ -7,6 +7,7 @@ import { LogsDrawer } from "./drawers/LogsDrawer";
 import { TargetsDrawer } from "./drawers/TargetsDrawer";
 import { SettingsDrawer } from "./drawers/SettingsDrawer";
 import { FiltersDrawer } from "./drawers/FiltersDrawer";
+import { AddProfileDrawer } from "./drawers/AddProfileDrawer";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
@@ -148,15 +149,18 @@ export function ProfilesView({
   groups,
   onSelect,
   onAction,
+  onMockSubmit,
 }: {
   groups: DeviceProfileGroup[];
   onSelect: (id: string) => void;
   onAction: (action: string, target: string, danger?: boolean) => void;
+  onMockSubmit: (message: string) => void;
 }) {
   const [platformFilter, setPlatformFilter] = useState<"All" | "Instagram" | "TikTok">("All");
   const [searchTerm, setSearchTerm] = useState("");
   const [drawer, setDrawer] = useState<{ kind: DrawerKind; profile: BotProfile } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ kind: ConfirmKind; profile: BotProfile } | null>(null);
+  const [addProfileOpen, setAddProfileOpen] = useState(false);
 
   const filteredGroups = useMemo(() => {
     const query = normalizeSearch(searchTerm);
@@ -212,7 +216,7 @@ export function ProfilesView({
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
           />
-          <Button>+ New profile</Button>
+          <Button onClick={() => setAddProfileOpen(true)}>+ New profile</Button>
         </div>
       </Card>
 
@@ -247,6 +251,16 @@ export function ProfilesView({
       {drawer?.kind === "targets" ? <TargetsDrawer profile={drawer.profile} onClose={() => setDrawer(null)} onAction={(label) => mockSave(label)} /> : null}
       {drawer?.kind === "settings" ? <SettingsDrawer profile={drawer.profile} onClose={() => setDrawer(null)} onConfirm={() => mockSave("Save profile settings")} /> : null}
       {drawer?.kind === "filters" ? <FiltersDrawer profile={drawer.profile} onClose={() => setDrawer(null)} onSave={() => mockSave("Save profile filters")} /> : null}
+      {addProfileOpen ? (
+        <AddProfileDrawer
+          groups={groups}
+          onClose={() => setAddProfileOpen(false)}
+          onSubmitMock={(payload) => {
+            void payload;
+            onMockSubmit("Mock only - no backend action executed. Add Profile payload is prepared for the secure admin create contract.");
+          }}
+        />
+      ) : null}
 
       {confirmAction ? (
         <Modal

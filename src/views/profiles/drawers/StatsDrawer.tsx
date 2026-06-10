@@ -3,6 +3,10 @@ import { mockClient } from "../../../api/mock-client";
 import type { BotProfile, ProfileStatsRow } from "../../../api/types";
 import { Badge, Button, Drawer } from "../../../design/components";
 
+function enabledBadge(value: boolean) {
+  return <Badge tone={value ? "success" : "neutral"}>{value ? "enabled" : "off"}</Badge>;
+}
+
 export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile; onClose: () => void; onSave: () => void }) {
   const [rows, setRows] = useState<ProfileStatsRow[]>([]);
   const [page, setPage] = useState(1);
@@ -30,8 +34,8 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
         <table className="stats-table">
           <thead>
             <tr>
-              <th>Session time</th><th>Followers</th><th>Following</th><th>Follow.B</th><th>Like.B</th>
-              <th>Follow</th><th>Unfollow</th><th>Like</th><th>Comment</th><th>DM</th><th>Watch</th><th>Total int.</th>
+              <th>Session time</th><th>Followers</th><th>Following</th><th>Follow-back</th><th>Like-back</th>
+              <th>Follow</th><th>Unfollow</th><th>Like</th><th>Comment</th><th>DM</th><th>Story watch</th><th>Total int.</th>
             </tr>
           </thead>
           <tbody>
@@ -40,8 +44,8 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
                 <td><div className="mono">{row.sessionTime}</div><div className="subtle mono">{row.sessionDate}</div></td>
                 <td className="mono">{row.followers}</td>
                 <td className="mono">{row.following}</td>
-                <td><Badge tone={row.followBack === "ok" ? "success" : "warning"}>{row.followBack}</Badge></td>
-                <td><Badge tone={row.likeBack === "ok" ? "success" : "warning"}>{row.likeBack}</Badge></td>
+                <td>{enabledBadge(row.followBackEnabled)}</td>
+                <td>{enabledBadge(row.likeBackEnabled)}</td>
                 <td><span className="metric-pill follow">{row.follow.current}/{row.follow.target}</span></td>
                 <td><span className="metric-pill unfollow">{row.unfollow.current}/{row.unfollow.target}</span></td>
                 <td><span className="metric-pill like">{row.like.current}/{row.like.target}</span></td>

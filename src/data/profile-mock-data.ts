@@ -6,7 +6,7 @@ import type {
   ProfileLogEntry,
   ProfileSettings,
   ProfileStatsRow,
-  ProfileTargetGroup,
+  ProfileTarget,
 } from "../api/types";
 import type { Device } from "../api/types";
 
@@ -320,36 +320,40 @@ export function buildDeviceProfileGroups(profiles: BotProfile[], devices: Device
 
 const mockStatsByProfile: Record<string, ProfileStatsRow[]> = {
   prof_001: [
-    { sessionTime: "23:59:59", sessionDate: "2026-06-09", followers: 2009, following: 523, followBack: "ok", likeBack: "ok", follow: { current: 140, target: 360 }, unfollow: { current: 67, target: 480 }, like: { current: 328, target: 1500 }, comment: { current: 0, target: 0 }, dm: { current: 0, target: 100 }, watch: 6, totalInteractions: 331 },
-    { sessionTime: "18:42:11", sessionDate: "2026-06-08", followers: 1992, following: 521, followBack: "ok", likeBack: "pending", follow: { current: 120, target: 360 }, unfollow: { current: 55, target: 480 }, like: { current: 280, target: 1500 }, comment: { current: 0, target: 0 }, dm: { current: 0, target: 100 }, watch: 4, totalInteractions: 17 },
-    { sessionTime: "16:10:03", sessionDate: "2026-06-07", followers: 1980, following: 518, followBack: "none", likeBack: "none", follow: { current: 95, target: 360 }, unfollow: { current: 40, target: 480 }, like: { current: 210, target: 1500 }, comment: { current: 0, target: 0 }, dm: { current: 0, target: 100 }, watch: 2, totalInteractions: 28 },
+    { sessionTime: "23:59:59", sessionDate: "2026-06-09", followers: 2009, following: 523, followBackEnabled: true, likeBackEnabled: true, follow: { current: 140, target: 360 }, unfollow: { current: 67, target: 480 }, like: { current: 328, target: 1500 }, comment: { current: 0, target: 0 }, dm: { current: 0, target: 100 }, watch: 6, totalInteractions: 541 },
+    { sessionTime: "18:42:11", sessionDate: "2026-06-08", followers: 1992, following: 521, followBackEnabled: true, likeBackEnabled: false, follow: { current: 120, target: 360 }, unfollow: { current: 55, target: 480 }, like: { current: 280, target: 1500 }, comment: { current: 0, target: 0 }, dm: { current: 0, target: 100 }, watch: 4, totalInteractions: 459 },
+    { sessionTime: "16:10:03", sessionDate: "2026-06-07", followers: 1980, following: 518, followBackEnabled: false, likeBackEnabled: false, follow: { current: 95, target: 360 }, unfollow: { current: 40, target: 480 }, like: { current: 210, target: 1500 }, comment: { current: 0, target: 0 }, dm: { current: 0, target: 100 }, watch: 2, totalInteractions: 347 },
   ],
 };
 
 const mockLogsByProfile: Record<string, ProfileLogEntry[]> = {
   prof_001: [
-    { timestamp: "06/09 16:59:16", level: "DEBUG", message: "Checking profile..", source: "botapp.core.interaction:253" },
-    { timestamp: "06/09 16:59:17", level: "INFO", message: "Total Watched: OK (2/50)", source: "botapp.core.watch:88" },
-    { timestamp: "06/09 16:59:19", level: "INFO", message: "Story appears to have closed quickly for @sample_user.", source: "botapp.core.story:112" },
-    { timestamp: "06/09 17:00:00", level: "INFO", message: "PAUSED: 17:00:00", source: "botapp.core.scheduler:41" },
-    { timestamp: "06/09 17:00:01", level: "WARN", message: "Mock eligibility block preview only. token=[REDACTED]", source: "botapp.core.guard:19" },
+    { id: "log_001", accountId: "prof_001", timestamp: "2026-06-09 16:59:16", level: "info", phase: "preflight", event: "preflight_started", message: "Preflight started", actionStatus: "started", source: "worker", runId: "run_mock_001" },
+    { id: "log_002", accountId: "prof_001", timestamp: "2026-06-09 16:59:17", level: "success", phase: "device", event: "device_heartbeat_ok", message: "Device heartbeat OK", actionStatus: "succeeded", durationMs: 148, source: "device", runId: "run_mock_001" },
+    { id: "log_003", accountId: "prof_001", timestamp: "2026-06-09 16:59:18", level: "success", phase: "state_machine", event: "account_identity_confirmed", message: "Account identity confirmed", actionStatus: "succeeded", durationMs: 312, source: "worker", runId: "run_mock_001" },
+    { id: "log_004", accountId: "prof_001", timestamp: "2026-06-09 16:59:20", level: "info", phase: "follow", event: "candidate_selected", message: "Candidate selected", targetUsername: "sample_target_a", actionStatus: "started", source: "worker", runId: "run_mock_001" },
+    { id: "log_005", accountId: "prof_001", timestamp: "2026-06-09 16:59:23", level: "success", phase: "follow", event: "follow_verified", message: "Follow verified", targetUsername: "sample_target_a", actionStatus: "succeeded", durationMs: 1320, source: "worker", runId: "run_mock_001" },
+    { id: "log_006", accountId: "prof_001", timestamp: "2026-06-09 16:59:26", level: "success", phase: "mute", event: "mute_posts_enabled", message: "Mute posts enabled", targetUsername: "sample_target_a", actionStatus: "succeeded", durationMs: 460, source: "worker", runId: "run_mock_001" },
+    { id: "log_007", accountId: "prof_001", timestamp: "2026-06-09 16:59:28", level: "warning", phase: "mute", event: "mute_stories_skipped", message: "Mute stories skipped: budget reached", reason: "budget_reached", targetUsername: "sample_target_a", actionStatus: "skipped", source: "worker", runId: "run_mock_001" },
+    { id: "log_008", accountId: "prof_001", timestamp: "2026-06-09 16:59:33", level: "info", phase: "like", event: "post_opened", message: "Post opened", targetUsername: "sample_target_a", actionStatus: "started", source: "worker", runId: "run_mock_001" },
+    { id: "log_009", accountId: "prof_001", timestamp: "2026-06-09 16:59:36", level: "success", phase: "like", event: "like_verified", message: "Like verified", targetUsername: "sample_target_a", actionStatus: "succeeded", durationMs: 880, source: "worker", runId: "run_mock_001" },
+    { id: "log_010", accountId: "prof_001", timestamp: "2026-06-09 16:59:39", level: "success", phase: "state_machine", event: "return_to_ct_ok", message: "Return to CT OK", actionStatus: "succeeded", durationMs: 740, source: "worker", runId: "run_mock_001" },
+    { id: "log_011", accountId: "prof_001", timestamp: "2026-06-09 16:59:43", level: "warning", phase: "follow", event: "action_skipped", message: "Action skipped: eligibility_blocked", reason: "eligibility_blocked", targetUsername: "sample_target_b", actionStatus: "skipped", source: "worker", runId: "run_mock_001" },
+    { id: "log_012", accountId: "prof_001", timestamp: "2026-06-09 16:59:45", level: "info", phase: "recovery", event: "recovery_started", message: "Recovery started", reason: "slow_ui_response", actionStatus: "started", source: "worker", runId: "run_mock_001" },
+    { id: "log_013", accountId: "prof_001", timestamp: "2026-06-09 16:59:49", level: "success", phase: "recovery", event: "recovery_completed", message: "Recovery completed", reason: "state_restored", actionStatus: "recovered", durationMs: 3880, source: "worker", runId: "run_mock_001" },
+    { id: "log_014", accountId: "prof_001", timestamp: "2026-06-09 17:00:00", level: "info", phase: "state_machine", event: "session_paused", message: "Session paused", reason: "timeslot_closed", actionStatus: "succeeded", source: "worker", runId: "run_mock_001" },
   ],
 };
 
-const mockTargetsByProfile: Record<string, ProfileTargetGroup[]> = {
+const mockTargetsByProfile: Record<string, ProfileTarget[]> = {
   prof_002: [
-    {
-      id: "tg_001",
-      label: "Target Followers",
-      sourceType: "main-target",
-      enabled: true,
-      sourceList: "1805leclosdesmaries, _mamasparty, atelierfloralfleuriste, boutique_mode",
-      targets: [
-        { index: 0, username: "1805leclosdesmaries", dateAdded: "2026-05-12", followers: 1111, followbackRatio: 13.725, totalFollow: 102, status: "approved" },
-        { index: 1, username: "_mamasparty", dateAdded: "2026-05-14", followers: 631, followbackRatio: 17.222, totalFollow: 180, status: "approved" },
-        { index: 2, username: "atelierfloralfleuriste", dateAdded: null, followers: 5962, followbackRatio: 19.311, totalFollow: 668, status: "review" },
-      ],
-    },
+    { id: "ct_001", accountId: "prof_002", username: "1805leclosdesmaries", avatarUrl: "/avatars/ct-001.svg", status: "valid", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 1111, isVerified: false, isPrivate: false, performance: "avg", followbackRatio: 13.725, followsSent: 102, followbacks: 14, lastUsedAt: "2026-06-07T11:42:00.000Z", lastSelectedAt: "2026-06-07T11:40:00.000Z", lastSuccessfulCandidateAt: "2026-06-07T11:44:00.000Z", addedAt: "2026-05-12T09:00:00.000Z", source: "manual_single", syncStatus: "synced" },
+    { id: "ct_002", accountId: "prof_002", username: "_mamasparty", avatarUrl: "/avatars/ct-002.svg", status: "valid", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 631, isVerified: false, isPrivate: false, performance: "good", followbackRatio: 17.222, followsSent: 180, followbacks: 31, lastUsedAt: "2026-06-06T16:28:00.000Z", lastSelectedAt: "2026-06-06T16:24:00.000Z", addedAt: "2026-05-14T10:30:00.000Z", source: "manual_bulk", batchId: "batch_mock_01", syncStatus: "synced" },
+    { id: "ct_003", accountId: "prof_002", username: "atelierfloralfleuriste", avatarUrl: "/avatars/ct-003.svg", status: "valid", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 5962, isVerified: false, isPrivate: false, performance: "good", followbackRatio: 19.311, followsSent: 668, followbacks: 129, lastUsedAt: "2026-06-04T14:15:00.000Z", addedAt: "2026-05-16T08:15:00.000Z", source: "manual_bulk", batchId: "batch_mock_01", syncStatus: "synced" },
+    { id: "ct_004", accountId: "prof_002", username: "private_studio", avatarUrl: "https://example.com/raw-avatar.jpg?cache=unsafe", status: "rejected", verification: "found", verificationReason: "profile_is_private", eligibility: "rejected_private", followersCount: 2200, isVerified: false, isPrivate: true, performance: "not_applicable", followbackRatio: null, followsSent: 0, followbacks: 0, lastUsedAt: null, addedAt: "2026-05-18T12:20:00.000Z", source: "manual_single", reason: "profile_is_private", syncStatus: "synced" },
+    { id: "ct_005", accountId: "prof_002", username: "provider_waiting", status: "review", verification: "unavailable", verificationReason: "provider_unavailable", eligibility: "review_provider_unavailable", followersCount: null, performance: "not_applicable", followbackRatio: null, followsSent: null, followbacks: null, lastUsedAt: null, addedAt: "2026-05-19T18:00:00.000Z", source: "admin", reason: "provider_unavailable", syncStatus: "pending" },
+    { id: "ct_006", accountId: "prof_002", username: "archived_target", status: "archived", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 3200, performance: "bad", followbackRatio: 7.9, followsSent: 140, followbacks: 11, lastUsedAt: "2026-05-29T13:10:00.000Z", lastExhaustedAt: "2026-05-29T13:12:00.000Z", exhaustionReason: "poor_performance_review", addedAt: "2026-05-01T09:00:00.000Z", source: "manual_single", archivedAt: "2026-06-02T09:00:00.000Z", reason: "dashboard_archive", syncStatus: "synced" },
+    { id: "ct_007", accountId: "prof_002", username: "pending_review_ct", status: "pending_verification", verification: "pending", verificationReason: "queued_for_future_verification", eligibility: "unknown", followersCount: null, performance: "pending", followbackRatio: null, followsSent: null, followbacks: null, lastUsedAt: null, addedAt: "2026-06-07T08:30:00.000Z", source: "manual_bulk", batchId: "batch_mock_02", syncStatus: "pending" },
   ],
 };
 
@@ -382,39 +386,32 @@ function fallbackStats(profile: BotProfile): ProfileStatsRow[] {
       sessionDate: "2026-06-09",
       followers: profile.followers,
       following: 420,
-      followBack: "ok",
-      likeBack: "pending",
+      followBackEnabled: true,
+      likeBackEnabled: false,
       follow: profile.counters.follow,
       unfollow: profile.counters.unfollow,
       like: profile.counters.like,
       comment: profile.counters.comment,
       dm: profile.counters.dm,
       watch: 3,
-      totalInteractions: profile.counters.follow.current + profile.counters.like.current,
+      totalInteractions: profile.counters.follow.current + profile.counters.unfollow.current + profile.counters.like.current + profile.counters.comment.current + profile.counters.dm.current + 3,
     },
   ];
 }
 
 function fallbackLogs(profile: BotProfile): ProfileLogEntry[] {
   return mockLogsByProfile[profile.id] ?? [
-    { timestamp: "06/09 10:00:00", level: "INFO", message: `Mock session loaded for ${profile.username}`, source: "botapp.mock.loader:1" },
-    { timestamp: "06/09 10:00:02", level: "DEBUG", message: "No backend connection. Preview logs only.", source: "botapp.mock.loader:2" },
+    { id: `${profile.id}_log_001`, accountId: profile.id, timestamp: "2026-06-09 10:00:00", level: "info", phase: "api", event: "mock_session_loaded", message: `Mock session loaded for ${profile.username}`, actionStatus: "succeeded", source: "botapp", requestId: "req_mock_001" },
+    { id: `${profile.id}_log_002`, accountId: profile.id, timestamp: "2026-06-09 10:00:02", level: "debug", phase: "api", event: "mock_preview_only", message: "No backend connection. Preview logs only.", actionStatus: "succeeded", source: "botapp", requestId: "req_mock_001" },
+    { id: `${profile.id}_log_003`, accountId: profile.id, timestamp: "2026-06-09 10:00:04", level: "warning", phase: "device", event: "slow_ui_response", message: "Warning: slow UI response", reason: "mock_latency_high", actionStatus: "skipped", durationMs: 1440, source: "device", runId: "run_mock_fallback" },
   ];
 }
 
-function fallbackTargets(profile: BotProfile): ProfileTargetGroup[] {
+function fallbackTargets(profile: BotProfile): ProfileTarget[] {
   return mockTargetsByProfile[profile.id] ?? [
-    {
-      id: `tg_${profile.id}`,
-      label: "Target Followers",
-      sourceType: "main-target",
-      enabled: true,
-      sourceList: "sample_target_a, sample_target_b",
-      targets: [
-        { index: 0, username: "sample_target_a", dateAdded: "2026-05-01", followers: 2400, followbackRatio: 12.4, totalFollow: 45, status: "approved" },
-        { index: 1, username: "sample_target_b", dateAdded: null, followers: 890, followbackRatio: 8.1, totalFollow: 12, status: "review" },
-      ],
-    },
+    { id: `${profile.id}_ct_001`, accountId: profile.id, username: "sample_target_a", avatarUrl: "/avatars/ct-001.svg", status: "valid", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 2400, isVerified: false, isPrivate: false, performance: "pending", followbackRatio: null, followsSent: 0, followbacks: 0, lastUsedAt: null, addedAt: "2026-05-01T10:00:00.000Z", source: "manual_single", syncStatus: "synced" },
+    { id: `${profile.id}_ct_002`, accountId: profile.id, username: "sample_target_b", status: "review", verification: "rate_limited", verificationReason: "rate_limited", eligibility: "review_provider_unavailable", followersCount: 890, performance: "not_applicable", followbackRatio: null, followsSent: 12, followbacks: 1, lastUsedAt: null, addedAt: "2026-05-02T10:00:00.000Z", source: "manual_bulk", reason: "rate_limited", syncStatus: "pending" },
+    { id: `${profile.id}_ct_003`, accountId: profile.id, username: "sample_archived", status: "archived", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 1800, performance: "insufficient_data", followbackRatio: 8.1, followsSent: 12, followbacks: 1, lastUsedAt: "2026-06-01T10:00:00.000Z", addedAt: "2026-05-03T10:00:00.000Z", source: "admin", archivedAt: "2026-06-04T10:00:00.000Z", reason: "dashboard_archive", syncStatus: "synced" },
   ];
 }
 
