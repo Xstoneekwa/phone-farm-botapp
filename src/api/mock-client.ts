@@ -53,6 +53,6 @@ export const mockClient: BotAppClient = {
     action,
     target,
     dry_run: true,
-    message: "Mock only — no backend action executed.",
+    message: "Action prepared. No backend mutation executed yet.",
   })),
 };

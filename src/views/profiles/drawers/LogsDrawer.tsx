@@ -17,17 +17,17 @@ function safeFilePart(value: string) {
 
 function createMockLiveEntry(profile: BotProfile, index: number): ProfileLogEntry {
   const templates: Array<Omit<ProfileLogEntry, "id" | "accountId" | "timestamp">> = [
-    { level: "info", phase: "preflight", event: "opening_instagram_profile", message: "Opening Instagram profile", actionStatus: "started", source: "worker", runId: "run_mock_live" },
-    { level: "success", phase: "follow", event: "follow_tap_sent", message: "Follow tap sent", targetUsername: "sample_target_live", actionStatus: "started", durationMs: 240, source: "worker", runId: "run_mock_live" },
-    { level: "success", phase: "follow", event: "follow_verified", message: "Follow verified", targetUsername: "sample_target_live", actionStatus: "succeeded", durationMs: 1180, source: "worker", runId: "run_mock_live" },
-    { level: "info", phase: "like", event: "post_opened", message: "Post opened", targetUsername: "sample_target_live", actionStatus: "started", source: "worker", runId: "run_mock_live" },
-    { level: "success", phase: "like", event: "like_tap_sent", message: "Like tap sent", targetUsername: "sample_target_live", actionStatus: "started", durationMs: 310, source: "worker", runId: "run_mock_live" },
-    { level: "warning", phase: "device", event: "slow_ui_response", message: "Warning: slow UI response", reason: "mock_latency_high", actionStatus: "skipped", durationMs: 1410, source: "device", runId: "run_mock_live" },
-    { level: "info", phase: "recovery", event: "recovery_started", message: "Recovery started", reason: "slow_ui_response", actionStatus: "started", source: "worker", runId: "run_mock_live" },
-    { level: "success", phase: "recovery", event: "recovery_completed", message: "Recovery completed", reason: "state_restored", actionStatus: "recovered", durationMs: 2200, source: "worker", runId: "run_mock_live" },
-    { level: "warning", phase: "follow", event: "action_skipped", message: "Action skipped: eligibility_blocked", reason: "eligibility_blocked", actionStatus: "skipped", source: "worker", runId: "run_mock_live" },
-    { level: "error", phase: "device", event: "device_unavailable", message: "Error: device_unavailable", reason: "device_unavailable", actionStatus: "failed", source: "device", runId: "run_mock_live" },
-    { level: "success", phase: "state_machine", event: "session_completed", message: "Session completed", actionStatus: "succeeded", durationMs: 820, source: "worker", runId: "run_mock_live" },
+    { level: "info", phase: "preflight", event: "opening_instagram_profile", message: "Opening Instagram profile", actionStatus: "started", source: "worker", runId: "run_live_preview" },
+    { level: "success", phase: "follow", event: "follow_tap_sent", message: "Follow tap sent", targetUsername: "sample_target_live", actionStatus: "started", durationMs: 240, source: "worker", runId: "run_live_preview" },
+    { level: "success", phase: "follow", event: "follow_verified", message: "Follow verified", targetUsername: "sample_target_live", actionStatus: "succeeded", durationMs: 1180, source: "worker", runId: "run_live_preview" },
+    { level: "info", phase: "like", event: "post_opened", message: "Post opened", targetUsername: "sample_target_live", actionStatus: "started", source: "worker", runId: "run_live_preview" },
+    { level: "success", phase: "like", event: "like_tap_sent", message: "Like tap sent", targetUsername: "sample_target_live", actionStatus: "started", durationMs: 310, source: "worker", runId: "run_live_preview" },
+    { level: "warning", phase: "device", event: "slow_ui_response", message: "Warning: slow UI response", reason: "latency_high", actionStatus: "skipped", durationMs: 1410, source: "device", runId: "run_live_preview" },
+    { level: "info", phase: "recovery", event: "recovery_started", message: "Recovery started", reason: "slow_ui_response", actionStatus: "started", source: "worker", runId: "run_live_preview" },
+    { level: "success", phase: "recovery", event: "recovery_completed", message: "Recovery completed", reason: "state_restored", actionStatus: "recovered", durationMs: 2200, source: "worker", runId: "run_live_preview" },
+    { level: "warning", phase: "follow", event: "action_skipped", message: "Action skipped: eligibility_blocked", reason: "eligibility_blocked", actionStatus: "skipped", source: "worker", runId: "run_live_preview" },
+    { level: "error", phase: "device", event: "device_unavailable", message: "Error: device_unavailable", reason: "device_unavailable", actionStatus: "failed", source: "device", runId: "run_live_preview" },
+    { level: "success", phase: "state_machine", event: "session_completed", message: "Session completed", actionStatus: "succeeded", durationMs: 820, source: "worker", runId: "run_live_preview" },
   ];
   const template = templates[index % templates.length];
   return {
@@ -91,7 +91,7 @@ export function LogsDrawer({ profile, onClose }: { profile: BotProfile; onClose:
   const [autoScroll, setAutoScroll] = useState(true);
   const [newLogCount, setNewLogCount] = useState(0);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
-  const [streamState, setStreamState] = useState<ProfileLogStreamState>("mock_live");
+  const [streamState, setStreamState] = useState<ProfileLogStreamState>("live");
   const [liveIndex, setLiveIndex] = useState(0);
   const viewerRef = useRef<HTMLDivElement | null>(null);
 
@@ -110,7 +110,7 @@ export function LogsDrawer({ profile, onClose }: { profile: BotProfile; onClose:
   }, [profile.id]);
 
   useEffect(() => {
-    if (streamState !== "mock_live") return undefined;
+    if (streamState !== "live") return undefined;
     const id = window.setInterval(() => {
       setLogs((current) => [...current, createMockLiveEntry(profile, liveIndex)].slice(-250));
       setLastUpdatedAt(formatTimestamp());
@@ -180,7 +180,7 @@ export function LogsDrawer({ profile, onClose }: { profile: BotProfile; onClose:
       <div className="logs-console-shell">
         <div className="logs-status-row">
           <div className="logs-live-stack">
-            <span className={`logs-live-badge state-${streamState}`}>{streamState === "mock_live" ? "Live mock" : streamState}</span>
+            <span className={`logs-live-badge state-${streamState}`}>{streamState === "live" ? "Live" : streamState}</span>
             <span className="subtle">Last update: <span className="mono">{lastUpdatedAt ?? "loading"}</span></span>
           </div>
           <div className="logs-counts">
@@ -203,9 +203,9 @@ export function LogsDrawer({ profile, onClose }: { profile: BotProfile; onClose:
 
         <div className="logs-actions-row">
           <Button variant="ghost" onClick={() => setAutoScroll((value) => !value)}>{autoScroll ? "Pause auto-scroll" : "Resume auto-scroll"}</Button>
-          <Button variant="ghost" onClick={() => setStreamState((value) => value === "mock_live" ? "paused" : "mock_live")}>{streamState === "mock_live" ? "Pause mock live" : "Resume mock live"}</Button>
-          <Button variant="ghost" onClick={clearView}>Clear view mock</Button>
-          <Button variant="ghost" onClick={refreshMock}>Refresh mock</Button>
+          <Button variant="ghost" onClick={() => setStreamState((value) => value === "live" ? "paused" : "live")}>{streamState === "live" ? "Pause live" : "Resume live"}</Button>
+          <Button variant="ghost" onClick={clearView}>Clear view</Button>
+          <Button variant="ghost" onClick={refreshMock}>Refresh</Button>
           <Button variant="ghost" onClick={() => exportLogs("txt")}>Export TXT</Button>
           <Button variant="ghost" onClick={() => exportLogs("json")}>Export JSON</Button>
         </div>
@@ -228,11 +228,11 @@ export function LogsDrawer({ profile, onClose }: { profile: BotProfile; onClose:
                 {safe.durationMs ? <span className="mono log-meta">{safe.durationMs}ms</span> : null}
               </div>
             );
-          }) : <div className="log-line level-info">No visible logs. Adjust filters or refresh mock.</div>}
+          }) : <div className="log-line level-info">No visible logs. Adjust filters or refresh.</div>}
         </div>
 
         <p className="logs-future-note">
-          Realtime-ready mock only. Future live data should come through a secure API/WebSocket relay for runtime events, account run logs, and worker structured logs. BotApp must not read local log files or hold Supabase secrets.
+          Future live data will come through a secure API/WebSocket relay for runtime events, account run logs, and worker structured logs. BotApp must not read local log files or hold Supabase secrets.
         </p>
       </div>
     </Drawer>

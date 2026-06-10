@@ -131,7 +131,7 @@ export function AddProfileDrawer({
     setVerification({
       status: valid ? "pending_verification" : "invalid_format",
       canonical_username: valid ? username.toLowerCase() : null,
-      reason: valid ? "mock_provider_not_configured" : "invalid_format",
+      reason: valid ? "provider_not_configured" : "invalid_format",
     });
   }
 
@@ -178,7 +178,7 @@ export function AddProfileDrawer({
       onClose={onClose}
       footer={<div className="drawer-footer-left">
         <Button variant="ghost" onClick={step === 0 ? onClose : () => setStep((current) => (current - 1) as AddProfileStep)}>{step === 0 ? "Cancel" : "Previous"}</Button>
-        {step < 5 ? <Button onClick={() => setStep((current) => (current + 1) as AddProfileStep)} disabled={!canMoveNext()}>Next</Button> : <Button onClick={() => setShowConfirm(true)} disabled={!canMoveNext()}>Create Profile (mock)</Button>}
+        {step < 5 ? <Button onClick={() => setStep((current) => (current + 1) as AddProfileStep)} disabled={!canMoveNext()}>Next</Button> : <Button onClick={() => setShowConfirm(true)} disabled={!canMoveNext()}>Create Profile</Button>}
       </div>}
     >
       <div className="add-profile-flow">
@@ -286,7 +286,7 @@ export function AddProfileDrawer({
             <div><dt>Runtime mode</dt><dd>{selectedRuntime.label}</dd></div>
             <div><dt>Add-ons</dt><dd>{selectedAddons.length ? selectedAddons.map((addon) => addon.label).join(", ") : "none"}</dd></div>
             <div><dt>Schedule</dt><dd>{selectedSlot?.label || "-"} · visible later in Schedule drawer</dd></div>
-            <div><dt>Safety</dt><dd>Mock only - no Supabase, Instagram, ADB, worker, provisioning, login, or run is called.</dd></div>
+            <div><dt>Safety</dt><dd>No Supabase, Instagram, ADB, worker, provisioning, login, or run is called from this preview.</dd></div>
             <div><dt>Future submit contract</dt><dd>POST `/api/instagram-dashboard/accounts/create` through a secure server API only.</dd></div>
           </dl>
         ) : null}
@@ -299,7 +299,7 @@ export function AddProfileDrawer({
           <p>This prepares the admin create contract only. It does not launch login, provisioning, or a run, and no backend mutation is executed.</p>
           <div className="add-profile-confirm-actions">
             <Button variant="ghost" onClick={() => setShowConfirm(false)}>Cancel</Button>
-            <Button onClick={submitMock}>Create Profile (mock)</Button>
+            <Button onClick={submitMock}>Create Profile</Button>
           </div>
         </section>
       </div>

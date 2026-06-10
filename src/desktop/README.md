@@ -1,22 +1,50 @@
 # BotApp macOS Packaging Notes
 
-BotApp Packaging V1 uses Electron + electron-builder because the app is already a Vite/React UI and this keeps the first local macOS package simple.
+BotApp Packaging V1 uses Electron + electron-builder. The app is a Vite/React UI wrapped for local macOS operator testing.
 
 ## Commands
 
-- Dev UI: `npm run dev`
-- Web build: `npm run build`
-- Lint: `npm run lint`
-- Local macOS app package: `npm run package:mac`
+| Command | Output |
+|---------|--------|
+| `npm run dev` | Vite dev server at `http://127.0.0.1:5173/` |
+| `npm run build` | Production renderer in `dist/` |
+| `npm run lint` | ESLint |
+| `npm run package:mac` | Unsigned `release/mac-arm64/BotApp.app` |
 
-The package output is written to `release/` and currently generates an unsigned local `.app` directory for testing.
+## Preview-only contract
 
-## Mock-only contract
+This build is UI-first with **local fixture data**. It does not call Supabase, Instagram, ADB, devices, workers, or runtime actions directly.
 
-This build remains UI-only and mock-first. It does not call a backend, Supabase, Instagram, ADB, devices, workers, or runtime actions. Start, stop, restart, archive, API key, webhook, template, and settings actions stay as confirmation modals plus mock toasts.
+Start, stop, settings save, targets mutations, and Add Profile prepare admin-backed payloads and show confirmation/toast feedback only. Real execution requires a future **secure BotApp API relay**.
 
 ## Bundle safety
 
-The packaged app must include only the built UI, the Electron wrapper, and safe runtime metadata. Do not bundle Phone Farm source repositories, Python workers, Supabase migrations, local `.env` files, raw logs, screenshots, XML dumps, or developer filesystem paths.
+The packaged app must include only:
 
-Real data must flow later through the BotApp API layer only, starting read-only before any guarded write operations.
+- built renderer (`dist/`)
+- Electron wrapper
+- safe public assets (e.g. `/avatars/*.svg`)
+
+Do **not** bundle:
+
+- Phone Farm Python repos or workers
+- Supabase migrations or service keys
+- `.env` files
+- raw logs, screenshots, XML dumps
+- developer filesystem paths
+
+Real data must flow through the BotApp API layer: read-only first, then guarded writes.
+
+## Validation before release testing
+
+```bash
+npm run lint && npm run build && npm run package:mac
+git diff --check
+# no-leak scan on diff, untracked src/docs/public, and app.asar
+```
+
+Confirm `release/`, `dist/`, and secrets are not staged for commit.
+
+## Renderer packaging fix
+
+Vite uses relative asset paths so the packaged Electron window loads local files correctly (no black screen on `file://`).

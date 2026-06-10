@@ -26,9 +26,9 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
         <Button variant="ghost" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1}>Prev</Button>
         <span className="mono">{page} / {totalPages}</span>
         <Button variant="ghost" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages}>Next</Button>
-        <Button variant="ghost" onClick={() => onSave()}>Refresh mock</Button>
+        <Button variant="ghost" onClick={() => onSave()}>Refresh</Button>
       </div>
-      <Button onClick={onSave}>Save mock</Button>
+      <Button onClick={onSave}>Save Stats</Button>
     </>}>
       <div className="stats-table-wrap">
         <table className="stats-table">

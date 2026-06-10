@@ -12,6 +12,6 @@ export function Settings({ settings, onAction }: { settings: AppSettings; onActi
     <SettingsSection title="Ops safety caps" rows={settings.opsSafetyCaps} />
     <SettingsSection title="Kill switches" rows={settings.killSwitches} />
     <SettingsSection title="Read-only runtime state" rows={settings.runtimeState} />
-    <Card title="Save settings"><p className="subtle">Save is mock-only. Real settings will use If-Match and dry_run support through the API layer.</p><Button onClick={() => onAction("Save settings", "BotApp settings", true)}>Save settings</Button></Card>
+    <Card title="Save settings"><p className="subtle">Save prepares the admin contract through a future secure relay with If-Match and dry_run support.</p><Button onClick={() => onAction("Save settings", "BotApp settings", true)}>Save settings</Button></Card>
   </div>;
 }

@@ -60,6 +60,52 @@ export type ProfileEligibility = {
   reason_description: string;
 };
 
+export type RunControlEligibilityProjection = {
+  ok_to_start: boolean;
+  eligibility_status: "ready" | "blocked";
+  reason: string;
+  primary_block_reason: string | null;
+  reason_label: string;
+  reason_description: string;
+  message: string;
+  requested_run_type: "account_session";
+};
+
+export type BotAppRunControlSource = "botapp";
+
+export type BotAppStartRunPayload = {
+  account_id: string;
+  device_id: string;
+  requested_by: string | null;
+  source: BotAppRunControlSource;
+  requested_run_type: "account_session";
+  reason: string;
+  idempotency_key: string;
+  metadata_safe: {
+    account_username: string;
+    device_label: string;
+    timeslot: string;
+    package_label: BotProfile["package"];
+    eligibility_reason: string;
+  };
+};
+
+export type BotAppStopRunPayload = {
+  account_id: string;
+  device_id: string;
+  requested_by: string | null;
+  source: BotAppRunControlSource;
+  reason: string;
+  run_request_id: string | null;
+  current_run_id: string | null;
+  idempotency_key: string;
+  metadata_safe: {
+    account_username: string;
+    current_session: string;
+    expected_effect: string;
+  };
+};
+
 export type ProfileCounters = {
   follow: { current: number; max: number };
   unfollow: { current: number; max: number };
@@ -134,7 +180,7 @@ export type ProfileLogPhase = "preflight" | "login" | "follow" | "mute" | "like"
 export type ProfileLogActionStatus = "started" | "skipped" | "succeeded" | "failed" | "recovered";
 export type ProfileLogSource = "worker" | "botapp" | "dashboard" | "api" | "device";
 export type ProfileLogExportFormat = "txt" | "json";
-export type ProfileLogStreamState = "mock_live" | "paused" | "disconnected";
+export type ProfileLogStreamState = "live" | "paused" | "disconnected";
 
 export type ProfileLogEntry = {
   id: string;
@@ -218,6 +264,48 @@ export type ProfileTargetBulkImportResult = {
 
 export type CredentialStatus = "active" | "missing" | "needs_update";
 
+export type ProfileAssignmentStatus = "assigned" | "pending" | "active" | "reserved" | "idle" | "blocked";
+
+export type ProfileScheduleSlotReason =
+  | "available"
+  | "occupied"
+  | "phone_rest"
+  | "outreach_rest_reserved"
+  | "no_clone_available"
+  | "no_app_instance_available"
+  | "current"
+  | null;
+
+export type ProfileAvailableAssignmentSlot = {
+  slotIndex: number;
+  slotKind: string;
+  slotKindLabel: string;
+  localLabel: string;
+  startsAt: string;
+  endsAt: string;
+  available: boolean;
+  reason: ProfileScheduleSlotReason;
+  occupiedBy: string | null;
+};
+
+export type ProfileScheduleGate = {
+  ok: boolean;
+  reason: string;
+  windowActive: boolean;
+  phoneRestActive: boolean;
+  nextEligibleStartsAt: string | null;
+  runStartGate: "ready" | "blocked";
+  dispatcherGate: "ready" | "env_fallback" | "blocked";
+  autoRestartGate: "ready" | "blocked";
+};
+
+export type ProfileScheduleRestWindow = {
+  id: string;
+  label: string;
+  timezone: string;
+  reason: string | null;
+};
+
 export type ProfileSettingsGeneral = {
   deviceId: string;
   deviceLabel: string;
@@ -225,6 +313,7 @@ export type ProfileSettingsGeneral = {
   username: string;
   credentialStatus: CredentialStatus;
   credentialSource: "Vault" | "secure_backend" | "unknown";
+  credentialUpdateRequired: boolean;
   twoFactorEnabled: boolean;
   commercialPackage: string;
   entitlements: string[];
@@ -233,21 +322,37 @@ export type ProfileSettingsGeneral = {
   readinessStatus: BotProfile["readiness"];
   eligibilityStatus: ProfileEligibility["status"];
   assignmentStatus: string;
+  currentSlot: string;
+  safeMetadata: string;
 };
 
 export type ProfileSettingsSchedule = {
   currentSlot: string;
   businessWindow: string;
+  businessTimezone: string;
   assignmentStatus: string;
   slotKind: string;
+  runtimeProfile: string;
+  assignedDevice: string;
+  safeDeviceSerial: string;
+  cloneSlot: string;
+  apkClonerSlot: string;
+  reservedState: ProfileAssignmentStatus;
   deviceLock: string;
   cloneBufferMinutes: number;
   phoneRest: string;
   scheduleSource: string;
+  assignmentSource: string;
+  appInstanceSummary: string;
+  saveReady: boolean;
+  availableSlots: ProfileAvailableAssignmentSlot[];
+  restWindows: ProfileScheduleRestWindow[];
+  gates: ProfileScheduleGate;
 };
 
 export type ProfileSettingsFollow = {
   timeslot: string;
+  followEnabled: boolean;
   endIfLimitReached: boolean;
   endIfLimitType: string;
   turnOffFollow: boolean;
@@ -255,6 +360,22 @@ export type ProfileSettingsFollow = {
   muteAfterFollow: boolean;
   doFollowsFirst: boolean;
   maxFollowPerSession: number;
+  packageFollowDayCap: number;
+  manualFollowDayCap: number;
+  manualFollowSessionCap: number;
+  warmupEnabled: boolean;
+  warmupStatus: string;
+  warmupDay: number;
+  packageStartedAt: string;
+  day1FollowCap: number;
+  day2FollowCap: number;
+  day3FollowCap: number;
+  day4PlusFollowCap: number;
+  effectiveWarmupCapToday: number;
+  followDayRemaining: number;
+  limitingReason: string;
+  capSource: "package" | "manual" | "warmup" | "remaining_today" | "ops_safety" | "runtime";
+  runtimeStatus: "active" | "read_only" | "needs_routing";
   effectiveFollowLimit: string;
   source: string;
 };
@@ -268,27 +389,259 @@ export type ProfileSettingsDm = {
   templateName: string | null;
   outreachEnabled: boolean;
   welcomeEnabled: boolean;
+  welcomeServiceActive: boolean;
+  outreachServiceActive: boolean;
+  welcomeEntitlementStatus: string;
+  welcomeTemplateStatus: string;
+  outreachTemplateStatus: string;
+  welcomeRealSendStatus: string;
+  outreachRealSendStatus: string;
+  legacyDmGateStatus: string;
+  saveReady: boolean;
+  welcomeDisabledReason: string | null;
+  outreachDisabledReason: string | null;
+  welcomeSessionCap: number;
+  welcomeDayCap: number;
+  outreachSessionCap: number;
+  outreachDayCap: number;
+  outreachEntitlementStatus: string;
   safeDmLimit: number;
 };
 
+export type ProfileDmFeatureStatus = "active" | "inactive" | "blocked" | "missing";
+
+export type ProfileDmEntitlement = {
+  feature: "welcome" | "outreach";
+  status: string;
+  serviceActive: boolean;
+  disabledReason: string | null;
+};
+
+export type ProfileDmMessage = {
+  body: string;
+  templateStatus: string;
+  charCount: number;
+  maxChars: number;
+};
+
+export type ProfileDmTemplate = {
+  id: string | null;
+  kind: "welcome" | "outreach";
+  status: string;
+  variables: string[];
+};
+
+export type ProfileDmTemplateAction = "insert_variable";
+
+export type ProfileDmSavePayload = {
+  account_id: string;
+  source: "botapp";
+  requested_by: string | null;
+  idempotency_key: string;
+  mock_only: true;
+  endpoint: "/api/instagram-dashboard/settings/dm";
+  patch: {
+    account_id: string;
+    welcome_enabled: boolean;
+    welcome_message: string;
+    welcome_cap_session: number;
+    welcome_cap_day: number;
+    outreach_enabled: boolean;
+    outreach_message: string;
+    outreach_cap_session: number;
+    outreach_cap_day: number;
+  };
+  metadata_safe: {
+    account_username: string;
+    welcome_template_status: string;
+    outreach_template_status: string;
+    welcome_real_send_status: string;
+    outreach_real_send_status: string;
+    sensitive_values_excluded: true;
+  };
+};
+
 export type ProfileSettingsFollowback = {
+  unfollowEnabled: boolean;
+  unfollowMode: ProfileUnfollowMode;
+  unfollowPerSession: number;
   unfollowPerDay: number;
   unfollowAfterDays: number;
   stopAfterUnfollowSkipped: number;
-  unfollowSort: string;
+  unfollowSort: ProfileUnfollowMode;
   followbackRatioSummary: string;
+  packageUnfollowDayCap: number;
+  runtimeCapMode: "prod_normal" | "mini_run" | "incident_safety";
+  runtimeSafetyCap: number | null;
+  runtimeHardCap: number;
+  runtimeCapSource: string;
+  followEntitlementStatus: string;
+  unfollowEntitlementStatus: string;
+  handoffStatus: string;
+  blockReason: string;
+  safeCandidateStrategyStatus: string;
+  doUnfollowFirstStatus: string;
+  currentRuntimeMode: string;
+  unfollowedToday: number;
+  unfollowDayRemaining: number | null;
+  limitingReason: string;
   effectiveUnfollowLimit: string;
+};
+
+export type ProfileUnfollowMode = "unfollow" | "unfollow-any" | "unfollow-non-followers";
+export type ProfileUnfollowRuntimeCapMode = ProfileSettingsFollowback["runtimeCapMode"];
+
+export type ProfileUnfollowLimit = {
+  label: string;
+  value: number;
+  source: "account_setting" | "runtime" | "ops_safety" | "remaining_today" | "package" | "admin_override";
+  readOnly: boolean;
+};
+
+export type ProfileUnfollowRuntimeSummary = {
+  enabled: boolean;
+  effectiveCap: number;
+  remainingToday: number | null;
+  limitingReason: string;
+  blockReason: string;
+};
+
+export type ProfileUnfollowSafetyCap = {
+  runtimeCapMode: ProfileUnfollowRuntimeCapMode;
+  runtimeSafetyCap: number | null;
+  runtimeHardCap: number;
+  runtimeCapSource: string;
+};
+
+export type ProfileFollowbackRatioSummary = {
+  label: string;
+  followed: number;
+  unfollowed: number;
+  status: string;
+};
+
+export type ProfileUnfollowCandidateStrategy = {
+  status: string;
+  handoffStatus: string;
+  mode: ProfileUnfollowMode;
+};
+
+export type ProfileFollowbackSavePayload = {
+  account_id: string;
+  source: "botapp";
+  requested_by: string | null;
+  idempotency_key: string;
+  mock_only: true;
+  endpoint: "/api/instagram-dashboard/settings/unfollow";
+  patch: {
+    account_id: string;
+    unfollow_enabled: boolean;
+    unfollow_mode: ProfileUnfollowMode;
+    unfollow_per_session_limit: number;
+    unfollow_per_day_limit: number;
+    unfollow_after_days: number;
+    runtime_cap_mode: ProfileUnfollowRuntimeCapMode;
+    runtime_safety_cap: number | null;
+  };
+  metadata_safe: {
+    account_username: string;
+    effective_unfollow_cap: string;
+    runtime_cap_source: string;
+    limiting_reason: string;
+    sensitive_values_excluded: true;
+  };
 };
 
 export type ProfileSettingsSources = {
   mainSource: string;
   sourceGroups: string[];
   targetAccountRefs: string[];
+  totalTargetsCount: number;
+  activeTargetsCount: number;
+  eligibleTargetsCount: number;
+  pendingTargetsCount: number;
+  rejectedTargetsCount: number;
+  archivedTargetsCount: number;
+  maxFollowsPerTargetPerRun: number;
+  maxTargetsPerRun: number;
+  bounds: {
+    maxFollowsPerTargetPerRun: { min: number; max: number };
+    maxTargetsPerRun: { min: number; max: number };
+  };
+  sourceStatus: "account_setting" | "env_fallback" | "default" | "schema_pending";
+  runtimeStatus: "active" | "schema_pending";
+  saveReady: boolean;
+  note: string;
   ctQualitySummary: string;
+  followbackRatioByTarget: string;
+  followsSentByTarget: string;
+  insufficientDataTargets: number;
+  pendingRuntimeTargets: number;
+  recentlyExhaustedTargets: number;
+  nextTargetProbable: string;
+  sourceHealth: "healthy" | "review" | "blocked";
+  adminSyncStatus: ProfileSourceSyncStatus;
+  clientSyncStatus: ProfileSourceSyncStatus;
+  botAppSyncStatus: ProfileSourceSyncStatus;
+  lastRefreshLabel: string;
   syncReadiness: "ready" | "review" | "blocked";
 };
 
+export type ProfileSourceMode = "multi_target_rotation";
+export type ProfileSourceStatus = ProfileSettingsSources["sourceStatus"];
+export type ProfileSourceSyncStatus = "ready" | "review" | "blocked" | "schema_pending";
+
+export type ProfileSourcePolicy = {
+  mode: ProfileSourceMode;
+  maxFollowsPerTargetPerRun: number;
+  maxTargetsPerRun: number;
+  source: ProfileSourceStatus;
+  saveReady: boolean;
+};
+
+export type ProfileSourceSummary = {
+  totalTargets: number;
+  activeTargets: number;
+  eligibleTargets: number;
+  rejectedTargets: number;
+  archivedTargets: number;
+  sourceHealth: ProfileSettingsSources["sourceHealth"];
+};
+
+export type ProfileTargetSourceSummary = {
+  ctQualitySummary: string;
+  nextTargetProbable: string;
+  followbackRatioByTarget: string;
+};
+
+export type ProfileSourceSavePayload = {
+  account_id: string;
+  source: "botapp";
+  requested_by: string | null;
+  idempotency_key: string;
+  mock_only: true;
+  endpoint: "/api/instagram-dashboard/settings/follow-sources";
+  patch: {
+    account_id: string;
+    max_follows_per_target_per_run: number;
+    max_targets_per_run: number;
+  };
+  metadata_safe: {
+    account_username: string;
+    source_status: ProfileSourceStatus;
+    runtime_status: ProfileSettingsSources["runtimeStatus"];
+    target_summary: {
+      active: number;
+      eligible: number;
+      rejected: number;
+      archived: number;
+    };
+    sensitive_values_excluded: true;
+  };
+};
+
 export type ProfileSettingsFilters = {
+  skipPrivateProfiles: boolean;
   skipFollower: boolean;
   skipFollowing: boolean;
   skipNonBusiness: boolean;
@@ -296,14 +649,183 @@ export type ProfileSettingsFilters = {
   followPrivate: boolean;
   followOnlyPrivate: boolean;
   dmPrivate: boolean;
-  minFollowers: number;
-  maxFollowers: number;
+  minFollowers: number | null;
+  maxFollowers: number | null;
   minFollowing: number;
   maxFollowing: number;
-  minPosts: number;
+  minPosts: number | null;
   blacklistedWords: string;
   mandatoryWords: string;
+  runtimeReadyFields: string[];
+  plannedFields: string[];
+  runtimeStatus: "active";
+  saveReady: boolean;
+  sourceStatus: "account_setting" | "default" | "mock";
   templateName: string | null;
+};
+
+export type ProfileFilterNumericRange = {
+  min: number | null;
+  max: number | null;
+};
+
+export type ProfileFilterWordList = {
+  raw: string;
+  normalized: string[];
+  readOnly: boolean;
+};
+
+export type ProfileFilterSourceStatus = ProfileSettingsFilters["sourceStatus"];
+
+export type ProfileFilterRule = {
+  key: string;
+  label: string;
+  runtimeReady: boolean;
+  readOnly: boolean;
+};
+
+export type ProfileFilterValidation = {
+  ok: boolean;
+  reason: string | null;
+};
+
+export type ProfileFiltersSavePayload = {
+  account_id: string;
+  source: "botapp";
+  requested_by: string | null;
+  idempotency_key: string;
+  mock_only: true;
+  endpoint: "/api/instagram-dashboard/settings/follow-filters";
+  patch: {
+    account_id: string;
+    skip_private_profiles: boolean;
+    min_followers: number | null;
+    max_followers: number | null;
+    min_posts: number | null;
+  };
+  metadata_safe: {
+    account_username: string;
+    runtime_ready_fields: string[];
+    planned_fields: string[];
+    source_status: ProfileFilterSourceStatus;
+    sensitive_values_excluded: true;
+  };
+};
+
+export type ProfileSettingsSaveMode = "general" | "settings" | "schedule" | "follow" | "dm" | "followback" | "sources" | "filters" | "template";
+
+export type ProfileSettingsTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  templateType: "settings" | "filters" | "full";
+};
+
+export type ProfileCredentialSafeStatus = {
+  status: CredentialStatus;
+  source: ProfileSettingsGeneral["credentialSource"];
+  updateRequired: boolean;
+  twoFactorEnabled: boolean;
+};
+
+export type ProfileSettingsPayload = {
+  account_id: string;
+  source: "botapp";
+  mode: ProfileSettingsSaveMode;
+  mock_only: true;
+  settings: Partial<ProfileSettings>;
+  template?: ProfileSettingsTemplate;
+  metadata_safe: {
+    account_username: string;
+    tab: string;
+    sensitive_values_excluded: true;
+  };
+};
+
+export type ProfileScheduleAction = "save_schedule";
+
+export type ProfileScheduleSavePayload = {
+  account_id: string;
+  device_id: string;
+  starts_at: string;
+  ends_at: string;
+  selected_slot_key: string;
+  source: "botapp";
+  requested_by: string | null;
+  reason: "manual_schedule_assignment";
+  action: ProfileScheduleAction;
+  idempotency_key: string;
+  mock_only: true;
+  metadata_safe: {
+    account_username: string;
+    device_label: string;
+    slot_label: string;
+    slot_kind: string;
+    assignment_source: "manual_botapp";
+    sensitive_values_excluded: true;
+  };
+};
+
+export type ProfileFollowCapSource = ProfileSettingsFollow["capSource"];
+
+export type ProfileFollowLimit = {
+  label: string;
+  value: number;
+  source: ProfileFollowCapSource;
+  readOnly: boolean;
+};
+
+export type ProfileFollowWarmupState = {
+  enabled: boolean;
+  status: string;
+  day: number;
+  day1Cap: number;
+  day2Cap: number;
+  day3Cap: number;
+  day4PlusCap: number;
+  effectiveCapToday: number;
+};
+
+export type ProfileFollowRuntimeSummary = {
+  enabled: boolean;
+  effectiveCapToday: number;
+  followDayRemaining: number;
+  limitingReason: string;
+  runtimeStatus: ProfileSettingsFollow["runtimeStatus"];
+};
+
+export type ProfileFollowSafetyCap = {
+  packageCap: number;
+  manualDayCap: number;
+  manualSessionCap: number;
+  warmupCap: number;
+  effectiveCap: number;
+};
+
+export type ProfileFollowSavePayload = {
+  account_id: string;
+  source: "botapp";
+  requested_by: string | null;
+  idempotency_key: string;
+  mock_only: true;
+  endpoint: "/api/instagram-dashboard/settings";
+  patch: {
+    account_id: string;
+    manual_follow_day_cap: number;
+    manual_follow_session_cap: number;
+    warmup_enabled: boolean;
+    day_1_follow_cap: number;
+    day_2_follow_cap: number;
+    day_3_follow_cap: number;
+    day_4_plus_follow_cap: number;
+  };
+  metadata_safe: {
+    account_username: string;
+    package_follow_day_cap: number;
+    effective_follow_cap_today: number;
+    limiting_reason: string;
+    sensitive_values_excluded: true;
+  };
 };
 
 export type ProfileSettings = {

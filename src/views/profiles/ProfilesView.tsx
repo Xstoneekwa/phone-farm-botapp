@@ -8,6 +8,17 @@ import { TargetsDrawer } from "./drawers/TargetsDrawer";
 import { SettingsDrawer } from "./drawers/SettingsDrawer";
 import { FiltersDrawer } from "./drawers/FiltersDrawer";
 import { AddProfileDrawer } from "./drawers/AddProfileDrawer";
+import {
+  buildStartPayload,
+  buildStopPayload,
+  isStartDisabled,
+  isStopEnabled,
+  mockCurrentRunId,
+  mockRunRequestId,
+  projectRunEligibility,
+  startDisabledReason,
+  stopDisabledReason,
+} from "./run-control";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
@@ -82,6 +93,14 @@ function summarizeProfiles(profiles: BotProfile[]): DeviceProfileGroup["summary"
     dual: profiles.filter((profile) => profile.planType === "dual").length,
     other: profiles.filter((profile) => profile.planType === "other").length,
   };
+}
+
+function phoneGroupSummaryLabel(group: DeviceProfileGroup) {
+  const total = group.summary.total;
+  const running = group.profiles.filter((profile) => profile.status === "running").length;
+  if (running > 0) return `${total} profiles · ${running} running`;
+  if (group.phoneStatus === "running" || group.phoneStatus === "active") return `${total} profiles · ready`;
+  return `${total} profiles · idle`;
 }
 
 function phoneStatusTone(status: DeviceProfileGroup["phoneStatus"]) {
@@ -161,6 +180,7 @@ export function ProfilesView({
   const [drawer, setDrawer] = useState<{ kind: DrawerKind; profile: BotProfile } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ kind: ConfirmKind; profile: BotProfile } | null>(null);
   const [addProfileOpen, setAddProfileOpen] = useState(false);
+  const [stopReason, setStopReason] = useState("");
 
   const filteredGroups = useMemo(() => {
     const query = normalizeSearch(searchTerm);
@@ -180,6 +200,7 @@ export function ProfilesView({
 
   function handleToolbar(profile: BotProfile, action: ProfileToolbarAction) {
     if (action === "play" || action === "auto_login" || action === "assign_now" || action === "archive" || action === "delete" || action === "stop") {
+      if (action === "stop") setStopReason("");
       setConfirmAction({ kind: action, profile });
       return;
     }
@@ -195,18 +216,45 @@ export function ProfilesView({
     setDrawer(null);
   }
 
+  function executeConfirm(action: { kind: ConfirmKind; profile: BotProfile }) {
+    if (action.kind === "play") {
+      const payload = buildStartPayload(action.profile);
+      void payload;
+      onMockSubmit("Start payload prepared for future secure BotApp relay.");
+      setConfirmAction(null);
+      return;
+    }
+    if (action.kind === "stop") {
+      const payload = buildStopPayload(action.profile, stopReason);
+      void payload;
+      onMockSubmit("Stop payload prepared for future secure BotApp relay.");
+      setConfirmAction(null);
+      return;
+    }
+    const labels: Record<ConfirmKind, string> = {
+      play: "Start profile",
+      auto_login: "Auto Login",
+      assign_now: "Assign Now",
+      archive: "Archive profile",
+      delete: "Delete profile",
+      stop: "Stop profile",
+    };
+    onAction(labels[action.kind], action.profile.username, true);
+    setConfirmAction(null);
+  }
+
   return (
     <div className="profiles-screen">
       <Card
         title="Profiles / Accounts"
-        subtitle="Phones first, then assigned accounts. Toolbar actions open mock drawers only."
+        subtitle=""
         actions={<>
           <div className="profiles-filters">
             {(["All", "Instagram", "TikTok"] as const).map((item) => (
               <button key={item} type="button" className={platformFilter === item ? "filter-chip active" : "filter-chip"} onClick={() => setPlatformFilter(item)}>{item}</button>
             ))}
           </div>
-          <Button variant="ghost" onClick={() => onAction("Refresh profiles", "all profiles")}>Refresh mock</Button>
+          <Button variant="ghost" onClick={() => onAction("Refresh profiles", "all profiles")}>Refresh</Button>
         </>}
       >
         <div className="profiles-search-row">
@@ -216,7 +264,7 @@ export function ProfilesView({
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
           />
-          <Button onClick={() => setAddProfileOpen(true)}>+ New profile</Button>
+          <Button className="new-profile-button" onClick={() => setAddProfileOpen(true)}>+ New profile</Button>
         </div>
       </Card>
 
@@ -235,7 +283,7 @@ export function ProfilesView({
               <Badge tone={phoneStatusTone(group.phoneStatus)}>{group.phoneStatus}</Badge>
             </div>
             <div className="phone-group-summary mono">
-              {group.summary.total} profiles · {group.summary.normal} normal · {group.summary.dual} dual · {group.summary.other} other
+              {phoneGroupSummaryLabel(group)}
             </div>
           </header>
           <div className="phone-group-body">
@@ -249,7 +297,14 @@ export function ProfilesView({
       {drawer?.kind === "stats" ? <StatsDrawer profile={drawer.profile} onClose={() => setDrawer(null)} onSave={() => mockSave("Save profile stats")} /> : null}
       {drawer?.kind === "logs" ? <LogsDrawer profile={drawer.profile} onClose={() => setDrawer(null)} /> : null}
       {drawer?.kind === "targets" ? <TargetsDrawer profile={drawer.profile} onClose={() => setDrawer(null)} onAction={(label) => mockSave(label)} /> : null}
-      {drawer?.kind === "settings" ? <SettingsDrawer profile={drawer.profile} onClose={() => setDrawer(null)} onConfirm={() => mockSave("Save profile settings")} /> : null}
+      {drawer?.kind === "settings" ? (
+        <SettingsDrawer
+          profile={drawer.profile}
+          onClose={() => setDrawer(null)}
+          onConfirm={() => mockSave("Save profile settings")}
+          onOpenTargets={() => setDrawer({ kind: "targets", profile: drawer.profile })}
+        />
+      ) : null}
       {drawer?.kind === "filters" ? <FiltersDrawer profile={drawer.profile} onClose={() => setDrawer(null)} onSave={() => mockSave("Save profile filters")} /> : null}
       {addProfileOpen ? (
         <AddProfileDrawer
@@ -257,46 +312,112 @@ export function ProfilesView({
           onClose={() => setAddProfileOpen(false)}
           onSubmitMock={(payload) => {
             void payload;
-            onMockSubmit("Mock only - no backend action executed. Add Profile payload is prepared for the secure admin create contract.");
+            onMockSubmit("Add Profile payload is prepared for the secure admin create contract.");
           }}
         />
       ) : null}
 
       {confirmAction ? (
         <Modal
-          title={`${confirmAction.kind.replace("_", " ")} ${confirmAction.profile.username}?`}
+          title={confirmTitle(confirmAction.kind, confirmAction.profile)}
           danger={confirmAction.kind === "delete" || confirmAction.kind === "archive" || confirmAction.kind === "stop" || confirmAction.profile.eligibility !== "can_start"}
-          confirmLabel="Preview only"
+          confirmLabel={confirmAction.kind === "play" ? "Start" : confirmAction.kind === "stop" ? "Stop" : "Confirm"}
           onClose={() => setConfirmAction(null)}
-          onConfirm={() => {
-            const labels: Record<ConfirmKind, string> = {
-              play: "Start profile",
-              auto_login: "Auto Login",
-              assign_now: "Assign Now",
-              archive: "Archive profile",
-              delete: "Delete profile",
-              stop: "Stop profile",
-            };
-            onAction(labels[confirmAction.kind], confirmAction.profile.username, true);
-            setConfirmAction(null);
-          }}
+          onConfirm={() => executeConfirm(confirmAction)}
         >
-          <p><strong>Mock only — no backend action executed.</strong></p>
-          <div className="detail-list play-eligibility">
-            <span>Readiness</span><code>{confirmAction.profile.readiness}</code>
-            <span>Eligibility</span><code>{confirmAction.profile.eligibilityDetail.status}</code>
-            <span>Primary block</span><code className="mono">{confirmAction.profile.eligibilityDetail.primary_block_reason || "none"}</code>
-            <span>Reason label</span><code>{confirmAction.profile.eligibilityDetail.reason_label}</code>
-            <span>Description</span><span>{confirmAction.profile.eligibilityDetail.reason_description}</span>
-            <span>Credential status</span><code>{confirmAction.profile.credentialStatus}</code>
-            <span>Login status</span><code>{confirmAction.profile.loginStatus}</code>
-            <span>Device availability</span><code>{confirmAction.profile.deviceAvailability}</code>
-            <span>Assignment state</span><code>{confirmAction.profile.assignmentState}</code>
-            <span>Entitlements</span><code>{confirmAction.profile.entitlements.join(", ")}</code>
-            <span>Device lock</span><code className="mono">{confirmAction.profile.runtimeLock}</code>
-          </div>
+          {confirmAction.kind === "play" ? <StartConfirmation profile={confirmAction.profile} /> : null}
+          {confirmAction.kind === "stop" ? (
+            <StopConfirmation profile={confirmAction.profile} stopReason={stopReason} onStopReasonChange={setStopReason} />
+          ) : null}
+          {confirmAction.kind !== "play" && confirmAction.kind !== "stop" ? <GenericConfirmation profile={confirmAction.profile} /> : null}
         </Modal>
       ) : null}
     </div>
+  );
+}
+
+function confirmTitle(kind: ConfirmKind, profile: BotProfile) {
+  if (kind === "play") return `Start manual run for ${profile.username}?`;
+  if (kind === "stop") return `Stop current run for ${profile.username}?`;
+  return `${kind.replace("_", " ")} ${profile.username}?`;
+}
+
+function StartConfirmation({ profile }: { profile: BotProfile }) {
+  const eligibility = projectRunEligibility(profile);
+  const payload = buildStartPayload(profile);
+  const disabledReason = startDisabledReason(profile);
+  return (
+    <div className="run-confirmation">
+      <p><strong>Prepared for secure relay execution.</strong></p>
+      {isStartDisabled(profile) ? <p className="run-control-warning">{disabledReason}</p> : null}
+      <div className="detail-list play-eligibility">
+        <span>Account</span><code>@{profile.username}</code>
+        <span>Device</span><code>{profile.deviceName}</code>
+        <span>Timeslot</span><code>{profile.activeWindow}</code>
+        <span>Eligibility</span><code>{eligibility.eligibility_status}</code>
+        <span>Package</span><code>{profile.package}</code>
+        <span>Reason / warnings</span><span>{eligibility.reason_label} · {eligibility.reason_description}</span>
+        <span>Future endpoint</span><code>/api/botapp/instagram-dashboard/runs/start</code>
+        <span>Future contract</span><code>create_account_run_request relay</code>
+      </div>
+      <pre className="payload-preview">{JSON.stringify(payload, null, 2)}</pre>
+    </div>
+  );
+}
+
+function StopConfirmation({
+  profile,
+  stopReason,
+  onStopReasonChange,
+}: {
+  profile: BotProfile;
+  stopReason: string;
+  onStopReasonChange: (value: string) => void;
+}) {
+  const payload = buildStopPayload(profile, stopReason);
+  const disabledReason = stopDisabledReason(profile);
+  return (
+    <div className="run-confirmation">
+      <p><strong>Prepared for secure relay execution.</strong></p>
+      {!isStopEnabled(profile) ? <p className="run-control-warning">{disabledReason}</p> : null}
+      <div className="detail-list play-eligibility">
+        <span>Account</span><code>@{profile.username}</code>
+        <span>Current run/session</span><code>{mockCurrentRunId(profile) ?? profile.lastSessionAt ?? "none"}</code>
+        <span>Run request</span><code>{mockRunRequestId(profile) ?? "none"}</code>
+        <span>Expected effect</span><span>Cancel active account_run_requests and request stop/reconcile active ig_runs through a future secure BotApp relay.</span>
+        <span>Future endpoint</span><code>/api/botapp/instagram-dashboard/stop</code>
+      </div>
+      <label className="stop-reason-field">
+        Optional stop reason
+        <input
+          className="input"
+          value={stopReason}
+          onChange={(event) => onStopReasonChange(event.target.value)}
+          placeholder="manual_stop"
+        />
+      </label>
+      <pre className="payload-preview">{JSON.stringify(payload, null, 2)}</pre>
+    </div>
+  );
+}
+
+function GenericConfirmation({ profile }: { profile: BotProfile }) {
+  return (
+    <>
+      <p><strong>Prepared for secure relay execution.</strong></p>
+      <div className="detail-list play-eligibility">
+        <span>Readiness</span><code>{profile.readiness}</code>
+        <span>Eligibility</span><code>{profile.eligibilityDetail.status}</code>
+        <span>Primary block</span><code className="mono">{profile.eligibilityDetail.primary_block_reason || "none"}</code>
+        <span>Reason label</span><code>{profile.eligibilityDetail.reason_label}</code>
+        <span>Description</span><span>{profile.eligibilityDetail.reason_description}</span>
+        <span>Credential status</span><code>{profile.credentialStatus}</code>
+        <span>Login status</span><code>{profile.loginStatus}</code>
+        <span>Device availability</span><code>{profile.deviceAvailability}</code>
+        <span>Assignment state</span><code>{profile.assignmentState}</code>
+        <span>Entitlements</span><code>{profile.entitlements.join(", ")}</code>
+        <span>Device lock</span><code className="mono">{profile.runtimeLock}</code>
+      </div>
+    </>
   );
 }

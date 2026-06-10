@@ -8,10 +8,10 @@ export function Overview({ profiles, devices, notifications, logs, onAction }: {
   const blocked = profiles.filter((profile) => profile.eligibility === "blocked_now").length;
   return <div className="grid" style={{ gap: 16 }}>
     <div className="grid metrics">
-      <Card><span className="subtle">Active profiles</span><div className="metric-value">{running}</div><span className="subtle">{profiles.length} loaded from mock client</span></Card>
+      <Card><span className="subtle">Active profiles</span><div className="metric-value">{running}</div><span className="subtle">{profiles.length} loaded locally</span></Card>
       <Card><span className="subtle">Devices online</span><div className="metric-value">{online}</div><span className="subtle">{devices.length} registered phones</span></Card>
       <Card><span className="subtle">Start blocked now</span><div className="metric-value">{blocked}</div><span className="subtle">Runtime eligibility, not config readiness</span></Card>
-      <Card><span className="subtle">Security mode</span><div className="metric-value">Mock</div><span className="subtle">No backend calls enabled</span></Card>
+      <Card><span className="subtle">Security mode</span><div className="metric-value">Local</div><span className="subtle">Secure relay not connected</span></Card>
     </div>
     <div className="grid two">
       <Card title="Action Required" subtitle="Ready config can still be blocked by runtime gates." actions={<Button variant="danger" onClick={() => onAction("Stop all accounts", "all profiles", true)}>Stop all accounts</Button>}>

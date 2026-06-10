@@ -1,6 +1,8 @@
 # BotApp Architecture
 
-BotApp is a macOS Electron application built with Vite, React, and TypeScript. It is currently a mock-first operator shell for the Phone Farm system.
+Short summary. For the full developer guide see **`docs/botapp-architecture.md`**.
+
+BotApp is a macOS Electron application built with Vite, React, and TypeScript. It is currently a local-preview operator shell for the Phone Farm system.
 
 ## Surfaces
 

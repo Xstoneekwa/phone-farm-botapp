@@ -91,7 +91,7 @@ export function App() {
   }
 
   let view: React.ReactNode;
-  if (loading) view = <div className="empty-state"><strong>Loading mock data</strong><span>No backend connection is required.</span></div>;
+  if (loading) view = <div className="empty-state"><strong>Loading local data</strong><span>No backend connection is required.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
   else if (active === "profiles") view = <Profiles groups={data.profileGroups} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message) => pushToast(message, "success")} />;
   else if (active === "account") view = <AccountDetail profile={selectedProfile} onAction={requestAction} />;
@@ -107,7 +107,7 @@ export function App() {
     <Sidebar active={active} onNavigate={navigate} counts={counts} />
     <main className="main"><TopBar active={active} onCommand={() => setCommandOpen(true)} /><div className="content">{view}</div></main>
     {commandOpen ? <div className="command-overlay" onClick={() => setCommandOpen(false)}><div className="command-box" onClick={(event) => event.stopPropagation()}><input className="input" placeholder="Jump to screen..." autoFocus />{routes.map((route) => <button key={route.id} onClick={() => navigate(route.id)}><span>{route.label}</span><span className="mono">{route.shortcut}</span></button>)}</div></div> : null}
-    {pendingAction ? <Modal title={`${pendingAction.action}?`} danger={pendingAction.danger} confirmLabel="Preview only" onClose={() => setPendingAction(null)} onConfirm={confirmAction}><p><strong>Mock only — no backend action executed.</strong></p><p>This preview will not call Supabase, Instagram, ADB, a worker, a dispatcher, or a real device. Target: <span className="mono">{pendingAction.target}</span>.</p></Modal> : null}
+    {pendingAction ? <Modal title={`${pendingAction.action}?`} danger={pendingAction.danger} confirmLabel="Confirm" onClose={() => setPendingAction(null)} onConfirm={confirmAction}><p><strong>Prepared for secure relay execution.</strong></p><p>This preview will not call Supabase, Instagram, ADB, a worker, a dispatcher, or a real device. Target: <span className="mono">{pendingAction.target}</span>.</p></Modal> : null}
     <Toasts items={toasts} />
   </div>;
 }

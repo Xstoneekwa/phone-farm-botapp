@@ -99,19 +99,24 @@ Future integration:
 
 ## Filters
 
-File: `src/views/profiles/drawers/FiltersDrawer.tsx`
+Files:
+
+- `src/views/profiles/drawers/FilterSettingsPanel.tsx` — shared UI + validation + payload
+- `src/views/profiles/drawers/FiltersDrawer.tsx` — toolbar entry
+- `SettingsDrawer.tsx` — Settings > Filters tab (same panel)
 
 Current behavior:
 
-- Existing mock filter form.
-- Reads local mock filters.
-- Save action is preview-only.
+- Single shared panel for toolbar Filters and Settings Filters.
+- Runtime-ready editable: skip private, min/max followers, min posts.
+- Planned read-only fields mirror admin (follower/following, business, word lists).
+- Save Filters prepares admin PATCH payload; no backend mutation.
 
 Future integration:
 
 - Audit against admin/client filter semantics.
 - Preserve safety around private/business/follower count filters.
-- Validate values server-side before persistence.
+- Validate values server-side through BotApp relay before persistence.
 
 ## Toolbar Actions
 

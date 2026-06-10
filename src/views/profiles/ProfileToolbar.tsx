@@ -1,4 +1,5 @@
 import type { BotProfile, ProfileToolbarAction, ProfileRequirementState } from "../../api/types";
+import { isStartDisabled, isStopEnabled, startDisabledReason, stopDisabledReason } from "./run-control";
 
 const toolbarActions: Array<{ id: ProfileToolbarAction; label: string; danger?: boolean }> = [
   { id: "stats", label: "Stats" },
@@ -37,26 +38,45 @@ function disabledReason(profile: BotProfile, action: ProfileToolbarAction): Prof
   return null;
 }
 
+function runControlDisabledReason(profile: BotProfile, action: ProfileToolbarAction) {
+  if (action === "play" && isStartDisabled(profile)) return startDisabledReason(profile);
+  if (action === "stop" && !isStopEnabled(profile)) return stopDisabledReason(profile);
+  return null;
+}
+
+function tooltipText(profile: BotProfile, action: ProfileToolbarAction, label: string) {
+  const requirementReason = disabledReason(profile, action);
+  const runControlReason = runControlDisabledReason(profile, action);
+  if (runControlReason) return `${label} · ${runControlReason}`;
+  if (requirementReason) return `${label} · ${requirementReason.label}`;
+  if (action === "play") return "Start manual account_session run through future secure BotApp relay.";
+  if (action === "stop") return "Cancel queued run request and request stop for active run through future secure BotApp relay.";
+  return label;
+}
+
 export function ProfileToolbar({ profile, onAction }: { profile: BotProfile; onAction: (action: ProfileToolbarAction) => void }) {
   return (
     <div className="profile-toolbar" role="toolbar" aria-label="Profile actions">
-      {toolbarActions.map((item) => (
-        <span
-          key={item.id}
-          className="tooltip-wrap"
-          data-tooltip={`${item.label}${disabledReason(profile, item.id) ? ` · ${disabledReason(profile, item.id)?.reason}` : ""}`}
-        >
-          <button
-            type="button"
-            className={`profile-toolbar-btn${item.danger ? " danger" : ""}`}
-            aria-label={item.label}
-            disabled={Boolean(disabledReason(profile, item.id))}
-            onClick={() => onAction(item.id)}
+      {toolbarActions.map((item) => {
+        const disabled = Boolean(disabledReason(profile, item.id) || runControlDisabledReason(profile, item.id));
+        return (
+          <span
+            key={item.id}
+            className="tooltip-wrap"
+            data-tooltip={tooltipText(profile, item.id, item.label)}
           >
-            <Icon action={item.id} />
-          </button>
-        </span>
-      ))}
+            <button
+              type="button"
+              className={`profile-toolbar-btn${item.danger ? " danger" : ""}`}
+              aria-label={item.label}
+              disabled={disabled}
+              onClick={() => onAction(item.id)}
+            >
+              <Icon action={item.id} />
+            </button>
+          </span>
+        );
+      })}
     </div>
   );
 }

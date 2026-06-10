@@ -54,7 +54,7 @@ export function resolveEligibility(reason: string): ProfileEligibility {
     status: "blocked_now",
     primary_block_reason: reason,
     reason_label: reason.replaceAll("_", " "),
-    reason_description: "Start is blocked in mock mode until eligibility is resolved.",
+    reason_description: "Start is blocked until eligibility is resolved.",
   };
 }
 
@@ -96,7 +96,7 @@ export const mockProfilesExpanded: BotProfile[] = [
     entitlements: ["follow", "outreach", "unfollow", "welcome"],
     runtimeProfile: "full_cycle",
     slotKind: "full_cycle_6h",
-    autoLoginRequirement: requirement(true, "ready", "Ready", "Credential and device prerequisites are satisfied for mock auto login."),
+    autoLoginRequirement: requirement(true, "ready", "Ready", "Credential and device prerequisites are satisfied for auto login."),
     assignNowRequirement: requirement(false, "eligibility_blocked", "Eligibility blocked", "Assignment is visible but blocked by current runtime eligibility."),
     lastSessionAt: "16:59:16 2026-06-09",
     readiness: "ready",
@@ -131,8 +131,8 @@ export const mockProfilesExpanded: BotProfile[] = [
     entitlements: ["follow", "welcome"],
     runtimeProfile: "follow_only",
     slotKind: "growth_3h",
-    autoLoginRequirement: requirement(true, "ready", "Ready", "Mock auto login prerequisites are satisfied."),
-    assignNowRequirement: requirement(true, "ready", "Ready", "Device and assignment slot are available in mock mode."),
+    autoLoginRequirement: requirement(true, "ready", "Ready", "Auto login prerequisites are satisfied."),
+    assignNowRequirement: requirement(true, "ready", "Ready", "Device and assignment slot are available."),
     lastSessionAt: "11:42:03 2026-06-09",
     readiness: "ready",
     eligibility: "can_start",
@@ -166,7 +166,7 @@ export const mockProfilesExpanded: BotProfile[] = [
     entitlements: ["follow", "dm", "welcome"],
     runtimeProfile: "full_cycle",
     slotKind: "premium_6h",
-    autoLoginRequirement: requirement(false, "login_status_not_ready", "Login not ready", "Challenge resolution is required before mock auto login can be previewed."),
+    autoLoginRequirement: requirement(false, "login_status_not_ready", "Login not ready", "Challenge resolution is required before auto login can be previewed."),
     assignNowRequirement: requirement(false, "runtime_blocked", "Runtime blocked", "Account needs login verification before assignment preview."),
     lastSessionAt: null,
     readiness: "needs_login",
@@ -201,7 +201,7 @@ export const mockProfilesExpanded: BotProfile[] = [
     entitlements: ["follow", "welcome"],
     runtimeProfile: "follow_only",
     slotKind: "growth_3h",
-    autoLoginRequirement: requirement(true, "ready", "Ready", "Mock auto login prerequisites are satisfied."),
+    autoLoginRequirement: requirement(true, "ready", "Ready", "Auto login prerequisites are satisfied."),
     assignNowRequirement: requirement(false, "assignment_window_closed", "Window closed", "Assignment is blocked until the configured schedule window opens."),
     lastSessionAt: "15:10:22 2026-06-09",
     readiness: "ready",
@@ -236,8 +236,8 @@ export const mockProfilesExpanded: BotProfile[] = [
     entitlements: ["follow", "unfollow", "welcome"],
     runtimeProfile: "full_cycle",
     slotKind: "pro_3h",
-    autoLoginRequirement: requirement(true, "ready", "Ready", "Mock auto login prerequisites are satisfied."),
-    assignNowRequirement: requirement(true, "ready", "Ready", "Device and slot are available in mock mode."),
+    autoLoginRequirement: requirement(true, "ready", "Ready", "Auto login prerequisites are satisfied."),
+    assignNowRequirement: requirement(true, "ready", "Ready", "Device and slot are available."),
     lastSessionAt: "10:04:22 2026-06-09",
     readiness: "ready",
     eligibility: "can_start",
@@ -328,28 +328,28 @@ const mockStatsByProfile: Record<string, ProfileStatsRow[]> = {
 
 const mockLogsByProfile: Record<string, ProfileLogEntry[]> = {
   prof_001: [
-    { id: "log_001", accountId: "prof_001", timestamp: "2026-06-09 16:59:16", level: "info", phase: "preflight", event: "preflight_started", message: "Preflight started", actionStatus: "started", source: "worker", runId: "run_mock_001" },
-    { id: "log_002", accountId: "prof_001", timestamp: "2026-06-09 16:59:17", level: "success", phase: "device", event: "device_heartbeat_ok", message: "Device heartbeat OK", actionStatus: "succeeded", durationMs: 148, source: "device", runId: "run_mock_001" },
-    { id: "log_003", accountId: "prof_001", timestamp: "2026-06-09 16:59:18", level: "success", phase: "state_machine", event: "account_identity_confirmed", message: "Account identity confirmed", actionStatus: "succeeded", durationMs: 312, source: "worker", runId: "run_mock_001" },
-    { id: "log_004", accountId: "prof_001", timestamp: "2026-06-09 16:59:20", level: "info", phase: "follow", event: "candidate_selected", message: "Candidate selected", targetUsername: "sample_target_a", actionStatus: "started", source: "worker", runId: "run_mock_001" },
-    { id: "log_005", accountId: "prof_001", timestamp: "2026-06-09 16:59:23", level: "success", phase: "follow", event: "follow_verified", message: "Follow verified", targetUsername: "sample_target_a", actionStatus: "succeeded", durationMs: 1320, source: "worker", runId: "run_mock_001" },
-    { id: "log_006", accountId: "prof_001", timestamp: "2026-06-09 16:59:26", level: "success", phase: "mute", event: "mute_posts_enabled", message: "Mute posts enabled", targetUsername: "sample_target_a", actionStatus: "succeeded", durationMs: 460, source: "worker", runId: "run_mock_001" },
-    { id: "log_007", accountId: "prof_001", timestamp: "2026-06-09 16:59:28", level: "warning", phase: "mute", event: "mute_stories_skipped", message: "Mute stories skipped: budget reached", reason: "budget_reached", targetUsername: "sample_target_a", actionStatus: "skipped", source: "worker", runId: "run_mock_001" },
-    { id: "log_008", accountId: "prof_001", timestamp: "2026-06-09 16:59:33", level: "info", phase: "like", event: "post_opened", message: "Post opened", targetUsername: "sample_target_a", actionStatus: "started", source: "worker", runId: "run_mock_001" },
-    { id: "log_009", accountId: "prof_001", timestamp: "2026-06-09 16:59:36", level: "success", phase: "like", event: "like_verified", message: "Like verified", targetUsername: "sample_target_a", actionStatus: "succeeded", durationMs: 880, source: "worker", runId: "run_mock_001" },
-    { id: "log_010", accountId: "prof_001", timestamp: "2026-06-09 16:59:39", level: "success", phase: "state_machine", event: "return_to_ct_ok", message: "Return to CT OK", actionStatus: "succeeded", durationMs: 740, source: "worker", runId: "run_mock_001" },
-    { id: "log_011", accountId: "prof_001", timestamp: "2026-06-09 16:59:43", level: "warning", phase: "follow", event: "action_skipped", message: "Action skipped: eligibility_blocked", reason: "eligibility_blocked", targetUsername: "sample_target_b", actionStatus: "skipped", source: "worker", runId: "run_mock_001" },
-    { id: "log_012", accountId: "prof_001", timestamp: "2026-06-09 16:59:45", level: "info", phase: "recovery", event: "recovery_started", message: "Recovery started", reason: "slow_ui_response", actionStatus: "started", source: "worker", runId: "run_mock_001" },
-    { id: "log_013", accountId: "prof_001", timestamp: "2026-06-09 16:59:49", level: "success", phase: "recovery", event: "recovery_completed", message: "Recovery completed", reason: "state_restored", actionStatus: "recovered", durationMs: 3880, source: "worker", runId: "run_mock_001" },
-    { id: "log_014", accountId: "prof_001", timestamp: "2026-06-09 17:00:00", level: "info", phase: "state_machine", event: "session_paused", message: "Session paused", reason: "timeslot_closed", actionStatus: "succeeded", source: "worker", runId: "run_mock_001" },
+    { id: "log_001", accountId: "prof_001", timestamp: "2026-06-09 16:59:16", level: "info", phase: "preflight", event: "preflight_started", message: "Preflight started", actionStatus: "started", source: "worker", runId: "run_preview_001" },
+    { id: "log_002", accountId: "prof_001", timestamp: "2026-06-09 16:59:17", level: "success", phase: "device", event: "device_heartbeat_ok", message: "Device heartbeat OK", actionStatus: "succeeded", durationMs: 148, source: "device", runId: "run_preview_001" },
+    { id: "log_003", accountId: "prof_001", timestamp: "2026-06-09 16:59:18", level: "success", phase: "state_machine", event: "account_identity_confirmed", message: "Account identity confirmed", actionStatus: "succeeded", durationMs: 312, source: "worker", runId: "run_preview_001" },
+    { id: "log_004", accountId: "prof_001", timestamp: "2026-06-09 16:59:20", level: "info", phase: "follow", event: "candidate_selected", message: "Candidate selected", targetUsername: "sample_target_a", actionStatus: "started", source: "worker", runId: "run_preview_001" },
+    { id: "log_005", accountId: "prof_001", timestamp: "2026-06-09 16:59:23", level: "success", phase: "follow", event: "follow_verified", message: "Follow verified", targetUsername: "sample_target_a", actionStatus: "succeeded", durationMs: 1320, source: "worker", runId: "run_preview_001" },
+    { id: "log_006", accountId: "prof_001", timestamp: "2026-06-09 16:59:26", level: "success", phase: "mute", event: "mute_posts_enabled", message: "Mute posts enabled", targetUsername: "sample_target_a", actionStatus: "succeeded", durationMs: 460, source: "worker", runId: "run_preview_001" },
+    { id: "log_007", accountId: "prof_001", timestamp: "2026-06-09 16:59:28", level: "warning", phase: "mute", event: "mute_stories_skipped", message: "Mute stories skipped: budget reached", reason: "budget_reached", targetUsername: "sample_target_a", actionStatus: "skipped", source: "worker", runId: "run_preview_001" },
+    { id: "log_008", accountId: "prof_001", timestamp: "2026-06-09 16:59:33", level: "info", phase: "like", event: "post_opened", message: "Post opened", targetUsername: "sample_target_a", actionStatus: "started", source: "worker", runId: "run_preview_001" },
+    { id: "log_009", accountId: "prof_001", timestamp: "2026-06-09 16:59:36", level: "success", phase: "like", event: "like_verified", message: "Like verified", targetUsername: "sample_target_a", actionStatus: "succeeded", durationMs: 880, source: "worker", runId: "run_preview_001" },
+    { id: "log_010", accountId: "prof_001", timestamp: "2026-06-09 16:59:39", level: "success", phase: "state_machine", event: "return_to_ct_ok", message: "Return to CT OK", actionStatus: "succeeded", durationMs: 740, source: "worker", runId: "run_preview_001" },
+    { id: "log_011", accountId: "prof_001", timestamp: "2026-06-09 16:59:43", level: "warning", phase: "follow", event: "action_skipped", message: "Action skipped: eligibility_blocked", reason: "eligibility_blocked", targetUsername: "sample_target_b", actionStatus: "skipped", source: "worker", runId: "run_preview_001" },
+    { id: "log_012", accountId: "prof_001", timestamp: "2026-06-09 16:59:45", level: "info", phase: "recovery", event: "recovery_started", message: "Recovery started", reason: "slow_ui_response", actionStatus: "started", source: "worker", runId: "run_preview_001" },
+    { id: "log_013", accountId: "prof_001", timestamp: "2026-06-09 16:59:49", level: "success", phase: "recovery", event: "recovery_completed", message: "Recovery completed", reason: "state_restored", actionStatus: "recovered", durationMs: 3880, source: "worker", runId: "run_preview_001" },
+    { id: "log_014", accountId: "prof_001", timestamp: "2026-06-09 17:00:00", level: "info", phase: "state_machine", event: "session_paused", message: "Session paused", reason: "timeslot_closed", actionStatus: "succeeded", source: "worker", runId: "run_preview_001" },
   ],
 };
 
 const mockTargetsByProfile: Record<string, ProfileTarget[]> = {
   prof_002: [
     { id: "ct_001", accountId: "prof_002", username: "1805leclosdesmaries", avatarUrl: "/avatars/ct-001.svg", status: "valid", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 1111, isVerified: false, isPrivate: false, performance: "avg", followbackRatio: 13.725, followsSent: 102, followbacks: 14, lastUsedAt: "2026-06-07T11:42:00.000Z", lastSelectedAt: "2026-06-07T11:40:00.000Z", lastSuccessfulCandidateAt: "2026-06-07T11:44:00.000Z", addedAt: "2026-05-12T09:00:00.000Z", source: "manual_single", syncStatus: "synced" },
-    { id: "ct_002", accountId: "prof_002", username: "_mamasparty", avatarUrl: "/avatars/ct-002.svg", status: "valid", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 631, isVerified: false, isPrivate: false, performance: "good", followbackRatio: 17.222, followsSent: 180, followbacks: 31, lastUsedAt: "2026-06-06T16:28:00.000Z", lastSelectedAt: "2026-06-06T16:24:00.000Z", addedAt: "2026-05-14T10:30:00.000Z", source: "manual_bulk", batchId: "batch_mock_01", syncStatus: "synced" },
-    { id: "ct_003", accountId: "prof_002", username: "atelierfloralfleuriste", avatarUrl: "/avatars/ct-003.svg", status: "valid", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 5962, isVerified: false, isPrivate: false, performance: "good", followbackRatio: 19.311, followsSent: 668, followbacks: 129, lastUsedAt: "2026-06-04T14:15:00.000Z", addedAt: "2026-05-16T08:15:00.000Z", source: "manual_bulk", batchId: "batch_mock_01", syncStatus: "synced" },
+    { id: "ct_002", accountId: "prof_002", username: "_mamasparty", avatarUrl: "/avatars/ct-002.svg", status: "valid", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 631, isVerified: false, isPrivate: false, performance: "good", followbackRatio: 17.222, followsSent: 180, followbacks: 31, lastUsedAt: "2026-06-06T16:28:00.000Z", lastSelectedAt: "2026-06-06T16:24:00.000Z", addedAt: "2026-05-14T10:30:00.000Z", source: "manual_bulk", batchId: "batch_preview_01", syncStatus: "synced" },
+    { id: "ct_003", accountId: "prof_002", username: "atelierfloralfleuriste", avatarUrl: "/avatars/ct-003.svg", status: "valid", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 5962, isVerified: false, isPrivate: false, performance: "good", followbackRatio: 19.311, followsSent: 668, followbacks: 129, lastUsedAt: "2026-06-04T14:15:00.000Z", addedAt: "2026-05-16T08:15:00.000Z", source: "manual_bulk", batchId: "batch_preview_01", syncStatus: "synced" },
     { id: "ct_004", accountId: "prof_002", username: "private_studio", avatarUrl: "https://example.com/raw-avatar.jpg?cache=unsafe", status: "rejected", verification: "found", verificationReason: "profile_is_private", eligibility: "rejected_private", followersCount: 2200, isVerified: false, isPrivate: true, performance: "not_applicable", followbackRatio: null, followsSent: 0, followbacks: 0, lastUsedAt: null, addedAt: "2026-05-18T12:20:00.000Z", source: "manual_single", reason: "profile_is_private", syncStatus: "synced" },
     { id: "ct_005", accountId: "prof_002", username: "provider_waiting", status: "review", verification: "unavailable", verificationReason: "provider_unavailable", eligibility: "review_provider_unavailable", followersCount: null, performance: "not_applicable", followbackRatio: null, followsSent: null, followbacks: null, lastUsedAt: null, addedAt: "2026-05-19T18:00:00.000Z", source: "admin", reason: "provider_unavailable", syncStatus: "pending" },
     { id: "ct_006", accountId: "prof_002", username: "archived_target", status: "archived", verification: "found", verificationReason: "found", eligibility: "eligible", followersCount: 3200, performance: "bad", followbackRatio: 7.9, followsSent: 140, followbacks: 11, lastUsedAt: "2026-05-29T13:10:00.000Z", lastExhaustedAt: "2026-05-29T13:12:00.000Z", exhaustionReason: "poor_performance_review", addedAt: "2026-05-01T09:00:00.000Z", source: "manual_single", archivedAt: "2026-06-02T09:00:00.000Z", reason: "dashboard_archive", syncStatus: "synced" },
@@ -361,6 +361,7 @@ const mockSettingsByProfile: Record<string, ProfileSettings> = {};
 
 const mockFiltersByProfile: Record<string, ProfileFilters> = {
   prof_001: {
+    skipPrivateProfiles: true,
     skipFollower: true,
     skipFollowing: true,
     skipNonBusiness: false,
@@ -375,6 +376,11 @@ const mockFiltersByProfile: Record<string, ProfileFilters> = {
     minPosts: 1,
     blacklistedWords: "spam, fake, bot, giveaway, crypto",
     mandatoryWords: "",
+    runtimeReadyFields: ["skip_private_profiles", "min_followers", "max_followers", "min_posts"],
+    plannedFields: ["profile type filters", "bio/name word lists", "outreach filters", "CT quality"],
+    runtimeStatus: "active",
+    saveReady: true,
+    sourceStatus: "account_setting",
     templateName: "FILTRE 2025",
   },
 };
@@ -401,9 +407,9 @@ function fallbackStats(profile: BotProfile): ProfileStatsRow[] {
 
 function fallbackLogs(profile: BotProfile): ProfileLogEntry[] {
   return mockLogsByProfile[profile.id] ?? [
-    { id: `${profile.id}_log_001`, accountId: profile.id, timestamp: "2026-06-09 10:00:00", level: "info", phase: "api", event: "mock_session_loaded", message: `Mock session loaded for ${profile.username}`, actionStatus: "succeeded", source: "botapp", requestId: "req_mock_001" },
-    { id: `${profile.id}_log_002`, accountId: profile.id, timestamp: "2026-06-09 10:00:02", level: "debug", phase: "api", event: "mock_preview_only", message: "No backend connection. Preview logs only.", actionStatus: "succeeded", source: "botapp", requestId: "req_mock_001" },
-    { id: `${profile.id}_log_003`, accountId: profile.id, timestamp: "2026-06-09 10:00:04", level: "warning", phase: "device", event: "slow_ui_response", message: "Warning: slow UI response", reason: "mock_latency_high", actionStatus: "skipped", durationMs: 1440, source: "device", runId: "run_mock_fallback" },
+    { id: `${profile.id}_log_001`, accountId: profile.id, timestamp: "2026-06-09 10:00:00", level: "info", phase: "api", event: "session_loaded", message: `Session loaded for ${profile.username}`, actionStatus: "succeeded", source: "botapp", requestId: "req_preview_001" },
+    { id: `${profile.id}_log_002`, accountId: profile.id, timestamp: "2026-06-09 10:00:02", level: "debug", phase: "api", event: "preview_only", message: "No backend connection. Local preview logs only.", actionStatus: "succeeded", source: "botapp", requestId: "req_preview_001" },
+    { id: `${profile.id}_log_003`, accountId: profile.id, timestamp: "2026-06-09 10:00:04", level: "warning", phase: "device", event: "slow_ui_response", message: "Warning: slow UI response", reason: "latency_high", actionStatus: "skipped", durationMs: 1440, source: "device", runId: "run_preview_fallback" },
   ];
 }
 
@@ -416,14 +422,16 @@ function fallbackTargets(profile: BotProfile): ProfileTarget[] {
 }
 
 function fallbackSettings(profile: BotProfile): ProfileSettings {
+  const sourceDefaults = followSourceDefaultsForPackage(profile.package);
   return mockSettingsByProfile[profile.id] ?? {
     general: {
       deviceId: profile.deviceId,
-      deviceLabel: `${profile.deviceName} · mock`,
+      deviceLabel: profile.deviceName,
       displayName: profile.displayName,
       username: profile.username,
       credentialStatus: profile.credentialStatus,
       credentialSource: profile.credentialStatus === "missing" ? "unknown" : "Vault",
+      credentialUpdateRequired: profile.credentialStatus !== "active",
       twoFactorEnabled: profile.twoFactorEnabled,
       commercialPackage: profile.package,
       entitlements: profile.entitlements,
@@ -432,19 +440,80 @@ function fallbackSettings(profile: BotProfile): ProfileSettings {
       readinessStatus: profile.readiness,
       eligibilityStatus: profile.eligibilityDetail.status,
       assignmentStatus: profile.assignmentState,
+      currentSlot: profile.activeWindow.replace("-", " - "),
+      safeMetadata: "safe projection only; sensitive credential values and raw runtime artifacts are excluded",
     },
     schedule: {
       currentSlot: profile.activeWindow.replace("-", " - "),
       businessWindow: profile.activeWindow.replace("-", " - "),
+      businessTimezone: "Europe/Paris",
       assignmentStatus: profile.assignmentState,
       slotKind: profile.slotKind,
+      runtimeProfile: profile.runtimeProfile,
+      assignedDevice: profile.deviceName,
+      safeDeviceSerial: `••••${profile.deviceId.slice(-2).toUpperCase()}`,
+      cloneSlot: profile.profileNumber === 1 ? "primary app" : `clone ${profile.profileNumber - 1}`,
+      apkClonerSlot: profile.profileNumber === 1 ? "primary Instagram package" : `APK clone slot ${profile.profileNumber - 1}`,
+      reservedState: profile.status === "running" ? "active" : profile.assignmentState === "assigned" ? "reserved" : profile.assignmentState === "blocked" ? "blocked" : "idle",
       deviceLock: profile.runtimeLock,
       cloneBufferMinutes: profile.runtimeLock === "device_level_lock" ? 10 : 0,
       phoneRest: profile.eligibilityReason === "phone_rest_active" ? "active" : "clear",
-      scheduleSource: "mock dashboard sync contract",
+      scheduleSource: "dashboard sync contract",
+      assignmentSource: "manual_dashboard",
+      appInstanceSummary: profile.profileNumber === 1 ? "1 free · 1 occupied · 0 blocked" : "2 free · 1 occupied · 0 blocked",
+      saveReady: profile.assignmentState !== "blocked",
+      availableSlots: [
+        {
+          slotIndex: 1,
+          slotKind: profile.slotKind,
+          slotKindLabel: profile.runtimeProfile === "outreach_only" ? "Outreach-only · 40 min" : "Full-cycle · 6h",
+          localLabel: profile.activeWindow.replace("-", " - "),
+          startsAt: "2026-06-10T07:00:00.000Z",
+          endsAt: "2026-06-10T10:00:00.000Z",
+          available: true,
+          reason: "current",
+          occupiedBy: profile.username,
+        },
+        {
+          slotIndex: 2,
+          slotKind: profile.slotKind,
+          slotKindLabel: profile.runtimeProfile === "outreach_only" ? "Outreach-only · 40 min" : "Full-cycle · 6h",
+          localLabel: profile.runtimeProfile === "outreach_only" ? "12:40 - 13:20" : "12:00 - 15:00",
+          startsAt: "2026-06-10T10:00:00.000Z",
+          endsAt: "2026-06-10T13:00:00.000Z",
+          available: profile.assignmentState !== "blocked",
+          reason: profile.assignmentState === "blocked" ? "no_app_instance_available" : "available",
+          occupiedBy: null,
+        },
+        {
+          slotIndex: 3,
+          slotKind: profile.slotKind,
+          slotKindLabel: profile.runtimeProfile === "outreach_only" ? "Outreach-only · 40 min" : "Full-cycle · 6h",
+          localLabel: profile.runtimeProfile === "outreach_only" ? "13:20 - 14:00" : "15:00 - 18:00",
+          startsAt: "2026-06-10T13:00:00.000Z",
+          endsAt: "2026-06-10T16:00:00.000Z",
+          available: false,
+          reason: profile.eligibilityReason === "phone_rest_active" ? "phone_rest" : "occupied",
+          occupiedBy: profile.eligibilityReason === "phone_rest_active" ? null : "sample_account",
+        },
+      ],
+      restWindows: profile.eligibilityReason === "phone_rest_active"
+        ? [{ id: `${profile.id}_rest_1`, label: "Daily: 12:00 - 13:00", timezone: "Europe/Paris", reason: "phone rest" }]
+        : [],
+      gates: {
+        ok: profile.eligibility === "can_start",
+        reason: profile.eligibility === "can_start" ? "assignment_window_open" : profile.eligibilityReason || "assignment_missing",
+        windowActive: profile.eligibilityReason !== "assignment_window_closed",
+        phoneRestActive: profile.eligibilityReason === "phone_rest_active",
+        nextEligibleStartsAt: profile.eligibilityReason === "assignment_window_closed" ? "2026-06-10T10:00:00.000Z" : null,
+        runStartGate: profile.eligibility === "can_start" ? "ready" : "blocked",
+        dispatcherGate: profile.eligibility === "can_start" ? "ready" : "env_fallback",
+        autoRestartGate: profile.eligibility === "can_start" ? "ready" : "blocked",
+      },
     },
     follow: {
       timeslot: profile.activeWindow.replace("-", " - "),
+      followEnabled: profile.entitlements.includes("follow"),
       endIfLimitReached: true,
       endIfLimitType: "Follow",
       turnOffFollow: false,
@@ -452,6 +521,22 @@ function fallbackSettings(profile: BotProfile): ProfileSettings {
       muteAfterFollow: true,
       doFollowsFirst: true,
       maxFollowPerSession: Math.min(profile.counters.follow.max, 60),
+      packageFollowDayCap: profile.package === "Premium" ? 180 : profile.package === "Pro" ? 140 : 120,
+      manualFollowDayCap: profile.counters.follow.max,
+      manualFollowSessionCap: Math.min(profile.counters.follow.max, 60),
+      warmupEnabled: true,
+      warmupStatus: profile.package === "Growth" ? "active" : "package_started",
+      warmupDay: profile.status === "running" ? 4 : 2,
+      packageStartedAt: "2026-06-01",
+      day1FollowCap: 10,
+      day2FollowCap: 20,
+      day3FollowCap: 40,
+      day4PlusFollowCap: profile.package === "Premium" ? 180 : profile.package === "Pro" ? 140 : 120,
+      effectiveWarmupCapToday: profile.status === "running" ? 120 : 20,
+      followDayRemaining: Math.max(0, profile.counters.follow.max - profile.counters.follow.current),
+      limitingReason: profile.eligibility === "can_start" ? "ready" : profile.eligibilityReason || "runtime_gate_blocked",
+      capSource: profile.status === "running" ? "remaining_today" : "manual",
+      runtimeStatus: "active",
       effectiveFollowLimit: `min(${profile.counters.follow.max}, ops_hard_cap)`,
       source: "business setting / admin / ops cap",
     },
@@ -459,28 +544,98 @@ function fallbackSettings(profile: BotProfile): ProfileSettings {
       welcomeDmEnabled: profile.entitlements.includes("welcome"),
       coldDmEnabled: profile.entitlements.includes("outreach"),
       aiCommentPrompt: "Write your message here",
-      welcomeDmBody: "Thanks for following. Mock welcome message only — no real send in this build.",
+      welcomeDmBody: "Thanks for following. Preview welcome message — no send in this build.",
       coldDmBody: "Write your message here",
       templateName: null,
       outreachEnabled: profile.entitlements.includes("outreach"),
       welcomeEnabled: profile.entitlements.includes("welcome"),
+      welcomeServiceActive: profile.entitlements.includes("welcome"),
+      outreachServiceActive: profile.entitlements.includes("outreach"),
+      welcomeEntitlementStatus: profile.entitlements.includes("welcome") ? "Active" : "Missing",
+      welcomeTemplateStatus: profile.entitlements.includes("welcome") ? "Active configured" : "Missing",
+      outreachTemplateStatus: profile.entitlements.includes("outreach") ? "Active configured" : "Missing",
+      welcomeRealSendStatus: "Disabled until secure relay",
+      outreachRealSendStatus: "Disabled until secure relay",
+      legacyDmGateStatus: "Legacy shared DM sender is read-only",
+      saveReady: true,
+      welcomeDisabledReason: profile.entitlements.includes("welcome") ? null : "welcome entitlement missing",
+      outreachDisabledReason: profile.entitlements.includes("outreach") ? null : "outreach entitlement missing",
+      welcomeSessionCap: Math.min(profile.counters.dm.max || 10, 10),
+      welcomeDayCap: 10,
+      outreachSessionCap: profile.entitlements.includes("outreach") ? 5 : 0,
+      outreachDayCap: profile.entitlements.includes("outreach") ? 30 : 0,
+      outreachEntitlementStatus: profile.entitlements.includes("outreach") ? "Active" : "Missing",
       safeDmLimit: profile.counters.dm.max,
     },
     followback: {
+      unfollowEnabled: profile.entitlements.includes("unfollow"),
+      unfollowMode: "unfollow",
+      unfollowPerSession: Math.min(profile.counters.unfollow.max || 50, 50),
       unfollowPerDay: profile.counters.unfollow.max,
       unfollowAfterDays: 3,
       stopAfterUnfollowSkipped: 3000,
-      unfollowSort: "default",
-      followbackRatioSummary: "mock ratio: healthy",
+      unfollowSort: "unfollow",
+      followbackRatioSummary: "ratio: healthy",
+      packageUnfollowDayCap: profile.package === "Premium" ? 240 : profile.package === "Pro" ? 200 : 120,
+      runtimeCapMode: "prod_normal",
+      runtimeSafetyCap: null,
+      runtimeHardCap: 0,
+      runtimeCapSource: "account_setting",
+      followEntitlementStatus: profile.entitlements.includes("follow") ? "Active" : "Missing",
+      unfollowEntitlementStatus: profile.entitlements.includes("unfollow") ? "Active" : "Missing",
+      handoffStatus: profile.entitlements.includes("unfollow") ? "Enabled" : "Disabled",
+      blockReason: profile.entitlements.includes("unfollow") ? "" : "unfollow_entitlement_missing",
+      safeCandidateStrategyStatus: "Ready",
+      doUnfollowFirstStatus: "Needs runtime support",
+      currentRuntimeMode: "unfollow",
+      unfollowedToday: profile.counters.unfollow.current,
+      unfollowDayRemaining: Math.max(0, profile.counters.unfollow.max - profile.counters.unfollow.current),
+      limitingReason: profile.entitlements.includes("unfollow") ? "ready" : "limited_by_entitlement",
       effectiveUnfollowLimit: `min(${profile.counters.unfollow.max}, ops_hard_cap)`,
     },
-    sources: {
-      mainSource: "Target Followers",
-      sourceGroups: ["main-target", "quality-review", "buffer"],
-      targetAccountRefs: ["sample_target_a", "sample_target_b"],
-      ctQualitySummary: "2 approved · 1 review · synced with Targets drawer",
-      syncReadiness: profile.readiness === "ready" ? "ready" : "review",
-    },
+    sources: (() => {
+      const targets = fallbackTargets(profile);
+      const activeTargets = targets.filter((target) => target.status === "valid" || target.status === "active");
+      const eligibleTargets = targets.filter((target) => target.eligibility === "eligible");
+      const rejectedTargets = targets.filter((target) => `${target.eligibility}`.startsWith("rejected"));
+      const archivedTargets = targets.filter((target) => target.status === "archived");
+      const pendingTargets = targets.filter((target) => target.status === "review" || target.status === "pending_verification");
+      const sourceHealth = eligibleTargets.length ? "healthy" : pendingTargets.length ? "review" : "blocked";
+      return {
+        mainSource: "Multi-target rotation",
+        sourceGroups: ["main-target", "quality-review", "buffer"],
+        targetAccountRefs: targets.slice(0, 3).map((target) => target.username),
+        totalTargetsCount: targets.length,
+        activeTargetsCount: activeTargets.length,
+        eligibleTargetsCount: eligibleTargets.length,
+        pendingTargetsCount: pendingTargets.length,
+        rejectedTargetsCount: rejectedTargets.length,
+        archivedTargetsCount: archivedTargets.length,
+        maxFollowsPerTargetPerRun: sourceDefaults.maxFollowsPerTargetPerRun,
+        maxTargetsPerRun: sourceDefaults.maxTargetsPerRun,
+        bounds: {
+          maxFollowsPerTargetPerRun: { min: 1, max: 50 },
+          maxTargetsPerRun: { min: 1, max: 10 },
+        },
+        sourceStatus: "account_setting",
+        runtimeStatus: "active",
+        saveReady: true,
+        note: "Per-run settings. Global Follow caps still apply.",
+        ctQualitySummary: `${eligibleTargets.length} eligible · ${pendingTargets.length} review · synced with Targets drawer`,
+        followbackRatioByTarget: "pending runtime data",
+        followsSentByTarget: activeTargets.length ? `Available on ${activeTargets.length} targets` : "pending runtime data",
+        insufficientDataTargets: Math.max(0, activeTargets.length - eligibleTargets.length),
+        pendingRuntimeTargets: pendingTargets.length,
+        recentlyExhaustedTargets: rejectedTargets.length,
+        nextTargetProbable: eligibleTargets[0]?.username ? `@${eligibleTargets[0].username}` : "No eligible target in local data",
+        sourceHealth,
+        adminSyncStatus: "ready",
+        clientSyncStatus: profile.readiness === "ready" ? "ready" : "review",
+        botAppSyncStatus: sourceHealth === "blocked" ? "blocked" : "ready",
+        lastRefreshLabel: "Loaded from local projection",
+        syncReadiness: sourceHealth === "healthy" ? "ready" : sourceHealth === "review" ? "review" : "blocked",
+      };
+    })(),
     filters: fallbackFilters(profile),
     advanced: {
       appMode: "da_normal",
@@ -497,9 +652,18 @@ function fallbackSettings(profile: BotProfile): ProfileSettings {
   };
 }
 
+function followSourceDefaultsForPackage(packageLabel: string) {
+  const normalized = packageLabel.trim().toLowerCase();
+  return {
+    maxFollowsPerTargetPerRun: normalized.includes("pro") || normalized.includes("premium") ? 30 : 27,
+    maxTargetsPerRun: 4,
+  };
+}
+
 
 function fallbackFilters(profile: BotProfile): ProfileFilters {
   return mockFiltersByProfile[profile.id] ?? {
+    skipPrivateProfiles: true,
     skipFollower: true,
     skipFollowing: true,
     skipNonBusiness: false,
@@ -514,6 +678,11 @@ function fallbackFilters(profile: BotProfile): ProfileFilters {
     minPosts: 1,
     blacklistedWords: "spam, fake, bot",
     mandatoryWords: "",
+    runtimeReadyFields: ["skip_private_profiles", "min_followers", "max_followers", "min_posts"],
+    plannedFields: ["profile type filters", "bio/name word lists", "outreach filters", "CT quality"],
+    runtimeStatus: "active",
+    saveReady: true,
+    sourceStatus: "default",
     templateName: null,
   };
 }

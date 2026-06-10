@@ -13,28 +13,28 @@ export const mockDevices: Device[] = [
 export const mockDeviceProfileGroups = buildDeviceProfileGroups(mockProfiles, mockDevices);
 
 export const mockActivityLogs: ActivityLogEntry[] = [
-  { id: "log_001", timestamp: "10:12:43 2026-06-09", level: "info", actor: "mock-operator", event: "profile.preview_start", target: "studio_lumiere", detail: "Mock only — no backend action executed. request_id=req_mock_001" },
+  { id: "log_001", timestamp: "10:12:43 2026-06-09", level: "info", actor: "operator", event: "profile.preview_start", target: "studio_lumiere", detail: "Start payload prepared. request_id=req_preview_001" },
   { id: "log_002", timestamp: "10:11:03 2026-06-09", level: "warning", actor: "system", event: "device.lock_reserved", target: "Phone 01", detail: "Device-level lock prevents multiple active UI sessions on one phone." },
-  { id: "log_003", timestamp: "10:08:25 2026-06-09", level: "error", actor: "api-gateway", event: "webhook.delivery_failed", target: "webhook_prod", detail: "Webhook delivery failed in mock mode. Sensitive payload fields are omitted." },
-  { id: "log_004", timestamp: "10:04:12 2026-06-09", level: "info", actor: "mock-client", event: "settings.loaded", target: "BotApp", detail: "Loaded local mock settings only." },
+  { id: "log_003", timestamp: "10:08:25 2026-06-09", level: "error", actor: "api-gateway", event: "webhook.delivery_failed", target: "webhook_prod", detail: "Webhook delivery failed in preview mode. Sensitive payload fields are omitted." },
+  { id: "log_004", timestamp: "10:04:12 2026-06-09", level: "info", actor: "botapp", event: "settings.loaded", target: "BotApp", detail: "Loaded local settings projection." },
 ];
 
 export const mockTargets: Target[] = [
   { id: "ct_001", handle: "architectes.paris", source: "curated", qualityScore: 91, status: "approved", notes: "High match, active audience." },
   { id: "ct_002", handle: "renovation_lille", source: "import", qualityScore: 76, status: "review", notes: "Review overlap before activation." },
-  { id: "ct_003", handle: "old_target_source", source: "legacy", qualityScore: 31, status: "archived", notes: "Archived in mock only." },
+  { id: "ct_003", handle: "old_target_source", source: "legacy", qualityScore: 31, status: "archived", notes: "Archived locally." },
 ];
 
 export const mockDmTemplates: DmTemplate[] = [
   { id: "tpl_001", name: "Welcome Pro", type: "welcome", status: "active", body: "Bonjour {name}, merci pour le follow. Ravi de vous connecter ici.", sent: 128, replies: 19 },
   { id: "tpl_002", name: "Warm intro", type: "welcome", status: "draft", body: "Hello {username}, thanks for connecting.", sent: 0, replies: 0 },
-  { id: "tpl_003", name: "Outreach Add-on", type: "outreach", status: "draft", body: "Mock draft only. Outreach remains add-on gated.", sent: 0, replies: 0 },
+  { id: "tpl_003", name: "Outreach Add-on", type: "outreach", status: "draft", body: "Draft template. Outreach remains add-on gated.", sent: 0, replies: 0 },
 ];
 
 export const mockNotifications: NotificationItem[] = [
   { id: "ntf_001", severity: "critical", title: "Welcome real send disabled", message: "Ready config, but start is blocked by ops safety flag.", profileId: "prof_001", createdAt: "10:13:00 2026-06-09", acknowledged: false },
   { id: "ntf_002", severity: "warning", title: "Assignment window closed", message: "Profile is ready but cannot start outside its assigned window.", profileId: "prof_002", createdAt: "10:05:33 2026-06-09", acknowledged: false },
-  { id: "ntf_003", severity: "info", title: "Mock mode active", message: "No backend, device, Instagram, Supabase, or ADB calls are enabled.", createdAt: "10:00:00 2026-06-09", acknowledged: true },
+  { id: "ntf_003", severity: "info", title: "Local mode active", message: "Secure relay not connected. No backend, device, Instagram, Supabase, or ADB calls are enabled.", createdAt: "10:00:00 2026-06-09", acknowledged: true },
 ];
 
 export const mockApiKeys: ApiKeySummary[] = [
@@ -49,8 +49,8 @@ export const mockWebhooks: WebhookSummary[] = [
 
 export const mockSettings: AppSettings = {
   business: { defaultPackage: "Growth", welcomeEnabledForPro: true, outreachRequiresAddon: true },
-  admin: { appMode: "mock-first", apiBase: "Not connected", updatesChannel: "manual" },
+  admin: { appMode: "local-preview", apiBase: "Not connected", updatesChannel: "manual" },
   opsSafetyCaps: { effectiveFollowCap: "min(db_setting, env_hard_cap)", deviceLevelLock: true, cloneBufferMinutes: 10 },
   killSwitches: { startAllAccounts: false, realDeviceActions: false, realDmSend: false },
-  runtimeState: { source: "mock-client", polling: "disabled", websocket: "planned" },
+  runtimeState: { source: "local-client", polling: "disabled", websocket: "planned" },
 };

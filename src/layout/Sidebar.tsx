@@ -32,6 +32,6 @@ export function Sidebar({ active, onNavigate, counts }: { active: RouteId; onNav
         </button>)}
       </div>)}
     </nav>
-    <div className="operator" title="Default · Mock operator" aria-label="Default · Mock operator"><div className="avatar">D</div><div className="operator-copy"><strong>Default</strong><span>Mock operator</span></div></div>
+    <div className="operator" title="Default operator" aria-label="Default operator"><div className="avatar">D</div><div className="operator-copy"><strong>Default</strong><span>Operator</span></div></div>
   </aside>;
 }

@@ -12,7 +12,7 @@ export type BotAppRequestOptions = {
 };
 
 export const futureApiConventions = {
-  authHeader: "Authorization: Bearer <token>",
+  authHeader: "Secure auth header managed outside the renderer bundle",
   idempotencyHeader: "X-Idempotency-Key",
   requestHeader: "X-Request-Id",
   attributionHeader: "X-External-User-Id",
@@ -28,7 +28,7 @@ export async function notConnectedYet<T>(options: BotAppRequestOptions): Promise
     request_id: "mock-request-not-connected",
     error: {
       code: "mock_client_only",
-      message: "Mock only — no backend action executed.",
+      message: "Secure relay not connected. No backend mutation executed.",
     },
   };
 }

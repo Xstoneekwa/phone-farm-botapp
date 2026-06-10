@@ -63,10 +63,9 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
   const selectedVisible = filteredTargets.length > 0 && filteredTargets.every((target) => selected.has(target.id));
   const bulkResult = useMemo(() => parseBulkTargets(bulkText, targets), [bulkText, targets]);
 
-  function mockAction(label: string) {
-    const detail = `Mock only — no backend action executed. ${label}`;
-    setMessage(detail);
-    onAction(detail);
+  function notifyAction(label: string) {
+    setMessage(label);
+    onAction(label);
     setLastUpdatedAt(formatDateTime(new Date().toISOString()));
   }
 
@@ -75,7 +74,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
       if (result.ok) {
         setTargets(result.data);
         setSelected(new Set());
-        mockAction("Targets refreshed from local mock data.");
+        notifyAction("Targets refreshed from local data.");
       }
     });
   }
@@ -100,7 +99,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
       return;
     }
     if (targets.some((target) => !isArchivedOrDeletedTarget(target) && target.username === username)) {
-      setMessage("Duplicate target in visible mock data.");
+      setMessage("Duplicate target already visible in this list.");
       return;
     }
     setTargets((current) => [{
@@ -122,7 +121,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
       syncStatus: "pending",
     }, ...current]);
     setSingleUsername("");
-    mockAction(`Target @${username} queued locally for verification.`);
+    notifyAction(`Target @${username} queued locally for verification.`);
   }
 
   function importBulk() {
@@ -152,16 +151,16 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
     }));
     setTargets((current) => [...imported, ...current]);
     setBulkText("");
-    mockAction(`Bulk import parsed ${bulkResult.totalSubmitted}; accepted ${bulkResult.acceptedForVerification}, invalid ${bulkResult.invalid}, duplicates ${bulkResult.duplicates + bulkResult.alreadyExisting}.`);
+    notifyAction(`Bulk import parsed ${bulkResult.totalSubmitted}; accepted ${bulkResult.acceptedForVerification}, invalid ${bulkResult.invalid}, duplicates ${bulkResult.duplicates + bulkResult.alreadyExisting}.`);
   }
 
   function archiveTargets(ids: string[]) {
     if (!ids.length) return;
-    if (!window.confirm(`${ids.length} target(s) will be archived in the local mock view. Continue?`)) return;
+    if (!window.confirm(`${ids.length} target(s) will be archived in the local view. Continue?`)) return;
     const now = new Date().toISOString();
     setTargets((current) => current.map((target) => ids.includes(target.id) ? { ...target, status: "archived", archivedAt: now, reason: "dashboard_archive" } : target));
     setSelected(new Set());
-    mockAction(ids.length === 1 ? "Target archived locally." : `${ids.length} targets archived locally.`);
+    notifyAction(ids.length === 1 ? "Target archived locally." : `${ids.length} targets archived locally.`);
   }
 
   function resetTarget(id: string) {
@@ -174,7 +173,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
       reason: "manual_reset",
       syncStatus: "pending",
     } : target));
-    mockAction("Target reset to pending verification locally.");
+    notifyAction("Target reset to pending verification locally.");
   }
 
   function restoreTarget(id: string) {
@@ -186,7 +185,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
       reason: target.eligibility === "eligible" ? "restored_eligible" : "restored_pending_verification",
       syncStatus: "pending",
     } : target));
-    mockAction("Target restored locally; future API should queue verification if quality is stale.");
+    notifyAction("Target restored locally; secure relay will queue verification when quality is stale.");
   }
 
   function exportTargets(format: ProfileTargetExportFormat) {
@@ -211,7 +210,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
     link.download = `botapp-targets-${safeFilePart(profile.username)}-${new Date().toISOString().slice(0, 10)}.${format}`;
     link.click();
     URL.revokeObjectURL(url);
-    mockAction(`Exported ${rows.length} visible targets as ${format.toUpperCase()}.`);
+    notifyAction(`Exported ${rows.length} visible targets as ${format.toUpperCase()}.`);
   }
 
   return (
@@ -244,7 +243,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
           <span className="subtle">Last update: <span className="mono">{lastUpdatedAt ?? "loading"}</span></span>
         </div>
 
-        {message ? <div className="mock-message">{message}</div> : null}
+        {message ? <div className="panel-message">{message}</div> : null}
 
         <div className="targets-form-grid">
           <section className="target-form-card">
@@ -265,7 +264,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
         </div>
 
         <p className="targets-sync-note">
-          Mock only. Future CT validation must reuse the admin-backed target contract and flow through a secure BotApp API relay; no renderer direct DB, Supabase secret, local scraping/validation, local log read, raw avatar URL fetch, or sensitive raw payload.
+          CT validation will reuse the admin-backed target contract through a secure BotApp API relay. BotApp does not access the DB, Supabase secrets, local scraping, local logs, or raw avatar URLs from the renderer.
         </p>
 
         <div className="targets-table-wrap">
