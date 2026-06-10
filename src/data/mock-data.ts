@@ -1,18 +1,16 @@
-import type { ActivityLogEntry, ApiKeySummary, AppSettings, BotProfile, Device, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
+import type { ActivityLogEntry, ApiKeySummary, AppSettings, Device, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
+import { buildDeviceProfileGroups, mockProfilesExpanded } from "./profile-mock-data";
 
-export const mockProfiles: BotProfile[] = [
-  { id: "prof_001", username: "studio_lumiere", platform: "Instagram", package: "Pro", status: "running", deviceId: "phone_01", deviceName: "Phone 01", activeWindow: "09:00-12:00", followers: 18420, followsToday: 72, dmsToday: 8, readiness: "ready", eligibility: "can_start", eligibilityReason: "ready", runtimeLock: "device_level_lock" },
-  { id: "prof_002", username: "atelier_malo", platform: "Instagram", package: "Growth", status: "ready", deviceId: "phone_02", deviceName: "Phone 02", activeWindow: "13:00-16:00", followers: 9210, followsToday: 41, dmsToday: 0, readiness: "ready", eligibility: "blocked_now", eligibilityReason: "assignment_window_closed", runtimeLock: "none" },
-  { id: "prof_003", username: "cafe_central", platform: "Instagram", package: "Premium", status: "blocked", deviceId: "phone_01", deviceName: "Phone 01", activeWindow: "17:00-20:00", followers: 31780, followsToday: 0, dmsToday: 0, readiness: "needs_login", eligibility: "blocked_now", eligibilityReason: "login_verification_required", runtimeLock: "assignment_reserved" },
-  { id: "prof_004", username: "runclub_paris", platform: "TikTok", package: "Growth", status: "paused", deviceId: "phone_03", deviceName: "Phone 03", activeWindow: "20:00-23:00", followers: 12880, followsToday: 18, dmsToday: 0, readiness: "ready", eligibility: "blocked_now", eligibilityReason: "phone_rest_active", runtimeLock: "none" },
-];
+export const mockProfiles = mockProfilesExpanded;
 
 export const mockDevices: Device[] = [
-  { id: "phone_01", name: "Phone 01", model: "Samsung A52", status: "reserved", battery: 84, cloneCount: 3, activeSession: { id: "sess_001", profileId: "prof_001", username: "studio_lumiere", state: "active_ui", startedAt: "10:04:22 2026-06-09" }, nextBufferEndsAt: "10:18:00 2026-06-09", lockReason: "1 phone = 1 active UI session" },
-  { id: "phone_02", name: "Phone 02", model: "Samsung A32", status: "online", battery: 67, cloneCount: 4, activeSession: null, nextBufferEndsAt: null, lockReason: null },
-  { id: "phone_03", name: "Phone 03", model: "Pixel 6a", status: "maintenance", battery: 51, cloneCount: 2, activeSession: { id: "sess_002", profileId: "prof_004", username: "runclub_paris", state: "buffer", startedAt: "09:47:10 2026-06-09" }, nextBufferEndsAt: "10:22:00 2026-06-09", lockReason: "clone buffer active" },
-  { id: "phone_04", name: "Phone 04", model: "Samsung S21", status: "offline", battery: 0, cloneCount: 1, activeSession: null, nextBufferEndsAt: null, lockReason: "last heartbeat missed" },
+  { id: "phone_01", name: "PHONE 1", model: "Samsung A52", status: "reserved", battery: 84, cloneCount: 3, activeSession: { id: "sess_001", profileId: "prof_001", username: "rareparis.usa", state: "active_ui", startedAt: "10:04:22 2026-06-09" }, nextBufferEndsAt: "10:18:00 2026-06-09", lockReason: "1 phone = 1 active UI session" },
+  { id: "phone_02", name: "PHONE 2", model: "Samsung A32", status: "online", battery: 67, cloneCount: 4, activeSession: null, nextBufferEndsAt: null, lockReason: null },
+  { id: "phone_03", name: "PHONE 3", model: "Pixel 6a", status: "maintenance", battery: 51, cloneCount: 2, activeSession: { id: "sess_002", profileId: "prof_006", username: "runclub_paris", state: "buffer", startedAt: "09:47:10 2026-06-09" }, nextBufferEndsAt: "10:22:00 2026-06-09", lockReason: "clone buffer active" },
+  { id: "phone_04", name: "PHONE 4", model: "Samsung S21", status: "offline", battery: 0, cloneCount: 1, activeSession: null, nextBufferEndsAt: null, lockReason: "last heartbeat missed" },
 ];
+
+export const mockDeviceProfileGroups = buildDeviceProfileGroups(mockProfiles, mockDevices);
 
 export const mockActivityLogs: ActivityLogEntry[] = [
   { id: "log_001", timestamp: "10:12:43 2026-06-09", level: "info", actor: "mock-operator", event: "profile.preview_start", target: "studio_lumiere", detail: "Mock only — no backend action executed. request_id=req_mock_001" },

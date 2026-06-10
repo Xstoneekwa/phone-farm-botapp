@@ -24,23 +24,250 @@ export type PhoneSession = {
   startedAt: string;
 };
 
+export type ProfileToolbarAction =
+  | "stats"
+  | "logs"
+  | "targets"
+  | "play"
+  | "auto_login"
+  | "stop"
+  | "view"
+  | "settings"
+  | "filters"
+  | "assign_now"
+  | "archive"
+  | "delete";
+
+export type ProfileRequirementState = {
+  enabled: boolean;
+  reason:
+    | "ready"
+    | "missing_credentials"
+    | "assignment_window_closed"
+    | "device_unavailable"
+    | "no_assignment_slot"
+    | "runtime_blocked"
+    | "login_status_not_ready"
+    | "eligibility_blocked";
+  label: string;
+  detail: string;
+};
+
+export type ProfileEligibility = {
+  status: "can_start" | "blocked_now";
+  primary_block_reason: string;
+  reason_label: string;
+  reason_description: string;
+};
+
+export type ProfileCounters = {
+  follow: { current: number; max: number };
+  unfollow: { current: number; max: number };
+  like: { current: number; max: number };
+  comment: { current: number; max: number };
+  dm: { current: number; max: number };
+};
+
 export type BotProfile = {
   id: string;
   username: string;
+  displayName: string;
   platform: "Instagram" | "TikTok";
   package: "Growth" | "Pro" | "Premium";
+  planType: "normal" | "dual" | "other";
+  profileNumber: number;
+  clientName: string;
   status: ProfileStatus;
   deviceId: string;
   deviceName: string;
   activeWindow: string;
   followers: number;
+  followerDelta: number;
   followsToday: number;
   dmsToday: number;
+  counters: ProfileCounters;
+  twoFactorEnabled: boolean;
+  credentialStatus: CredentialStatus;
+  loginStatus: "ready" | "missing_credentials" | "challenge_required" | "unknown";
+  deviceAvailability: "available" | "reserved" | "offline" | "maintenance";
+  assignmentState: "assigned" | "reserved" | "missing_slot" | "blocked";
+  entitlements: string[];
+  runtimeProfile: string;
+  slotKind: string;
+  autoLoginRequirement: ProfileRequirementState;
+  assignNowRequirement: ProfileRequirementState;
+  lastSessionAt: string | null;
   readiness: "ready" | "needs_login" | "needs_settings" | "blocked";
   eligibility: "can_start" | "blocked_now";
   eligibilityReason: string;
+  eligibilityDetail: ProfileEligibility;
   runtimeLock: "none" | "device_level_lock" | "assignment_reserved";
 };
+
+export type DeviceProfileGroup = {
+  deviceId: string;
+  deviceLabel: string;
+  deviceSerial: string;
+  phoneStatus: "active" | "inactive" | "idle" | "running";
+  summary: { total: number; normal: number; dual: number; other: number };
+  profiles: BotProfile[];
+};
+
+export type ProfileStatsRow = {
+  sessionTime: string;
+  sessionDate: string;
+  followers: number;
+  following: number;
+  followBack: "ok" | "pending" | "none";
+  likeBack: "ok" | "pending" | "none";
+  follow: { current: number; target: number };
+  unfollow: { current: number; target: number };
+  like: { current: number; target: number };
+  comment: { current: number; target: number };
+  dm: { current: number; target: number };
+  watch: number;
+  totalInteractions: number;
+};
+
+export type ProfileLogEntry = {
+  timestamp: string;
+  level: "INFO" | "DEBUG" | "WARN" | "ERROR";
+  message: string;
+  source?: string;
+};
+
+export type ProfileTarget = {
+  index: number;
+  username: string;
+  dateAdded: string | null;
+  followers: number;
+  followbackRatio: number;
+  totalFollow: number;
+  status: "approved" | "review" | "archived";
+};
+
+export type ProfileTargetGroup = {
+  id: string;
+  label: string;
+  sourceType: string;
+  enabled: boolean;
+  sourceList: string;
+  targets: ProfileTarget[];
+};
+
+export type CredentialStatus = "active" | "missing" | "needs_update";
+
+export type ProfileSettingsGeneral = {
+  deviceId: string;
+  deviceLabel: string;
+  displayName: string;
+  username: string;
+  credentialStatus: CredentialStatus;
+  credentialSource: "Vault" | "secure_backend" | "unknown";
+  twoFactorEnabled: boolean;
+  commercialPackage: string;
+  entitlements: string[];
+  runtimeProfile: string;
+  slotKind: string;
+  readinessStatus: BotProfile["readiness"];
+  eligibilityStatus: ProfileEligibility["status"];
+  assignmentStatus: string;
+};
+
+export type ProfileSettingsSchedule = {
+  currentSlot: string;
+  businessWindow: string;
+  assignmentStatus: string;
+  slotKind: string;
+  deviceLock: string;
+  cloneBufferMinutes: number;
+  phoneRest: string;
+  scheduleSource: string;
+};
+
+export type ProfileSettingsFollow = {
+  timeslot: string;
+  endIfLimitReached: boolean;
+  endIfLimitType: string;
+  turnOffFollow: boolean;
+  followPerDay: number;
+  muteAfterFollow: boolean;
+  doFollowsFirst: boolean;
+  maxFollowPerSession: number;
+  effectiveFollowLimit: string;
+  source: string;
+};
+
+export type ProfileSettingsDm = {
+  welcomeDmEnabled: boolean;
+  coldDmEnabled: boolean;
+  aiCommentPrompt: string;
+  welcomeDmBody: string;
+  coldDmBody: string;
+  templateName: string | null;
+  outreachEnabled: boolean;
+  welcomeEnabled: boolean;
+  safeDmLimit: number;
+};
+
+export type ProfileSettingsFollowback = {
+  unfollowPerDay: number;
+  unfollowAfterDays: number;
+  stopAfterUnfollowSkipped: number;
+  unfollowSort: string;
+  followbackRatioSummary: string;
+  effectiveUnfollowLimit: string;
+};
+
+export type ProfileSettingsSources = {
+  mainSource: string;
+  sourceGroups: string[];
+  targetAccountRefs: string[];
+  ctQualitySummary: string;
+  syncReadiness: "ready" | "review" | "blocked";
+};
+
+export type ProfileSettingsFilters = {
+  skipFollower: boolean;
+  skipFollowing: boolean;
+  skipNonBusiness: boolean;
+  skipBusiness: boolean;
+  followPrivate: boolean;
+  followOnlyPrivate: boolean;
+  dmPrivate: boolean;
+  minFollowers: number;
+  maxFollowers: number;
+  minFollowing: number;
+  maxFollowing: number;
+  minPosts: number;
+  blacklistedWords: string;
+  mandatoryWords: string;
+  templateName: string | null;
+};
+
+export type ProfileSettings = {
+  general: ProfileSettingsGeneral;
+  schedule: ProfileSettingsSchedule;
+  follow: ProfileSettingsFollow;
+  dm: ProfileSettingsDm;
+  followback: ProfileSettingsFollowback;
+  sources: ProfileSettingsSources;
+  filters: ProfileSettingsFilters;
+  advanced: {
+    appMode: "da_normal" | "da_popup" | "da_no_popup";
+    apkClonerSlot: string;
+    turnOffLiking: boolean;
+    startupTimeout: number | null;
+    likePerDay: number;
+    likesPerFollow: string;
+    feedLikes: boolean;
+    watchStories: boolean;
+    aiCommentPerDay: number;
+    aiCommentsPerFollow: number;
+  };
+};
+
+export type ProfileFilters = ProfileSettingsFilters;
 
 export type Device = {
   id: string;
@@ -128,6 +355,12 @@ export type ActionPreview = {
 export type BotAppClient = {
   listProfiles(): Promise<ApiResult<BotProfile[]>>;
   getProfileDetail(profileId: string): Promise<ApiResult<BotProfile>>;
+  listDeviceProfileGroups(): Promise<ApiResult<DeviceProfileGroup[]>>;
+  getProfileStats(profileId: string): Promise<ApiResult<ProfileStatsRow[]>>;
+  getProfileLogs(profileId: string): Promise<ApiResult<ProfileLogEntry[]>>;
+  getProfileTargets(profileId: string): Promise<ApiResult<ProfileTargetGroup[]>>;
+  getProfileSettings(profileId: string): Promise<ApiResult<ProfileSettings>>;
+  getProfileFilters(profileId: string): Promise<ApiResult<ProfileFilters>>;
   listDevices(): Promise<ApiResult<Device[]>>;
   listNotifications(): Promise<ApiResult<NotificationItem[]>>;
   listActivityLogs(): Promise<ApiResult<ActivityLogEntry[]>>;

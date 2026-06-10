@@ -1,0 +1,62 @@
+import type { BotProfile, ProfileToolbarAction, ProfileRequirementState } from "../../api/types";
+
+const toolbarActions: Array<{ id: ProfileToolbarAction; label: string; danger?: boolean }> = [
+  { id: "stats", label: "Stats" },
+  { id: "logs", label: "Logs / History" },
+  { id: "targets", label: "Targets" },
+  { id: "play", label: "Start" },
+  { id: "auto_login", label: "Auto Login" },
+  { id: "stop", label: "Stop", danger: true },
+  { id: "view", label: "View" },
+  { id: "settings", label: "Settings" },
+  { id: "filters", label: "Filters" },
+  { id: "assign_now", label: "Assign Now" },
+  { id: "archive", label: "Archive", danger: true },
+  { id: "delete", label: "Delete", danger: true },
+];
+
+function Icon({ action }: { action: ProfileToolbarAction }) {
+  const common = { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.4 };
+  if (action === "stats") return <svg {...common}><path d="M2 12V8M6 12V5M10 12V7M14 12V3" strokeLinecap="round" /></svg>;
+  if (action === "logs") return <svg {...common}><path d="M3 4h10M3 8h7M3 12h8" strokeLinecap="round" /><path d="M12 11l2 1-2 1v-2z" /></svg>;
+  if (action === "targets") return <svg {...common}><circle cx="8" cy="8" r="5.2" /><circle cx="8" cy="8" r="2" /><path d="M8 1.4v2M8 12.6v2M1.4 8h2M12.6 8h2" strokeLinecap="round" /></svg>;
+  if (action === "play") return <svg {...common}><path d="M6 4l7 4-7 4V4z" fill="currentColor" stroke="none" /></svg>;
+  if (action === "auto_login") return <svg {...common}><path d="M4 5a4 4 0 1 1 0 6" /><path d="M1.5 8h7M6 5.5 8.5 8 6 10.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  if (action === "stop") return <svg {...common}><rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.2" fill="currentColor" stroke="none" /></svg>;
+  if (action === "view") return <svg {...common}><path d="M1.7 8s2.2-4 6.3-4 6.3 4 6.3 4-2.2 4-6.3 4-6.3-4-6.3-4z" /><circle cx="8" cy="8" r="1.8" /></svg>;
+  if (action === "settings") return <svg {...common} strokeLinejoin="round"><path d="M8 2.1 9.1 3l1.4-.3.9 1.5-.5 1.3.9 1.1v1.8l-.9 1.1.5 1.3-.9 1.5-1.4-.3-1.1.9-1.1-.9-1.4.3-.9-1.5.5-1.3-.9-1.1V6.6l.9-1.1-.5-1.3.9-1.5 1.4.3L8 2.1z" /><circle cx="8" cy="8" r="2.1" /></svg>;
+  if (action === "filters") return <svg {...common}><path d="M2 3h12l-4.5 5.2V13l-3-1.5V8.2L2 3z" /></svg>;
+  if (action === "assign_now") return <svg {...common}><circle cx="5.5" cy="5" r="2" /><path d="M2.5 12c.6-2 1.7-3 3-3s2.4 1 3 3" /><path d="M11 5v6M8 8h6" strokeLinecap="round" /></svg>;
+  if (action === "delete") return <svg {...common}><path d="M4 5h8M6 5V3h4v2M5 7l.5 6h5L11 7" /><path d="M7 8.5v3M9 8.5v3" strokeLinecap="round" /></svg>;
+  return <svg {...common}><path d="M4 4h9l-1 2H5L4 4zM5 7h7l-1 2H6L5 7zM6 10h5l-1 2H7L6 10z" /><path d="M3 13h2M3 4v9" /></svg>;
+}
+
+function disabledReason(profile: BotProfile, action: ProfileToolbarAction): ProfileRequirementState | null {
+  if (action === "auto_login" && !profile.autoLoginRequirement.enabled) return profile.autoLoginRequirement;
+  if (action === "assign_now" && !profile.assignNowRequirement.enabled) return profile.assignNowRequirement;
+  return null;
+}
+
+export function ProfileToolbar({ profile, onAction }: { profile: BotProfile; onAction: (action: ProfileToolbarAction) => void }) {
+  return (
+    <div className="profile-toolbar" role="toolbar" aria-label="Profile actions">
+      {toolbarActions.map((item) => (
+        <span
+          key={item.id}
+          className="tooltip-wrap"
+          data-tooltip={`${item.label}${disabledReason(profile, item.id) ? ` · ${disabledReason(profile, item.id)?.reason}` : ""}`}
+        >
+          <button
+            type="button"
+            className={`profile-toolbar-btn${item.danger ? " danger" : ""}`}
+            aria-label={item.label}
+            disabled={Boolean(disabledReason(profile, item.id))}
+            onClick={() => onAction(item.id)}
+          >
+            <Icon action={item.id} />
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}

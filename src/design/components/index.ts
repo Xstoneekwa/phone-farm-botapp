@@ -5,5 +5,6 @@ export * from "./Toggle";
 export * from "./Input";
 export * from "./Table";
 export * from "./Modal";
+export * from "./Drawer";
 export * from "./Toast";
 export * from "./EmptyState";

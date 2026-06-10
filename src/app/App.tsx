@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockClient } from "../api/mock-client";
-import type { ActivityLogEntry, ApiKeySummary, AppSettings, BotProfile, Device, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
+import type { ActivityLogEntry, ApiKeySummary, AppSettings, BotProfile, Device, DeviceProfileGroup, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
 import { Modal, Toasts, type ToastItem } from "../design/components";
 import { Sidebar } from "../layout/Sidebar";
 import { TopBar } from "../layout/TopBar";
@@ -19,6 +19,7 @@ import "./app.css";
 
 type AppData = {
   profiles: BotProfile[];
+  profileGroups: DeviceProfileGroup[];
   devices: Device[];
   notifications: NotificationItem[];
   logs: ActivityLogEntry[];
@@ -29,7 +30,7 @@ type AppData = {
   settings: AppSettings | null;
 };
 
-const emptyData: AppData = { profiles: [], devices: [], notifications: [], logs: [], targets: [], templates: [], apiKeys: [], webhooks: [], settings: null };
+const emptyData: AppData = { profiles: [], profileGroups: [], devices: [], notifications: [], logs: [], targets: [], templates: [], apiKeys: [], webhooks: [], settings: null };
 
 export function App() {
   const [active, setActive] = useState<RouteId>("overview");
@@ -43,12 +44,13 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [profiles, devices, notifications, logs, targets, templates, apiKeys, webhooks, settings] = await Promise.all([
-        mockClient.listProfiles(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listTargets(), mockClient.listDmTemplates(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
+      const [profiles, profileGroups, devices, notifications, logs, targets, templates, apiKeys, webhooks, settings] = await Promise.all([
+        mockClient.listProfiles(), mockClient.listDeviceProfileGroups(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listTargets(), mockClient.listDmTemplates(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
       ]);
       if (cancelled) return;
       setData({
         profiles: profiles.ok ? profiles.data : [],
+        profileGroups: profileGroups.ok ? profileGroups.data : [],
         devices: devices.ok ? devices.data : [],
         notifications: notifications.ok ? notifications.data : [],
         logs: logs.ok ? logs.data : [],
@@ -91,7 +93,7 @@ export function App() {
   let view: React.ReactNode;
   if (loading) view = <div className="empty-state"><strong>Loading mock data</strong><span>No backend connection is required.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
-  else if (active === "profiles") view = <Profiles profiles={data.profiles} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} />;
+  else if (active === "profiles") view = <Profiles groups={data.profileGroups} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} />;
   else if (active === "account") view = <AccountDetail profile={selectedProfile} onAction={requestAction} />;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} />;
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
