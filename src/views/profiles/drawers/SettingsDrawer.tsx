@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { mockClient } from "../../../api/mock-client";
 import { loadProfileDetails, type ProfileDetailsPayload } from "../../../api/profile-details";
 import type {
@@ -980,23 +980,26 @@ function LegacySettingsDrawer({
   const [filtersDraft, setFiltersDraft] = useState<ProfileSettings["filters"] | null>(null);
   const [settingsError, setSettingsError] = useState("");
   const [settingsSource, setSettingsSource] = useState("Loading settings");
+  const [credentialsFormOpen, setCredentialsFormOpen] = useState(false);
+  const [credentialsPassword, setCredentialsPassword] = useState("");
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [credentialsMessage, setCredentialsMessage] = useState("");
+
+  const applySettings = useCallback((nextSettings: ProfileSettings, source: string) => {
+    setSettings(nextSettings);
+    setSettingsError("");
+    setSettingsSource(source);
+    setFollowDraft(nextSettings.follow);
+    setDmDraft(nextSettings.dm);
+    setFollowbackDraft(nextSettings.followback);
+    setSourcesDraft(nextSettings.sources);
+    setFiltersDraft(nextSettings.filters);
+    const currentSlot = nextSettings.schedule.availableSlots.find((slot) => slot.reason === "current" || slot.occupiedBy === profile.username);
+    setSelectedScheduleSlotKey(currentSlot ? scheduleSlotKey(currentSlot) : "");
+  }, [profile.username]);
 
   useEffect(() => {
     let cancelled = false;
-    const applySettings = (nextSettings: ProfileSettings, source: string) => {
-      if (cancelled) return;
-      setSettings(nextSettings);
-      setSettingsError("");
-      setSettingsSource(source);
-      setFollowDraft(nextSettings.follow);
-      setDmDraft(nextSettings.dm);
-      setFollowbackDraft(nextSettings.followback);
-      setSourcesDraft(nextSettings.sources);
-      setFiltersDraft(nextSettings.filters);
-      const currentSlot = nextSettings.schedule.availableSlots.find((slot) => slot.reason === "current" || slot.occupiedBy === profile.username);
-      setSelectedScheduleSlotKey(currentSlot ? scheduleSlotKey(currentSlot) : "");
-    };
-
     if (window.botappDesktop?.profiles?.details) {
       void loadProfileDetails(profile.id).then((result) => {
         if (cancelled) return;
@@ -1017,7 +1020,55 @@ function LegacySettingsDrawer({
       });
     }
     return () => { cancelled = true; };
-  }, [profile]);
+  }, [applySettings, profile]);
+
+  async function refreshSettingsAfterCredentials() {
+    const result = await loadProfileDetails(profile.id);
+    if (!result.ok) {
+      setCredentialsMessage(result.error ?? "Credentials saved, but profile details refresh failed.");
+      return;
+    }
+    const data = (result.data ?? null) as ProfileDetailsPayload | null;
+    applySettings(buildSettingsFromProfileDetails(profile, data), detailsSourceLabel(data));
+  }
+
+  async function submitCredentials(dryRun: boolean) {
+    const submit = window.botappDesktop?.profiles?.credentials?.submit;
+    if (!submit) {
+      setCredentialsMessage("Credentials backend relay unavailable in this runtime.");
+      return;
+    }
+    if (!dryRun && credentialsPassword.trim().length < 6) {
+      setCredentialsMessage("Password must contain at least 6 characters.");
+      return;
+    }
+    setCredentialsLoading(true);
+    setCredentialsMessage("");
+    try {
+      const result = await submit({
+        accountId: profile.id,
+        username: settings?.general.username || profile.username,
+        password: dryRun ? "" : credentialsPassword,
+        dryRun,
+      });
+      if (!result.ok) {
+        setCredentialsMessage(result.error || "Credentials submit failed.");
+        return;
+      }
+      const data = (result.data ?? {}) as Record<string, unknown>;
+      const status = String(data.credential_status || "unknown");
+      const vaultWrite = String(data.vault_write || (dryRun ? "skipped" : "unknown"));
+      setCredentialsMessage(dryRun
+        ? `Dry-run OK: ${status}; Vault write ${vaultWrite}; login/provisioning/run disabled.`
+        : `Credentials saved: ${status}; Vault write ${vaultWrite}; login/provisioning/run disabled.`);
+      if (!dryRun) {
+        setCredentialsPassword("");
+        await refreshSettingsAfterCredentials();
+      }
+    } finally {
+      setCredentialsLoading(false);
+    }
+  }
 
   if (!settings) {
     return (
@@ -1097,7 +1148,36 @@ function LegacySettingsDrawer({
       {activeTab === "General" ? <div className="settings-grid">
         <Section title="General summary" badge="Read-only" full><p className="muted">General is a compact status summary. Operational changes live in Schedule, Follow, DM, Followback, Sources, Filters, Credentials, and the account action menu.</p></Section>
         <Section title="Account identity" badge="Read-only"><Field label="Username" value={settings.general.username} mono /><Field label="Display name" value={settings.general.displayName || "Not available"} /></Section>
-        <Section title="Credentials" badge="Safe" tone="warning"><Field label="Credential status" value={credentialLabel(settings.general.credentialStatus)} /><Field label="Credential source" value={settings.general.credentialSource} /><ToggleLine label="2FA enabled" checked={settings.general.twoFactorEnabled} /><ToggleLine label="Update required" checked={settings.general.credentialUpdateRequired} /><Button variant="ghost" onClick={onConfirm}>Update credentials</Button></Section>
+        <Section title="Credentials" badge="Safe" tone="warning">
+          <Field label="Credential status" value={credentialLabel(settings.general.credentialStatus)} />
+          <Field label="Credential source" value={settings.general.credentialSource} />
+          <ToggleLine label="2FA enabled" checked={settings.general.twoFactorEnabled} />
+          <ToggleLine label="Update required" checked={settings.general.credentialUpdateRequired} />
+          <p className="muted">Backend-only credential save. This writes to the secure Vault path and does not start login, provisioning, runs, or phone UI automation.</p>
+          {!credentialsFormOpen ? (
+            <Button variant="ghost" onClick={() => setCredentialsFormOpen(true)}>Update credentials</Button>
+          ) : (
+            <div className="settings-edit-field settings-edit-field-full">
+              <label className="settings-edit-field settings-edit-field-full">
+                <span>Instagram password · write-only</span>
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete="new-password"
+                  value={credentialsPassword}
+                  onChange={(event) => setCredentialsPassword(event.currentTarget.value)}
+                  disabled={credentialsLoading}
+                />
+              </label>
+              <div className="drawer-footer-left">
+                <Button variant="ghost" disabled={credentialsLoading} onClick={() => void submitCredentials(true)}>Dry-run</Button>
+                <Button disabled={credentialsLoading || credentialsPassword.trim().length < 6} onClick={() => void submitCredentials(false)}>Save credentials only</Button>
+                <Button variant="ghost" disabled={credentialsLoading} onClick={() => { setCredentialsFormOpen(false); setCredentialsPassword(""); setCredentialsMessage(""); }}>Cancel</Button>
+              </div>
+              {credentialsMessage ? <p className="muted">{credentialsMessage}</p> : null}
+            </div>
+          )}
+        </Section>
         <Section title="Package and runtime" badge="Runtime summary" tone="info"><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Add-ons / entitlements" value={settings.general.entitlements} /><Field label="Runtime profile" value={settings.general.runtimeProfile} mono /><Field label="Slot kind" value={settings.general.slotKind} mono /></Section>
         <Section title="Status" badge="Read-only"><Field label="Readiness status" value={settings.general.readinessStatus} /><Field label="Eligibility status" value={settings.general.eligibilityStatus} /><Field label="Assignment status" value={settings.general.assignmentStatus} /><Field label="Current slot" value={settings.general.currentSlot} mono /></Section>
         <Section title="Safe account metadata" badge="No secrets" tone="warning" full><Field label="Device assignment" value={`${settings.general.deviceLabel} · ${settings.general.deviceId}`} mono /><Field label="Safety rule" value={settings.general.safeMetadata} /></Section>

@@ -437,6 +437,17 @@ const botappEndpointRegistry = [
     testStrategy: "none",
   },
   {
+    id: "profiles_credentials_submit",
+    name: "Profile credentials submit",
+    method: "POST",
+    path: "/api/instagram-dashboard/credentials/submit",
+    usedBy: ["Profiles", "Settings"],
+    purpose: "Submit or update existing account credentials through secure Vault relay without login/provisioning/run",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
     id: "targets_collection",
     name: "Targets collection",
     method: "POST",
@@ -1089,6 +1100,30 @@ async function profileCreate(input) {
     return { ok: true, data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Profile create failed.") };
+  }
+}
+
+async function profileCredentialsSubmit(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const username = String(input?.username || "").trim().replace(/^@+/, "").toLowerCase();
+  const password = String(input?.password || "");
+  const dryRun = input?.dry_run === true || input?.dryRun === true;
+  if (!accountId || !username) return { ok: false, error: "Missing account id or username." };
+  if (!dryRun && password.trim().length < 6) return { ok: false, error: "Password must contain at least 6 characters." };
+  try {
+    const data = await dashboardPost("profiles_credentials_submit", {
+      account_id: accountId,
+      username,
+      password: dryRun ? "" : password,
+      reason: "botapp_credentials_update",
+      login_after_save: false,
+      provisioning_enabled: false,
+      start_run: false,
+      dry_run: dryRun,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Credentials submit failed.") };
   }
 }
 
@@ -2369,6 +2404,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));
   ipcMain.handle("botapp:profiles:create", (_event, input) => profileCreate(input));
+  ipcMain.handle("botapp:profiles:credentials:submit", (_event, input) => profileCredentialsSubmit(input));
   ipcMain.handle("botapp:profiles:targets:add", (_event, input) => addProfileTarget(input));
   ipcMain.handle("botapp:profiles:targets:bulk-add", (_event, input) => bulkAddProfileTargets(input));
   ipcMain.handle("botapp:profiles:targets:delete", (_event, input) => deleteProfileTargets(input));
