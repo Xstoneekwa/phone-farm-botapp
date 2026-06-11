@@ -8,8 +8,9 @@ import {
 } from "../data/profile-mock-data";
 import { buildClientAccountsOverview } from "../data/client-accounts-data";
 import { buildCompassOverview } from "../data/compass-data";
+import { buildAutoRestartOverview } from "../data/auto-restart-data";
 import { buildCredentialsActionsOverview } from "../data/credentials-actions-data";
-import { mockActivityLogs, mockApiKeys, mockDevices, mockDmTemplates, mockNotifications, mockProfiles, mockSettings, mockTargets, mockWebhooks } from "../data/mock-data";
+import { mockActivityLogs, mockApiKeys, mockDevices, mockNotifications, mockProfiles, mockSettings, mockTargets, mockWebhooks } from "../data/mock-data";
 import type { ActionPreview, ApiResult, BotAppClient, CompassAiAdvisor, CompassAiRecommendedAction, CompassAiSourceFact, CompassAiTargetTab, CompassActionTarget, CompassOverview } from "./types";
 
 function ok<T>(data: T): ApiResult<T> {
@@ -20,19 +21,26 @@ function delay<T>(value: T, ms = 80): Promise<T> {
   return new Promise((resolve) => window.setTimeout(() => resolve(value), ms));
 }
 
+function fixturesAllowed() {
+  return window.botappDesktop?.mode !== "packaged";
+}
+
 export const mockClient: BotAppClient = {
-  listProfiles: () => delay(ok(mockProfiles)),
-  getProfileDetail: (profileId) => delay(ok(mockProfiles.find((profile) => profile.id === profileId) ?? mockProfiles[0])),
-  listDeviceProfileGroups: () => delay(ok(buildDeviceProfileGroups(mockProfiles, mockDevices))),
+  listProfiles: () => delay(ok(fixturesAllowed() ? mockProfiles : [])),
+  getProfileDetail: (profileId) => delay(ok(fixturesAllowed() ? (mockProfiles.find((profile) => profile.id === profileId) ?? mockProfiles[0]) : mockProfiles[0])),
+  listDeviceProfileGroups: () => delay(ok(fixturesAllowed() ? buildDeviceProfileGroups(mockProfiles, mockDevices) : [])),
   getProfileStats: (profileId) => {
+    if (!fixturesAllowed()) return delay(ok([]));
     const profile = mockProfiles.find((item) => item.id === profileId) ?? mockProfiles[0];
     return delay(ok(getMockProfileStats(profile)));
   },
   getProfileLogs: (profileId) => {
+    if (!fixturesAllowed()) return delay(ok([]));
     const profile = mockProfiles.find((item) => item.id === profileId) ?? mockProfiles[0];
     return delay(ok(getMockProfileLogs(profile)));
   },
   getProfileTargets: (profileId) => {
+    if (!fixturesAllowed()) return delay(ok([]));
     const profile = mockProfiles.find((item) => item.id === profileId) ?? mockProfiles[0];
     return delay(ok(getMockProfileTargets(profile)));
   },
@@ -44,8 +52,8 @@ export const mockClient: BotAppClient = {
     const profile = mockProfiles.find((item) => item.id === profileId) ?? mockProfiles[0];
     return delay(ok(getMockProfileFilters(profile)));
   },
-  listClientAccounts: () => delay(ok(buildClientAccountsOverview(mockProfiles, mockDevices))),
-  listCredentialsActions: () => delay(ok(buildCredentialsActionsOverview(buildClientAccountsOverview(mockProfiles, mockDevices)))),
+  listClientAccounts: () => delay(ok(buildClientAccountsOverview(fixturesAllowed() ? mockProfiles : [], fixturesAllowed() ? mockDevices : []))),
+  listCredentialsActions: () => delay(ok(buildCredentialsActionsOverview(buildClientAccountsOverview(fixturesAllowed() ? mockProfiles : [], fixturesAllowed() ? mockDevices : [])))),
   listCompass: () => {
     const clientAccounts = buildClientAccountsOverview(mockProfiles, mockDevices);
     const credentials = buildCredentialsActionsOverview(clientAccounts);
@@ -166,13 +174,13 @@ export const mockClient: BotAppClient = {
     };
     return delay(ok(advisor));
   },
-  listDevices: () => delay(ok(mockDevices)),
-  listNotifications: () => delay(ok(mockNotifications)),
-  listActivityLogs: () => delay(ok(mockActivityLogs)),
-  listTargets: () => delay(ok(mockTargets)),
-  listDmTemplates: () => delay(ok(mockDmTemplates)),
-  listApiKeys: () => delay(ok(mockApiKeys)),
-  listWebhooks: () => delay(ok(mockWebhooks)),
+  listAutoRestart: () => delay(ok(fixturesAllowed() ? buildAutoRestartOverview() : buildAutoRestartOverview())),
+  listDevices: () => delay(ok(fixturesAllowed() ? mockDevices : [])),
+  listNotifications: () => delay(ok(fixturesAllowed() ? mockNotifications : [])),
+  listActivityLogs: () => delay(ok(fixturesAllowed() ? mockActivityLogs : [])),
+  listTargets: () => delay(ok(fixturesAllowed() ? mockTargets : [])),
+  listApiKeys: () => delay(ok(fixturesAllowed() ? mockApiKeys : [])),
+  listWebhooks: () => delay(ok(fixturesAllowed() ? mockWebhooks : [])),
   listSettings: () => delay(ok(mockSettings)),
   previewAction: (action, target) => delay(ok<ActionPreview>({
     action,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { mockClient } from "../../../api/mock-client";
+import { loadProfileDetails, type ProfileDetailsPayload } from "../../../api/profile-details";
 import type {
   BotProfile,
   ProfileDmSavePayload,
@@ -23,7 +24,20 @@ const DM_TEMPLATE_TOKEN_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}|\{\s*([A-Za
 const DM_SUPPORTED_VARIABLES = new Set(["username", "name", "account_username"]);
 
 function previewPayload(payload: unknown) {
-  return JSON.stringify(payload, (key, value) => key === "mock_only" ? undefined : value, 2);
+  return JSON.stringify(payload, (key, value) => {
+    if (key === "mock_only") return undefined;
+    if (value === null || value === undefined) return "—";
+    if (typeof value === "boolean") return value ? "Enabled" : "Disabled";
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) return formatCompactDate(value);
+    return value;
+  }, 2);
+}
+
+function formatCompactDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const iso = date.toISOString();
+  return `${iso.slice(11, 19)} ${iso.slice(0, 10)}`;
 }
 
 function credentialLabel(status: ProfileSettings["general"]["credentialStatus"]) {
@@ -274,7 +288,8 @@ function buildFollowSavePayload(
     metadata_safe: {
       account_username: profile.username,
       package_follow_day_cap: follow.packageFollowDayCap,
-      effective_follow_cap_today: Number.parseInt(follow.effectiveFollowLimit.replace(/\D+/g, ""), 10) || follow.effectiveWarmupCapToday,
+      effective_follow_cap_today: Number.parseInt(follow.effectiveFollowLimit.match(/^\d+/)?.[0] ?? "", 10) || follow.effectiveWarmupCapToday,
+      admin_override_active: follow.adminOverrideActive,
       limiting_reason: follow.limitingReason,
       sensitive_values_excluded: true,
     },
@@ -574,7 +589,377 @@ function SourcesPayloadPreview({ payload }: { payload: ProfileSourceSavePayload 
   );
 }
 
-export function SettingsDrawer({
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function readString(row: Record<string, unknown>, keys: string[], fallback = "") {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    if (typeof value === "boolean") return value ? "true" : "false";
+  }
+  return fallback;
+}
+
+function readNumber(row: Record<string, unknown>, keys: string[], fallback: number) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+  return fallback;
+}
+
+function readOptionalNumber(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+  return null;
+}
+
+function readNestedNumber(row: Record<string, unknown>, key: string, fallback: number) {
+  const value = row[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return fallback;
+}
+
+function readBoolean(row: Record<string, unknown>, keys: string[], fallback: boolean) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string" && value.trim()) return /^(true|1|yes|enabled|active)$/i.test(value);
+    if (typeof value === "number") return value > 0;
+  }
+  return fallback;
+}
+
+function readWordList(row: Record<string, unknown>, keys: string[], fallback = "") {
+  for (const key of keys) {
+    const value = row[key];
+    if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean).join(", ");
+    if (typeof value === "string") return value;
+  }
+  return fallback;
+}
+
+function dbStatusLabel(status?: string, fallback = "schema_only") {
+  if (status === "connected") return "connected";
+  if (status === "backend_pending") return "backend_pending";
+  if (status === "not_available") return "not_available";
+  return fallback;
+}
+
+function packageFollowCap(packageLabel: string) {
+  const normalized = packageLabel.toLowerCase();
+  if (normalized.includes("premium")) return 180;
+  if (normalized.includes("pro")) return 120;
+  return 80;
+}
+
+function packageUnfollowCap(packageLabel: string) {
+  const normalized = packageLabel.toLowerCase();
+  if (normalized.includes("premium")) return 240;
+  if (normalized.includes("pro")) return 120;
+  return 80;
+}
+
+function slotLabel(start: string, end: string, fallback: string) {
+  if (start && end) return `${start} - ${end}`;
+  return fallback || "not_available";
+}
+
+function detailsSourceLabel(data: ProfileDetailsPayload | null) {
+  const source = data?.source?.settings || "ig_account_settings";
+  const status = data?.settings?.status || "not_available";
+  return `DB / Manage · ${source} · ${status}`;
+}
+
+function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetailsPayload | null): ProfileSettings {
+  const account = record(data?.account);
+  const settings = record(data?.settings?.data);
+  const packageSummary = record(data?.packageSummary?.data);
+  const packageCaps = record(packageSummary.package_caps);
+  const effectiveCapsPreview = record(packageSummary.effective_caps_preview);
+  const filters = record(data?.filters?.data);
+  const credentials = record(data?.credentialsSafe);
+  const targets = data?.targets?.items ?? [];
+  const statsSummary = record(data?.stats?.summary);
+  const settingsStatus = dbStatusLabel(data?.settings?.status);
+  const filtersStatus = dbStatusLabel(data?.filters?.status);
+  const targetsStatus = dbStatusLabel(data?.targets?.status);
+  const packageLabel = readString(account, ["packageLabel", "package_label", "commercialPackage", "commercial_package"], profile.package);
+  const packageDefaultFollowCap = readNestedNumber(packageCaps, "follow_day", readNestedNumber(effectiveCapsPreview, "follow_day", packageFollowCap(packageLabel)));
+  const packageDefaultFollowSessionCap = readNestedNumber(packageCaps, "follow_session", packageDefaultFollowCap);
+  const manualFollowDayOverride = readOptionalNumber(settings, ["manual_follow_day_cap"]);
+  const manualFollowSessionOverride = readOptionalNumber(settings, ["manual_follow_session_cap"]);
+  const legacyFollowLimit = readOptionalNumber(settings, ["follow_limit"]);
+  const legacyMaxFollowPerRun = readOptionalNumber(settings, ["max_follow_per_run"]);
+  const warmupApplied = readBoolean(effectiveCapsPreview, ["warmup_applied"], false);
+  const warmupFollowDayCap = readOptionalNumber(effectiveCapsPreview, ["warmup_follow_day_cap"]);
+  const followCap = Math.max(0, Math.min(
+    packageDefaultFollowCap,
+    manualFollowDayOverride ?? packageDefaultFollowCap,
+    warmupApplied && warmupFollowDayCap !== null ? warmupFollowDayCap : packageDefaultFollowCap,
+  ));
+  const followSessionCap = manualFollowSessionOverride ?? packageDefaultFollowSessionCap;
+  const followCapSource: ProfileSettings["follow"]["capSource"] = manualFollowDayOverride !== null || manualFollowSessionOverride !== null ? "manual" : warmupApplied ? "warmup" : "package";
+  const followLimitingReason = followCapSource === "manual" ? "admin_override_active" : followCapSource === "warmup" ? "limited_by_warmup" : "package_default";
+  const unfollowCap = readNumber(settings, ["daily_unfollow_cap", "unfollow_per_day_limit", "unfollow_per_day"], profile.counters.unfollow.max);
+  const unfollowSessionCap = readNumber(settings, ["session_unfollow_cap", "unfollow_per_session_limit", "unfollow_per_session"], Math.min(unfollowCap, 50));
+  const timeslotStart = readString(settings, ["timeslot_start", "start_time", "window_start"], profile.activeWindow.split("-")[0] ?? "");
+  const timeslotEnd = readString(settings, ["timeslot_end", "end_time", "window_end"], profile.activeWindow.split("-")[1] ?? "");
+  const currentSlot = slotLabel(timeslotStart, timeslotEnd, profile.activeWindow.replace("-", " - "));
+  const timezone = readString(settings, ["timezone", "business_timezone"], "not_available");
+  const followEnabled = readBoolean(settings, ["follow_enabled", "enable_follow"], profile.entitlements.includes("follow"));
+  const welcomeEnabled = readBoolean(settings, ["welcome_dm_enabled", "welcome_enabled"], profile.entitlements.includes("welcome"));
+  const outreachEnabled = readBoolean(settings, ["outreach_dm_enabled", "cold_dm_enabled", "outreach_enabled"], profile.entitlements.includes("outreach"));
+  const unfollowEnabled = readBoolean(settings, ["unfollow_enabled"], profile.entitlements.includes("unfollow"));
+  const targetRows = targets.filter((target) => target && typeof target === "object") as Record<string, unknown>[];
+  const activeTargets = targetRows.filter((target) => /active|valid/i.test(readString(target, ["status"], "")));
+  const pendingTargets = targetRows.filter((target) => /pending|review/i.test(readString(target, ["status"], "")));
+  const rejectedTargets = targetRows.filter((target) => /reject/i.test(readString(target, ["status", "quality_status"], "")));
+  const archivedTargets = targetRows.filter((target) => /archive|delete/i.test(`${readString(target, ["status"], "")} ${readString(target, ["archived_at", "deleted_at"], "")}`));
+  const eligibleTargets = activeTargets.length ? activeTargets : targetRows.filter((target) => !/reject|archive|delete/i.test(readString(target, ["status"], "")));
+  const sourceHealth = targetsStatus !== "connected" ? "review" : eligibleTargets.length ? "healthy" : pendingTargets.length ? "review" : "blocked";
+  const credentialStatus = String(credentials.credentialStatus || profile.credentialStatus);
+  const credentialStatusSafe = credentialStatus === "missing" || credentialStatus === "needs_update" ? credentialStatus : "active";
+  const sourceDefaults = {
+    maxFollowsPerTargetPerRun: readNumber(settings, ["max_follows_per_target_per_run"], packageLabel.toLowerCase().includes("pro") ? 30 : 27),
+    maxTargetsPerRun: readNumber(settings, ["max_targets_per_run"], 4),
+  };
+
+  return {
+    general: {
+      deviceId: profile.deviceId || "not_available",
+      deviceLabel: profile.deviceName || "not_available",
+      displayName: readString(account, ["displayName", "display_name"], profile.displayName),
+      username: readString(account, ["username"], profile.username),
+      credentialStatus: credentialStatusSafe,
+      credentialSource: data?.credentialsSafe ? "secure_backend" : "unknown",
+      credentialUpdateRequired: Boolean(credentials.reauthRequired) || credentialStatusSafe !== "active",
+      twoFactorEnabled: /enabled|true/i.test(String(credentials.twoFactorDisplay || "")) || profile.twoFactorEnabled,
+      commercialPackage: packageLabel,
+      entitlements: profile.entitlements.length ? profile.entitlements : [packageLabel],
+      runtimeProfile: profile.runtimeProfile || "schema_only",
+      slotKind: profile.slotKind || "schema_only",
+      readinessStatus: profile.readiness,
+      eligibilityStatus: profile.eligibilityDetail.status,
+      assignmentStatus: profile.assignmentState,
+      currentSlot,
+      safeMetadata: `relay details loaded; settings=${settingsStatus}; filters=${filtersStatus}; secrets excluded`,
+    },
+    schedule: {
+      currentSlot,
+      businessWindow: currentSlot,
+      businessTimezone: timezone,
+      assignmentStatus: profile.assignmentState,
+      slotKind: profile.slotKind || "schema_only",
+      runtimeProfile: profile.runtimeProfile || "schema_only",
+      assignedDevice: profile.deviceName || "not_available",
+      safeDeviceSerial: profile.deviceId ? `••••${profile.deviceId.slice(-4)}` : "not_available",
+      cloneSlot: `profile #${profile.profileNumber}`,
+      apkClonerSlot: profile.profileNumber === 1 ? "primary Instagram package" : `APK clone slot ${profile.profileNumber - 1}`,
+      reservedState: profile.status === "running" ? "active" : profile.assignmentState === "assigned" ? "reserved" : profile.assignmentState === "blocked" ? "blocked" : "idle",
+      deviceLock: profile.runtimeLock || "none",
+      cloneBufferMinutes: readNumber(settings, ["clone_buffer_minutes"], 0),
+      phoneRest: readBoolean(settings, ["phone_rest_active"], false) ? "active" : "not_available",
+      scheduleSource: settingsStatus,
+      assignmentSource: profile.assignmentState === "missing_slot" ? "not_available" : "dashboard_manage",
+      appInstanceSummary: profile.assignmentState === "missing_slot" ? "not_available" : "assigned app instance",
+      saveReady: false,
+      availableSlots: [{
+        slotIndex: profile.profileNumber,
+        slotKind: profile.slotKind,
+        slotKindLabel: profile.runtimeProfile === "outreach_only" ? "Outreach-only · 40 min" : "Full-cycle · 6h",
+        localLabel: currentSlot,
+        startsAt: timeslotStart || "not_available",
+        endsAt: timeslotEnd || "not_available",
+        available: false,
+        reason: "current",
+        occupiedBy: profile.username,
+      }],
+      restWindows: [],
+      gates: {
+        ok: profile.eligibility === "can_start",
+        reason: profile.eligibility === "can_start" ? "ready" : profile.eligibilityReason || "assignment_missing",
+        windowActive: profile.eligibilityReason !== "assignment_window_closed",
+        phoneRestActive: false,
+        nextEligibleStartsAt: null,
+        runStartGate: profile.eligibility === "can_start" ? "ready" : "blocked",
+        dispatcherGate: profile.eligibility === "can_start" ? "ready" : "blocked",
+        autoRestartGate: profile.eligibility === "can_start" ? "ready" : "blocked",
+      },
+    },
+    follow: {
+      timeslot: currentSlot,
+      followEnabled,
+      endIfLimitReached: readBoolean(settings, ["end_if_limit_reached"], true),
+      endIfLimitType: "Follow",
+      turnOffFollow: !followEnabled,
+      followPerDay: followCap,
+      muteAfterFollow: readBoolean(settings, ["mute_after_follow"], false),
+      doFollowsFirst: readBoolean(settings, ["do_follows_first"], true),
+      maxFollowPerSession: followSessionCap,
+      packageFollowDayCap: packageDefaultFollowCap,
+      packageFollowSessionCap: packageDefaultFollowSessionCap,
+      manualFollowDayCap: manualFollowDayOverride ?? packageDefaultFollowCap,
+      manualFollowSessionCap: followSessionCap,
+      adminOverrideActive: manualFollowDayOverride !== null || manualFollowSessionOverride !== null,
+      adminOverrideLabel: manualFollowDayOverride !== null || manualFollowSessionOverride !== null
+        ? `${manualFollowDayOverride ?? packageDefaultFollowCap}/day · ${manualFollowSessionOverride ?? packageDefaultFollowSessionCap}/session`
+        : "not_active",
+      legacyFollowSessionCap: legacyFollowLimit,
+      legacyFollowCapLabel: legacyFollowLimit !== null || legacyMaxFollowPerRun !== null
+        ? `legacy/test: follow_limit=${legacyFollowLimit ?? "—"} · max_follow_per_run=${legacyMaxFollowPerRun ?? "—"}`
+        : "not_available",
+      warmupEnabled: readBoolean(effectiveCapsPreview, ["warmup_enabled"], readBoolean(settings, ["warmup_enabled", "warmup_mode"], false)),
+      warmupApplied,
+      warmupStatus: readString(packageSummary, ["warmup_status"], warmupApplied ? "active" : "not_available"),
+      warmupDay: readNumber(packageSummary, ["warmup_day"], 0),
+      packageStartedAt: readString(packageSummary, ["package_started_at"], readString(settings, ["package_started_at"], "not_available")),
+      day1FollowCap: readNumber(effectiveCapsPreview, ["day_1_follow_cap", "day1_follow_cap"], 10),
+      day2FollowCap: readNumber(effectiveCapsPreview, ["day_2_follow_cap", "day2_follow_cap"], 20),
+      day3FollowCap: readNumber(effectiveCapsPreview, ["day_3_follow_cap", "day3_follow_cap"], 40),
+      day4PlusFollowCap: readNumber(effectiveCapsPreview, ["day_4_plus_follow_cap", "day4_plus_follow_cap"], packageDefaultFollowCap),
+      effectiveWarmupCapToday: warmupApplied && warmupFollowDayCap !== null ? warmupFollowDayCap : packageDefaultFollowCap,
+      followDayRemaining: Math.max(0, followCap - profile.counters.follow.current),
+      limitingReason: followLimitingReason,
+      capSource: followCapSource,
+      runtimeStatus: settingsStatus === "connected" ? "active" : "read_only",
+      effectiveFollowLimit: `${followCap}/day · ${followSessionCap}/session`,
+      source: `DB / Manage · ${data?.source?.settings || "ig_account_settings"}`,
+    },
+    dm: {
+      welcomeDmEnabled: welcomeEnabled,
+      coldDmEnabled: outreachEnabled,
+      aiCommentPrompt: readString(settings, ["ai_comment_prompt"], "not_available"),
+      welcomeDmBody: readString(settings, ["welcome_dm_body", "welcome_message"], ""),
+      coldDmBody: readString(settings, ["cold_dm_body", "outreach_message"], ""),
+      templateName: readString(settings, ["template_name"], "") || null,
+      outreachEnabled,
+      welcomeEnabled,
+      welcomeServiceActive: welcomeEnabled,
+      outreachServiceActive: outreachEnabled,
+      welcomeEntitlementStatus: welcomeEnabled ? "active" : "not_available",
+      welcomeTemplateStatus: readString(settings, ["welcome_template_status"], "not_available"),
+      outreachTemplateStatus: readString(settings, ["outreach_template_status"], "not_available"),
+      welcomeRealSendStatus: readString(settings, ["welcome_real_send_status"], "backend_pending"),
+      outreachRealSendStatus: readString(settings, ["outreach_real_send_status"], "backend_pending"),
+      legacyDmGateStatus: settingsStatus,
+      saveReady: false,
+      welcomeDisabledReason: welcomeEnabled ? null : "welcome setting disabled or missing",
+      outreachDisabledReason: outreachEnabled ? null : "outreach setting disabled or missing",
+      welcomeSessionCap: readNumber(settings, ["welcome_session_cap"], 0),
+      welcomeDayCap: readNumber(settings, ["welcome_day_cap"], 0),
+      outreachSessionCap: readNumber(settings, ["outreach_session_cap"], 0),
+      outreachDayCap: readNumber(settings, ["outreach_day_cap"], 0),
+      outreachEntitlementStatus: outreachEnabled ? "active" : "not_available",
+      safeDmLimit: profile.counters.dm.max,
+    },
+    followback: {
+      unfollowEnabled,
+      unfollowMode: "unfollow",
+      unfollowPerSession: unfollowSessionCap,
+      unfollowPerDay: unfollowCap,
+      unfollowAfterDays: readNumber(settings, ["unfollow_after_days"], 3),
+      stopAfterUnfollowSkipped: readNumber(settings, ["stop_after_unfollow_skipped"], 3000),
+      unfollowSort: "unfollow",
+      followbackRatioSummary: `${readNumber(statsSummary, ["follows_today"], profile.counters.follow.current)} follows · ${readNumber(statsSummary, ["unfollows_today"], profile.counters.unfollow.current)} unfollows`,
+      packageUnfollowDayCap: packageUnfollowCap(packageLabel),
+      runtimeCapMode: "prod_normal",
+      runtimeSafetyCap: null,
+      runtimeHardCap: 0,
+      runtimeCapSource: settingsStatus,
+      followEntitlementStatus: followEnabled ? "active" : "not_available",
+      unfollowEntitlementStatus: unfollowEnabled ? "active" : "not_available",
+      handoffStatus: unfollowEnabled ? "enabled" : "not_available",
+      blockReason: unfollowEnabled ? "" : "unfollow setting disabled or missing",
+      safeCandidateStrategyStatus: "backend_pending",
+      doUnfollowFirstStatus: "backend_pending",
+      currentRuntimeMode: "unfollow",
+      unfollowedToday: profile.counters.unfollow.current,
+      unfollowDayRemaining: Math.max(0, unfollowCap - profile.counters.unfollow.current),
+      limitingReason: settingsStatus,
+      effectiveUnfollowLimit: `${unfollowCap}/day · ${unfollowSessionCap}/session`,
+    },
+    sources: {
+      mainSource: "Multi-target rotation",
+      sourceGroups: targetRows.map((target) => readString(target, ["source"], "unknown")).filter(Boolean).slice(0, 6),
+      targetAccountRefs: targetRows.map((target) => readString(target, ["target_username", "normalized_username"], "")).filter(Boolean).slice(0, 8),
+      totalTargetsCount: targetRows.length,
+      activeTargetsCount: activeTargets.length,
+      eligibleTargetsCount: eligibleTargets.length,
+      pendingTargetsCount: pendingTargets.length,
+      rejectedTargetsCount: rejectedTargets.length,
+      archivedTargetsCount: archivedTargets.length,
+      maxFollowsPerTargetPerRun: sourceDefaults.maxFollowsPerTargetPerRun,
+      maxTargetsPerRun: sourceDefaults.maxTargetsPerRun,
+      bounds: {
+        maxFollowsPerTargetPerRun: { min: 1, max: 50 },
+        maxTargetsPerRun: { min: 1, max: 10 },
+      },
+      sourceStatus: targetsStatus === "connected" ? "account_setting" : "schema_pending",
+      runtimeStatus: targetsStatus === "connected" ? "active" : "schema_pending",
+      saveReady: false,
+      note: `Targets source: ${targetsStatus}`,
+      ctQualitySummary: `${eligibleTargets.length} eligible · ${pendingTargets.length} review · ${rejectedTargets.length} rejected`,
+      followbackRatioByTarget: "backend_pending",
+      followsSentByTarget: targetRows.length ? "available in target rows when populated" : "not_available",
+      insufficientDataTargets: Math.max(0, targetRows.length - eligibleTargets.length),
+      pendingRuntimeTargets: pendingTargets.length,
+      recentlyExhaustedTargets: 0,
+      nextTargetProbable: targetRows[0] ? `@${readString(targetRows[0], ["target_username", "normalized_username"], "unknown")}` : "not_available",
+      sourceHealth,
+      adminSyncStatus: targetsStatus === "connected" ? "ready" : "schema_pending",
+      clientSyncStatus: "schema_pending",
+      botAppSyncStatus: targetsStatus === "connected" ? "ready" : "schema_pending",
+      lastRefreshLabel: "Loaded from DB / Manage details",
+      syncReadiness: sourceHealth === "healthy" ? "ready" : sourceHealth === "review" ? "review" : "blocked",
+    },
+    filters: {
+      skipPrivateProfiles: readBoolean(filters, ["skip_private_profiles"], false),
+      skipFollower: readBoolean(filters, ["skip_followers", "skip_follower"], true),
+      skipFollowing: readBoolean(filters, ["skip_following"], true),
+      skipNonBusiness: readBoolean(filters, ["skip_non_business"], false),
+      skipBusiness: readBoolean(filters, ["skip_business"], false),
+      followPrivate: readBoolean(filters, ["follow_private_profiles", "follow_private"], false),
+      followOnlyPrivate: readBoolean(filters, ["follow_only_private"], false),
+      dmPrivate: readBoolean(filters, ["dm_private"], false),
+      minFollowers: readNumber(filters, ["min_followers"], 1),
+      maxFollowers: readNumber(filters, ["max_followers"], 1_000_000),
+      minFollowing: readNumber(filters, ["min_following"], 1),
+      maxFollowing: readNumber(filters, ["max_following"], 1_000_000),
+      minPosts: readNumber(filters, ["min_posts"], 0),
+      blacklistedWords: readWordList(filters, ["blacklisted_words", "blacklist_words"], ""),
+      mandatoryWords: readWordList(filters, ["mandatory_words", "whitelist_words"], ""),
+      runtimeReadyFields: ["skip_private_profiles", "min_followers", "max_followers", "min_posts"],
+      plannedFields: filtersStatus === "connected" ? [] : ["backend schema fields not returned"],
+      runtimeStatus: "active",
+      saveReady: false,
+      sourceStatus: filtersStatus === "connected" ? "account_setting" : "default",
+      templateName: readString(filters, ["template_name"], "") || null,
+    },
+    advanced: {
+      appMode: "da_normal",
+      apkClonerSlot: profile.profileNumber === 1 ? "primary Instagram package" : `APK clone slot ${profile.profileNumber - 1}`,
+      turnOffLiking: false,
+      startupTimeout: null,
+      likePerDay: profile.counters.like.max,
+      likesPerFollow: "not_available",
+      feedLikes: false,
+      watchStories: false,
+      aiCommentPerDay: 0,
+      aiCommentsPerFollow: 0,
+    },
+  };
+}
+
+function LegacySettingsDrawer({
   profile,
   onClose,
   onConfirm,
@@ -593,25 +978,68 @@ export function SettingsDrawer({
   const [followbackDraft, setFollowbackDraft] = useState<ProfileSettings["followback"] | null>(null);
   const [sourcesDraft, setSourcesDraft] = useState<ProfileSettings["sources"] | null>(null);
   const [filtersDraft, setFiltersDraft] = useState<ProfileSettings["filters"] | null>(null);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSource, setSettingsSource] = useState("Loading settings");
 
   useEffect(() => {
     let cancelled = false;
-    void mockClient.getProfileSettings(profile.id).then((result) => {
-      if (!cancelled && result.ok) {
-        setSettings(result.data);
-        setFollowDraft(result.data.follow);
-        setDmDraft(result.data.dm);
-        setFollowbackDraft(result.data.followback);
-        setSourcesDraft(result.data.sources);
-        setFiltersDraft(result.data.filters);
-        const currentSlot = result.data.schedule.availableSlots.find((slot) => slot.reason === "current" || slot.occupiedBy === profile.username);
-        setSelectedScheduleSlotKey(currentSlot ? scheduleSlotKey(currentSlot) : "");
-      }
-    });
-    return () => { cancelled = true; };
-  }, [profile.id, profile.username]);
+    const applySettings = (nextSettings: ProfileSettings, source: string) => {
+      if (cancelled) return;
+      setSettings(nextSettings);
+      setSettingsError("");
+      setSettingsSource(source);
+      setFollowDraft(nextSettings.follow);
+      setDmDraft(nextSettings.dm);
+      setFollowbackDraft(nextSettings.followback);
+      setSourcesDraft(nextSettings.sources);
+      setFiltersDraft(nextSettings.filters);
+      const currentSlot = nextSettings.schedule.availableSlots.find((slot) => slot.reason === "current" || slot.occupiedBy === profile.username);
+      setSelectedScheduleSlotKey(currentSlot ? scheduleSlotKey(currentSlot) : "");
+    };
 
-  if (!settings) return <Drawer title="Settings" subtitle={profile.username} wide onClose={onClose}><div className="empty-state">Loading settings...</div></Drawer>;
+    if (window.botappDesktop?.profiles?.details) {
+      void loadProfileDetails(profile.id).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setSettings(buildSettingsFromProfileDetails(profile, null));
+          setSettingsError(result.error ?? "Profile details unavailable.");
+          setSettingsSource("DB / Manage · profile details unavailable");
+          return;
+        }
+        const data = (result.data ?? null) as ProfileDetailsPayload | null;
+        applySettings(buildSettingsFromProfileDetails(profile, data), detailsSourceLabel(data));
+      });
+    } else {
+      void mockClient.getProfileSettings(profile.id).then((result) => {
+        if (!cancelled && result.ok) {
+          applySettings(result.data, "Local dev fixture · not packaged runtime");
+        }
+      });
+    }
+    return () => { cancelled = true; };
+  }, [profile]);
+
+  if (!settings) {
+    return (
+      <Drawer title="Settings" subtitle={profile.username} wide onClose={onClose}>
+        <div className="empty-state">Loading settings from Manage…</div>
+      </Drawer>
+    );
+  }
+
+  if (settingsError) {
+    return (
+      <Drawer title="Settings" subtitle={profile.username} wide panelClassName="drawer-panel-settings" onClose={onClose} footer={<>
+        <span className="subtle">{settingsSource}</span>
+        <Button disabled>Save settings · backend pending</Button>
+      </>}>
+        <div className="settings-tabs" role="tablist" aria-label="Profile settings sections">
+          {tabs.map((tab) => <button key={tab} type="button" className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}
+        </div>
+        <div className="empty-state"><strong>Settings details unavailable</strong><span>{settingsError}</span></div>
+      </Drawer>
+    );
+  }
 
   const selectedScheduleSlot = settings.schedule.availableSlots.find((slot) => scheduleSlotKey(slot) === selectedScheduleSlotKey) ?? null;
   const currentScheduleSlotKey = settings.schedule.availableSlots.find((slot) => slot.reason === "current" || slot.occupiedBy === profile.username);
@@ -653,7 +1081,7 @@ export function SettingsDrawer({
       panelClassName="drawer-panel-settings"
       onClose={onClose}
       footer={showSaveAction ? <>
-        <div className="drawer-footer-left" />
+        <div className="drawer-footer-left"><span className="subtle">{settingsSource}</span></div>
         <Button
           onClick={onConfirm}
           disabled={(activeTab === "Schedule" && scheduleSaveDisabled) || (activeTab === "Follow" && followSaveDisabled) || (activeTab === "DM" && dmSaveDisabled) || (activeTab === "Followback" && followbackSaveDisabled) || (activeTab === "Sources" && sourcesSaveDisabled) || (activeTab === "Filters" && filtersSaveDisabled)}
@@ -685,9 +1113,10 @@ export function SettingsDrawer({
       </div> : null}
 
       {activeTab === "Follow" ? <div className="settings-grid">
-        <Section title="Follow summary" badge={follow.runtimeStatus} tone={statusTone(follow.runtimeStatus)}><Field label="Follow enabled" value={follow.followEnabled ? "enabled" : "disabled"} /><Field label="Effective follow cap today" value={follow.effectiveFollowLimit} mono /><Field label="Followed today" value={profile.counters.follow.current} /><Field label="Remaining today" value={follow.followDayRemaining} /><Field label="Limiting reason" value={follow.limitingReason} /><Field label="Applied cap source" value={follow.capSource} /></Section>
-        <Section title="Limits" badge="Editable admin caps" tone="info"><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Package follow cap/day" value={follow.packageFollowDayCap} /><NumberField label="Manual follow cap/day" value={follow.manualFollowDayCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowDayCap: value })} /><NumberField label="Manual follow cap/session" value={follow.manualFollowSessionCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowSessionCap: value })} /><Field label="Source of truth" value="package summary + account settings + warmup projection" /></Section>
-        <Section title="Warmup" badge={follow.warmupStatus} tone={statusTone(follow.warmupStatus)}><EditableToggleLine label="Warmup enabled" checked={follow.warmupEnabled} onChange={(checked) => setFollowDraft({ ...follow, warmupEnabled: checked })} /><Field label="Warmup day" value={follow.warmupDay} /><Field label="Package/service start date" value={follow.packageStartedAt || "Pending operator start date"} /><NumberField label="Day 1 follow cap" value={follow.day1FollowCap} max={10} onChange={(value) => setFollowDraft({ ...follow, day1FollowCap: value })} /><NumberField label="Day 2 follow cap" value={follow.day2FollowCap} max={20} onChange={(value) => setFollowDraft({ ...follow, day2FollowCap: value })} /><NumberField label="Day 3 follow cap" value={follow.day3FollowCap} max={40} onChange={(value) => setFollowDraft({ ...follow, day3FollowCap: value })} /><NumberField label="Day 4+ follow cap" value={follow.day4PlusFollowCap} max={follow.packageFollowDayCap} onChange={(value) => setFollowDraft({ ...follow, day4PlusFollowCap: value })} /><Field label="Effective warmup cap today" value={follow.effectiveWarmupCapToday} /></Section>
+        <Section title="Follow summary" badge={follow.capSource} tone={statusTone(follow.runtimeStatus)}><Field label="Follow enabled" value={follow.followEnabled ? "enabled" : "disabled"} /><Field label="Runtime effective cap" value={follow.effectiveFollowLimit} mono /><Field label="Followed today" value={profile.counters.follow.current} /><Field label="Remaining today" value={follow.followDayRemaining} /><Field label="Limiting reason" value={follow.limitingReason} /><Field label="Applied cap source" value={follow.capSource} /></Section>
+        <Section title="Package default" badge="source of truth" tone="info"><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Package follow cap/day" value={follow.packageFollowDayCap} /><Field label="Package follow cap/session" value={follow.packageFollowSessionCap} /><Field label="Source" value="account_package_summary.package_caps" /></Section>
+        <Section title="Admin override" badge={follow.adminOverrideActive ? "active" : "not active"} tone={follow.adminOverrideActive ? "warning" : "success"}><Field label="Override status" value={follow.adminOverrideLabel} /><NumberField label="Draft override cap/day" value={follow.manualFollowDayCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowDayCap: value, adminOverrideActive: true, adminOverrideLabel: `${value}/day · ${follow.manualFollowSessionCap}/session`, capSource: "manual" })} /><NumberField label="Draft override cap/session" value={follow.manualFollowSessionCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowSessionCap: value, adminOverrideActive: true, adminOverrideLabel: `${follow.manualFollowDayCap}/day · ${value}/session`, capSource: "manual" })} /><Field label="Legacy/test cap" value={follow.legacyFollowCapLabel} /></Section>
+        <Section title="Warmup" badge={follow.warmupApplied ? "applied" : follow.warmupStatus} tone={statusTone(follow.warmupStatus)}><EditableToggleLine label="Warmup enabled" checked={follow.warmupEnabled} onChange={(checked) => setFollowDraft({ ...follow, warmupEnabled: checked })} /><Field label="Warmup applied" value={follow.warmupApplied ? "yes" : "no"} /><Field label="Warmup day" value={follow.warmupDay} /><Field label="Package/service start date" value={follow.packageStartedAt || "Pending operator start date"} /><NumberField label="Day 1 follow cap" value={follow.day1FollowCap} max={10} onChange={(value) => setFollowDraft({ ...follow, day1FollowCap: value })} /><NumberField label="Day 2 follow cap" value={follow.day2FollowCap} max={20} onChange={(value) => setFollowDraft({ ...follow, day2FollowCap: value })} /><NumberField label="Day 3 follow cap" value={follow.day3FollowCap} max={40} onChange={(value) => setFollowDraft({ ...follow, day3FollowCap: value })} /><NumberField label="Day 4+ follow cap" value={follow.day4PlusFollowCap} max={follow.packageFollowDayCap} onChange={(value) => setFollowDraft({ ...follow, day4PlusFollowCap: value })} /><Field label="Effective warmup cap today" value={follow.effectiveWarmupCapToday} /></Section>
         <Section title="Legacy behavior preview" badge="Not Follow save" tone="warning"><p className="muted">These toggles exist in legacy settings/runtime defaults, but they are not part of the visible admin Follow save grid audited for this tab.</p><ToggleLine label="Do follows first" checked={follow.doFollowsFirst} /><ToggleLine label="Mute after follow" checked={follow.muteAfterFollow} /><ToggleLine label="End if limit reached" checked={follow.endIfLimitReached} /><ToggleLine label="Turn off follow" checked={follow.turnOffFollow} /></Section>
         <Section title="Safety / validation" badge={followError ? "Blocked" : followDirty ? "Ready" : "No changes"} tone={followError ? "warning" : followDirty ? "success" : "neutral"} full><Field label="Validation" value={followError || "Follow draft is valid."} /><Field label="Save state" value={followDirty ? "Changed from loaded settings" : "No changes"} /><Field label="Admin endpoint" value="/api/instagram-dashboard/settings" mono /></Section>
         <FollowPayloadPreview payload={followPayload} />
@@ -823,4 +1252,13 @@ export function SettingsDrawer({
       {activeTab === "Filters" ? <FilterSettingsPanel profile={profile} filters={filters} validationError={filtersError} onChange={setFiltersDraft} /> : null}
     </Drawer>
   );
+}
+
+export function SettingsDrawer(props: {
+  profile: BotProfile;
+  onClose: () => void;
+  onConfirm: () => void;
+  onOpenTargets?: () => void;
+}) {
+  return <LegacySettingsDrawer {...props} />;
 }

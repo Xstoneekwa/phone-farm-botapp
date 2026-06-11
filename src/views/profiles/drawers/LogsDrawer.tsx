@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { mockClient } from "../../../api/mock-client";
+import { loadProfileDetails, mapApiLogRow, type ProfileDetailsPayload } from "../../../api/profile-details";
 import type { BotProfile, ProfileLogEntry, ProfileLogExportFormat, ProfileLogLevel, ProfileLogPhase, ProfileLogStreamState } from "../../../api/types";
 import { Button, Drawer, Input } from "../../../design/components";
 import { redactText } from "../../../security/redaction";
@@ -98,19 +99,38 @@ export function LogsDrawer({ profile, onClose }: { profile: BotProfile; onClose:
   const levelLabel = (level: ProfileLogLevel | "all") => level === "all" ? "All levels" : level[0].toUpperCase() + level.slice(1);
   const phaseLabel = (phase: ProfileLogPhase | "all") => phase === "all" ? "All phases" : phase.replace("_", " ");
 
+  const relayDetailsEnabled = Boolean(window.botappDesktop?.profiles?.details);
+
   useEffect(() => {
     let cancelled = false;
-    void mockClient.getProfileLogs(profile.id).then((result) => {
+    async function load() {
+      if (relayDetailsEnabled) {
+        const result = await loadProfileDetails(profile.id);
+        if (cancelled) return;
+        const payload = result.data as ProfileDetailsPayload | undefined;
+        const logsSection = payload?.logs;
+        if (result.ok && logsSection) {
+          const items = (logsSection.items ?? []) as Record<string, unknown>[];
+          setLogs(items.map((row) => mapApiLogRow(profile.id, row)));
+          setLastUpdatedAt(formatTimestamp());
+          setStreamState("paused");
+          return;
+        }
+        setLogs([]);
+        return;
+      }
+      const result = await mockClient.getProfileLogs(profile.id);
       if (!cancelled && result.ok) {
         setLogs(result.data);
         setLastUpdatedAt(formatTimestamp());
       }
-    });
+    }
+    void load();
     return () => { cancelled = true; };
-  }, [profile.id]);
+  }, [profile.id, relayDetailsEnabled]);
 
   useEffect(() => {
-    if (streamState !== "live") return undefined;
+    if (relayDetailsEnabled || streamState !== "live") return undefined;
     const id = window.setInterval(() => {
       setLogs((current) => [...current, createMockLiveEntry(profile, liveIndex)].slice(-250));
       setLastUpdatedAt(formatTimestamp());
@@ -118,7 +138,7 @@ export function LogsDrawer({ profile, onClose }: { profile: BotProfile; onClose:
       if (!autoScroll) setNewLogCount((value) => value + 1);
     }, 2800);
     return () => window.clearInterval(id);
-  }, [autoScroll, liveIndex, profile, streamState]);
+  }, [autoScroll, liveIndex, profile, relayDetailsEnabled, streamState]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -152,6 +172,19 @@ export function LogsDrawer({ profile, onClose }: { profile: BotProfile; onClose:
   }
 
   function refreshMock() {
+    if (relayDetailsEnabled) {
+      void loadProfileDetails(profile.id).then((result) => {
+        const payload = result.data as ProfileDetailsPayload | undefined;
+        const logsSection = payload?.logs;
+        if (result.ok && logsSection) {
+          const items = (logsSection.items ?? []) as Record<string, unknown>[];
+          setLogs(items.map((row) => mapApiLogRow(profile.id, row)));
+          setNewLogCount(0);
+          setLastUpdatedAt(formatTimestamp());
+        }
+      });
+      return;
+    }
     void mockClient.getProfileLogs(profile.id).then((result) => {
       if (result.ok) {
         setLogs(result.data);

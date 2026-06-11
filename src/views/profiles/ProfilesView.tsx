@@ -57,6 +57,48 @@ function normalizeSearch(value: string) {
   return value.trim().toLowerCase();
 }
 
+function normalizePlatform(value: string | undefined) {
+  return /tiktok/i.test(String(value || "")) ? "TikTok" : "Instagram";
+}
+
+function buildFallbackGroups(profiles: BotProfile[]): DeviceProfileGroup[] {
+  if (!profiles.length) return [];
+  return [{
+    deviceId: "unassigned-live-profiles",
+    deviceLabel: "Unassigned / dashboard profiles",
+    deviceSerial: "",
+    deviceSerialLabel: "No device",
+    deviceStatus: "maintenance",
+    phoneStatus: "idle",
+    deviceView: {
+      available: false,
+      unavailableReason: "No ADB serial is attached to this dashboard account.",
+    },
+    summary: {
+      total: profiles.length,
+      normal: profiles.filter((profile) => profile.planType === "normal").length,
+      dual: profiles.filter((profile) => profile.planType === "dual").length,
+      other: profiles.filter((profile) => profile.planType === "other").length,
+    },
+    profiles,
+  }];
+}
+
+function mergeProfileGroups(groups: DeviceProfileGroup[], profiles: BotProfile[]) {
+  const groupedCount = groups.reduce((total, group) => total + group.profiles.length, 0);
+  if (groupedCount >= profiles.length) return groups;
+  const groupedIds = new Set(groups.flatMap((group) => group.profiles.map((profile) => profile.id)));
+  const missing = profiles.filter((profile) => !groupedIds.has(profile.id));
+  if (!missing.length) return groups;
+  const unassigned = groups.find((group) => group.deviceId === "unassigned-live-profiles");
+  if (unassigned) {
+    return groups.map((group) => group.deviceId === "unassigned-live-profiles"
+      ? { ...group, profiles: [...group.profiles, ...missing], summary: { ...group.summary, total: group.profiles.length + missing.length } }
+      : group);
+  }
+  return [...groups, ...buildFallbackGroups(missing)];
+}
+
 function profileMatchesSearch(profile: BotProfile, group: DeviceProfileGroup, query: string) {
   const platformShort = profile.platform === "Instagram" ? "ig" : "tt";
   const groupText = [
@@ -194,12 +236,22 @@ function AccountRow({
 }
 
 export function ProfilesView({
+  profiles,
   groups,
+  syncError,
+  profilesMeta,
+  loading,
+  onRefresh,
   onSelect,
   onAction,
   onMockSubmit,
 }: {
+  profiles: BotProfile[];
   groups: DeviceProfileGroup[];
+  syncError: string | null;
+  profilesMeta: { source: string; accountsCount: number; counts: Record<string, number> } | null;
+  loading: boolean;
+  onRefresh: () => void;
   onSelect: (id: string) => void;
   onAction: (action: string, target: string, danger?: boolean) => void;
   onMockSubmit: (message: string) => void;
@@ -228,13 +280,18 @@ export function ProfilesView({
     };
   }, []);
 
+  const displayGroups = useMemo(() => {
+    if (groups.length) return mergeProfileGroups(groups, profiles);
+    return buildFallbackGroups(profiles);
+  }, [groups, profiles]);
+
   const filteredGroups = useMemo(() => {
     const query = normalizeSearch(searchTerm);
-    return groups
+    return displayGroups
       .map((group) => ({
         ...group,
         profiles: group.profiles.filter((profile) => {
-          const platformMatches = platformFilter === "All" || profile.platform === platformFilter;
+          const platformMatches = platformFilter === "All" || normalizePlatform(profile.platform) === platformFilter;
           if (!platformMatches) return false;
           if (!query) return true;
           return groupMatchesSearch(group, query) || profileMatchesSearch(profile, group, query);
@@ -242,7 +299,48 @@ export function ProfilesView({
       }))
       .map((group) => ({ ...group, summary: summarizeProfiles(group.profiles) }))
       .filter((group) => group.profiles.length > 0);
-  }, [groups, platformFilter, searchTerm]);
+  }, [displayGroups, platformFilter, searchTerm]);
+
+  const flattenedProfilesCount = displayGroups.reduce((total, group) => total + group.profiles.length, 0);
+  const filteredProfilesCount = filteredGroups.reduce((total, group) => total + group.profiles.length, 0);
+  const hasActiveSearch = normalizeSearch(searchTerm).length > 0;
+  const hasActivePlatformFilter = platformFilter !== "All";
+  const emptyStateType = loading
+    ? "loading"
+    : syncError
+      ? "relay_error"
+      : profiles.length === 0
+        ? "no_backend_accounts"
+        : filteredProfilesCount === 0 && (hasActiveSearch || hasActivePlatformFilter)
+          ? "filter_no_match"
+          : filteredProfilesCount === 0
+            ? "grouping_empty"
+            : "has_profiles";
+
+  useEffect(() => {
+    console.info("[botapp] profiles_renderer_state", {
+      patch: "manage-sync-v1",
+      profileGroupsLength: groups.length,
+      profilesLength: profiles.length,
+      flattenedProfilesCount,
+      filteredGroupsLength: filteredGroups.length,
+      filteredProfilesCount,
+      selectedPlatform: platformFilter,
+      searchQuery: searchTerm,
+      profilesMetaAccountsCount: profilesMeta?.accountsCount ?? null,
+      profilesMetaSource: profilesMeta?.source ?? null,
+      syncErrorPresent: Boolean(syncError),
+      emptyStateType,
+    });
+  }, [groups.length, profiles.length, flattenedProfilesCount, filteredGroups.length, filteredProfilesCount, platformFilter, searchTerm, profilesMeta, syncError, emptyStateType]);
+
+  const sourceLabel = `Profiles patch active: manage-sync-v1 · ${
+    profilesMeta
+      ? `Source: Manage / Relay · ${profilesMeta.accountsCount} account${profilesMeta.accountsCount === 1 ? "" : "s"} (${profilesMeta.source})`
+      : profiles.length
+        ? `Source: Manage / Relay · ${profiles.length} account${profiles.length === 1 ? "" : "s"}`
+        : "Source: Manage / Relay · 0 accounts"
+  }`;
 
   function handleToolbar(profile: BotProfile, action: ProfileToolbarAction) {
     if (action === "play" || action === "auto_login" || action === "check_readiness" || action === "assign_now" || action === "archive" || action === "delete" || action === "stop") {
@@ -356,14 +454,14 @@ export function ProfilesView({
     <div className="profiles-screen">
       <Card
         title="Profiles / Accounts"
-        subtitle=""
+        subtitle={sourceLabel}
         actions={<>
           <div className="profiles-filters">
             {(["All", "Instagram", "TikTok"] as const).map((item) => (
               <button key={item} type="button" className={platformFilter === item ? "filter-chip active" : "filter-chip"} onClick={() => setPlatformFilter(item)}>{item}</button>
             ))}
           </div>
-          <Button variant="ghost" onClick={() => onAction("Refresh profiles", "all profiles")}>Refresh</Button>
+          <Button variant="ghost" onClick={onRefresh}>Refresh</Button>
         </>}
       >
         <div className="profiles-search-row">
@@ -396,10 +494,30 @@ export function ProfilesView({
 
       {phoneViewMessage ? <div className="phone-view-message">{phoneViewMessage}</div> : null}
 
-      {filteredGroups.length === 0 ? (
+      {emptyStateType === "loading" ? (
+        <div className="empty-state profiles-empty">
+          <strong>Loading profiles from Manage</strong>
+          <span>Syncing account list through the secure relay.</span>
+        </div>
+      ) : emptyStateType === "relay_error" ? (
+        <div className="empty-state profiles-empty">
+          <strong>Relay error / unable to load Manage accounts</strong>
+          <span>{syncError}</span>
+        </div>
+      ) : emptyStateType === "no_backend_accounts" ? (
+        <div className="empty-state profiles-empty">
+          <strong>No accounts returned from Manage</strong>
+          <span>Check relay URL, relay credential, and deployed dashboard endpoints.</span>
+        </div>
+      ) : emptyStateType === "filter_no_match" ? (
         <div className="empty-state profiles-empty">
           <strong>No profiles match this search</strong>
           <span>Try another username, package, phone, platform, status, or timeslot.</span>
+        </div>
+      ) : emptyStateType === "grouping_empty" ? (
+        <div className="empty-state profiles-empty">
+          <strong>Accounts loaded but not visible in groups</strong>
+          <span>{profiles.length} account(s) received from Manage. Refresh or check device grouping.</span>
         </div>
       ) : null}
 
@@ -456,9 +574,22 @@ export function ProfilesView({
         <AddProfileDrawer
           groups={groups}
           onClose={() => setAddProfileOpen(false)}
-          onSubmitMock={(payload) => {
-            void payload;
-            onMockSubmit("Add Profile payload is prepared for the secure admin create contract.");
+          onSubmit={async (payload) => {
+            if (!window.botappDesktop?.profiles?.createDryRun) {
+              const message = "Add Profile backend dry-run unavailable in this runtime.";
+              onMockSubmit(message);
+              return { ok: false, message };
+            }
+            const result = await window.botappDesktop.profiles.createDryRun(payload);
+            if (!result.ok) {
+              const message = result.error || "Add Profile backend dry-run failed.";
+              onMockSubmit(message);
+              return { ok: false, message };
+            }
+            const account = (result.data?.account ?? {}) as Record<string, unknown>;
+            const message = `Add Profile dry-run OK: @${String(account.username || "unknown")} · ${String(account.status || "validated")} · no mutation executed.`;
+            onMockSubmit(message);
+            return { ok: true, message };
           }}
         />
       ) : null}

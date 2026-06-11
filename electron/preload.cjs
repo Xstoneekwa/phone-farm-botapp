@@ -14,6 +14,26 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     removeRelayConfig: () => ipcRenderer.invoke("botapp:compass:remove-relay-config"),
     analyze: (input) => ipcRenderer.invoke("botapp:compass:analyze", input),
   },
+  autoRestart: {
+    overview: () => ipcRenderer.invoke("botapp:auto-restart:overview"),
+    dryRun: () => ipcRenderer.invoke("botapp:auto-restart:dry-run"),
+    actionPreview: (input) => ipcRenderer.invoke("botapp:auto-restart:action-preview", input),
+  },
+  data: {
+    overview: () => ipcRenderer.invoke("botapp:data:overview"),
+  },
+  profiles: {
+    details: (accountId) => ipcRenderer.invoke("botapp:profiles:details", accountId),
+    createDryRun: (input) => ipcRenderer.invoke("botapp:profiles:create-dry-run", input),
+    addTarget: (input) => ipcRenderer.invoke("botapp:profiles:targets:add", input),
+    bulkAddTargets: (input) => ipcRenderer.invoke("botapp:profiles:targets:bulk-add", input),
+  },
+  endpoints: {
+    list: () => ipcRenderer.invoke("botapp:endpoints:list"),
+    test: (input) => ipcRenderer.invoke("botapp:endpoints:test", input),
+    testAll: () => ipcRenderer.invoke("botapp:endpoints:test-all"),
+    exportProfile: () => ipcRenderer.invoke("botapp:endpoints:export-profile"),
+  },
   integrations: {
     list: () => ipcRenderer.invoke("botapp:integrations:list"),
     saveWebhook: (input) => ipcRenderer.invoke("botapp:integrations:save-webhook", input),

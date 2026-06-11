@@ -83,16 +83,17 @@ function appInstancesForGroup(group: DeviceProfileGroup | undefined) {
 export function AddProfileDrawer({
   groups,
   onClose,
-  onSubmitMock,
+  onSubmit,
 }: {
   groups: DeviceProfileGroup[];
   onClose: () => void;
-  onSubmitMock: (payload: Record<string, unknown>) => void;
+  onSubmit: (payload: Record<string, unknown>) => Promise<{ ok: boolean; message: string }>;
 }) {
   const [step, setStep] = useState<AddProfileStep>(0);
   const [showConfirm, setShowConfirm] = useState(false);
   const [form, setForm] = useState(() => defaultForm(groups));
   const [verification, setVerification] = useState<{ status: string; canonical_username: string | null; reason: string } | null>(null);
+  const [submitState, setSubmitState] = useState<{ loading: boolean; message: string }>({ loading: false, message: "" });
   const selectedGroup = useMemo(() => groups.find((group) => group.deviceId === form.device_id) ?? groups[0], [form.device_id, groups]);
   const appInstances = useMemo(() => appInstancesForGroup(selectedGroup), [selectedGroup]);
   const selectedApp = appInstances.find((app) => app.app_instance_id === form.app_instance_id) ?? appInstances.find((app) => app.selectable);
@@ -135,17 +136,19 @@ export function AddProfileDrawer({
     });
   }
 
-  function submitMock() {
+  async function submitProfile() {
     const payload = {
       endpoint_contract: "/api/instagram-dashboard/accounts/create",
-      mode: "mock_only",
+      mode: "backend_dry_run",
       username: verification?.canonical_username || form.username.trim().toLowerCase(),
       login_method: form.login_method,
-      password_status: form.login_method === "credentials" ? "write_only_pending_secure_submit" : "not_submitted",
+      password: form.login_method === "credentials" ? form.password : "",
+      password_status: form.login_method === "credentials" ? "write_only_dry_run" : "not_submitted",
+      email: form.email.trim(),
       email_present: Boolean(form.email.trim()),
       display_name: form.display_name.trim(),
       internal_label: form.internal_label.trim(),
-      notes_present: Boolean(form.notes.trim()),
+      notes: form.notes.trim(),
       device_id: form.device_id,
       app_instance_id: form.app_instance_id,
       clone_mode: selectedApp ? `clone_${selectedApp.instance_index}` : "",
@@ -164,8 +167,11 @@ export function AddProfileDrawer({
       },
       sync_targets: ["admin_dashboard", "client_dashboard", "database", "botapp"],
     };
+    setSubmitState({ loading: true, message: "Validating create contract through secure relay..." });
+    const result = await onSubmit(payload);
+    setSubmitState({ loading: false, message: result.message });
+    if (!result.ok) return;
     setShowConfirm(false);
-    onSubmitMock(payload);
     onClose();
   }
 
@@ -178,7 +184,7 @@ export function AddProfileDrawer({
       onClose={onClose}
       footer={<div className="drawer-footer-left">
         <Button variant="ghost" onClick={step === 0 ? onClose : () => setStep((current) => (current - 1) as AddProfileStep)}>{step === 0 ? "Cancel" : "Previous"}</Button>
-        {step < 5 ? <Button onClick={() => setStep((current) => (current + 1) as AddProfileStep)} disabled={!canMoveNext()}>Next</Button> : <Button onClick={() => setShowConfirm(true)} disabled={!canMoveNext()}>Create Profile</Button>}
+        {step < 5 ? <Button onClick={() => setStep((current) => (current + 1) as AddProfileStep)} disabled={!canMoveNext()}>Next</Button> : <Button onClick={() => setShowConfirm(true)} disabled={!canMoveNext() || submitState.loading}>Create Profile</Button>}
       </div>}
     >
       <div className="add-profile-flow">
@@ -287,7 +293,8 @@ export function AddProfileDrawer({
             <div><dt>Add-ons</dt><dd>{selectedAddons.length ? selectedAddons.map((addon) => addon.label).join(", ") : "none"}</dd></div>
             <div><dt>Schedule</dt><dd>{selectedSlot?.label || "-"} · visible later in Schedule drawer</dd></div>
             <div><dt>Safety</dt><dd>No Supabase, Instagram, ADB, worker, provisioning, login, or run is called from this preview.</dd></div>
-            <div><dt>Future submit contract</dt><dd>POST `/api/instagram-dashboard/accounts/create` through a secure server API only.</dd></div>
+            <div><dt>Submit contract</dt><dd>Dry-run POST `/api/instagram-dashboard/accounts/create` through secure relay.</dd></div>
+            {submitState.message ? <div><dt>Backend status</dt><dd>{submitState.message}</dd></div> : null}
           </dl>
         ) : null}
       </div>
@@ -296,10 +303,10 @@ export function AddProfileDrawer({
       <div className="add-profile-confirm-backdrop" role="presentation" onMouseDown={() => setShowConfirm(false)}>
         <section className="add-profile-confirm" role="dialog" aria-modal="true" aria-labelledby="add-profile-confirm-title" onMouseDown={(event) => event.stopPropagation()}>
           <h3 id="add-profile-confirm-title">Create this profile?</h3>
-          <p>This prepares the admin create contract only. It does not launch login, provisioning, or a run, and no backend mutation is executed.</p>
+          <p>This validates the admin create contract through the secure backend relay in dry-run mode. It does not create an account, launch login, provisioning, or a run.</p>
           <div className="add-profile-confirm-actions">
-            <Button variant="ghost" onClick={() => setShowConfirm(false)}>Cancel</Button>
-            <Button onClick={submitMock}>Create Profile</Button>
+            <Button variant="ghost" onClick={() => setShowConfirm(false)} disabled={submitState.loading}>Cancel</Button>
+            <Button onClick={() => void submitProfile()} disabled={submitState.loading}>{submitState.loading ? "Validating..." : "Dry-run create"}</Button>
           </div>
         </section>
       </div>

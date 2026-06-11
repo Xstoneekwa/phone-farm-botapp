@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockClient } from "../api/mock-client";
-import type { ActivityLogEntry, ApiKeySummary, AppSettings, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotProfile, CompassActionTarget, CompassAnalyzeResult, CompassAiRuntimeStatus, CompassOverview, Device, DeviceProfileGroup, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
+import type { ActivityLogEntry, ApiKeySummary, AppSettings, AutoRestartControl, AutoRestartOverview, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotProfile, CompassActionTarget, CompassAnalyzeResult, CompassAiRuntimeStatus, CompassOverview, Device, DeviceProfileGroup, NotificationItem, WebhookSummary } from "../api/types";
 import { Modal, Toasts, type ToastItem } from "../design/components";
 import { Sidebar } from "../layout/Sidebar";
 import { TopBar } from "../layout/TopBar";
@@ -11,9 +11,7 @@ import { Credentials } from "../views/Credentials";
 import { Devices } from "../views/Devices";
 import { ActivityLog } from "../views/ActivityLog";
 import { Compass } from "../views/Compass";
-import { Targets } from "../views/Targets";
-import { DMTemplates } from "../views/DMTemplates";
-import { Notifications } from "../views/Notifications";
+import { AutoRestart } from "../views/AutoRestart";
 import { APIKeys } from "../views/APIKeys";
 import { Settings } from "../views/Settings";
 import { routes, type RouteId } from "./routes";
@@ -25,17 +23,18 @@ type AppData = {
   clientAccounts: BotAppClientAccountsOverview | null;
   credentials: BotAppCredentialsOverview | null;
   compass: CompassOverview | null;
+  autoRestart: AutoRestartOverview | null;
   devices: Device[];
   notifications: NotificationItem[];
   logs: ActivityLogEntry[];
-  targets: Target[];
-  templates: DmTemplate[];
   apiKeys: ApiKeySummary[];
   webhooks: WebhookSummary[];
   settings: AppSettings | null;
 };
 
-const emptyData: AppData = { profiles: [], profileGroups: [], clientAccounts: null, credentials: null, compass: null, devices: [], notifications: [], logs: [], targets: [], templates: [], apiKeys: [], webhooks: [], settings: null };
+export type BotAppOverviewData = AppData;
+
+const emptyData: AppData = { profiles: [], profileGroups: [], clientAccounts: null, credentials: null, compass: null, autoRestart: null, devices: [], notifications: [], logs: [], apiKeys: [], webhooks: [], settings: null };
 
 export function App() {
   const [active, setActive] = useState<RouteId>("overview");
@@ -43,33 +42,47 @@ export function App() {
   const [selectedCredentialsAccountId, setSelectedCredentialsAccountId] = useState<string | null>(null);
   const [data, setData] = useState<AppData>(emptyData);
   const [loading, setLoading] = useState(true);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [profilesMeta, setProfilesMeta] = useState<{ source: string; accountsCount: number; counts: Record<string, number> } | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ action: string; target: string; danger: boolean } | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
+  async function loadOverviewData() {
+    if (window.botappDesktop?.data?.overview) {
+      const result = await window.botappDesktop.data.overview();
+      setData(result.data);
+      setSyncError(result.error ?? null);
+      setProfilesMeta(result.profilesMeta ?? null);
+      if (!result.ok && result.error) pushToast(result.error, "info");
+      return;
+    }
+    const [profiles, profileGroups, clientAccounts, credentials, compass, autoRestart, devices, notifications, logs, apiKeys, webhooks, settings] = await Promise.all([
+      mockClient.listProfiles(), mockClient.listDeviceProfileGroups(), mockClient.listClientAccounts(), mockClient.listCredentialsActions(), mockClient.listCompass(), mockClient.listAutoRestart(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
+    ]);
+    setData({
+      profiles: profiles.ok ? profiles.data : [],
+      profileGroups: profileGroups.ok ? profileGroups.data : [],
+      clientAccounts: clientAccounts.ok ? clientAccounts.data : null,
+      credentials: credentials.ok ? credentials.data : null,
+      compass: compass.ok ? compass.data : null,
+      autoRestart: autoRestart.ok ? autoRestart.data : null,
+      devices: devices.ok ? devices.data : [],
+      notifications: notifications.ok ? notifications.data : [],
+      logs: logs.ok ? logs.data : [],
+      apiKeys: apiKeys.ok ? apiKeys.data : [],
+      webhooks: webhooks.ok ? webhooks.data : [],
+      settings: settings.ok ? settings.data : null,
+    });
+    setSyncError(null);
+    setProfilesMeta(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [profiles, profileGroups, clientAccounts, credentials, compass, devices, notifications, logs, targets, templates, apiKeys, webhooks, settings] = await Promise.all([
-        mockClient.listProfiles(), mockClient.listDeviceProfileGroups(), mockClient.listClientAccounts(), mockClient.listCredentialsActions(), mockClient.listCompass(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listTargets(), mockClient.listDmTemplates(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
-      ]);
-      if (cancelled) return;
-      setData({
-        profiles: profiles.ok ? profiles.data : [],
-        profileGroups: profileGroups.ok ? profileGroups.data : [],
-        clientAccounts: clientAccounts.ok ? clientAccounts.data : null,
-        credentials: credentials.ok ? credentials.data : null,
-        compass: compass.ok ? compass.data : null,
-        devices: devices.ok ? devices.data : [],
-        notifications: notifications.ok ? notifications.data : [],
-        logs: logs.ok ? logs.data : [],
-        targets: targets.ok ? targets.data : [],
-        templates: templates.ok ? templates.data : [],
-        apiKeys: apiKeys.ok ? apiKeys.data : [],
-        webhooks: webhooks.ok ? webhooks.data : [],
-        settings: settings.ok ? settings.data : null,
-      });
-      setLoading(false);
+      await loadOverviewData();
+      if (!cancelled) setLoading(false);
     }
     void load();
     return () => { cancelled = true; };
@@ -122,7 +135,7 @@ export function App() {
       return;
     }
     if (target.targetTab === "targets") {
-      setActive("targets");
+      setActive("compass");
       return;
     }
     setActive("compass");
@@ -165,18 +178,59 @@ export function App() {
     };
   }
 
+  async function refreshAutoRestart() {
+    const result = await (window.botappDesktop?.autoRestart?.overview
+      ? window.botappDesktop.autoRestart.overview().then((overview) => ({ ok: true as const, data: overview })).catch((error) => ({ ok: false as const, error }))
+      : mockClient.listAutoRestart());
+    if (result.ok) {
+      setData((current) => ({ ...current, autoRestart: result.data }));
+      pushToast("Auto Restart overview refreshed.", "success");
+      return;
+    }
+    pushToast("Auto Restart overview unavailable.", "error");
+  }
+
+  async function runAutoRestartDryRun() {
+    const result = await window.botappDesktop?.autoRestart?.dryRun?.();
+    if (result?.ok) {
+      setData((current) => ({ ...current, autoRestart: result.overview }));
+      pushToast("Auto Restart dry-run preview refreshed.", "success");
+      return;
+    }
+    await refreshAutoRestart();
+  }
+
+  async function previewAutoRestartControl(control: AutoRestartControl) {
+    const preview = await window.botappDesktop?.autoRestart?.actionPreview?.({
+      action: control.action,
+      requestId: control.requestId,
+      target: {
+        targetAccountId: control.targetAccountId,
+        targetDeviceId: control.targetDeviceId,
+      },
+    });
+    pushToast(preview?.ok ? `${control.label}: preview ready.` : (preview?.error ?? `${control.label}: backend pending.`), preview?.ok ? "success" : "info");
+  }
+
+  function navigateAutoRestartTarget(target: "accounts" | "devices" | "credentials" | "activity" | "compass" | "safety" | "candidates") {
+    if (target === "devices") setActive("devices");
+    else if (target === "credentials") setActive("credentials");
+    else if (target === "activity") setActive("activity");
+    else if (target === "compass") setActive("compass");
+    else if (target === "accounts") setActive("account");
+    else setActive("auto-restart");
+  }
+
   let view: React.ReactNode;
-  if (loading) view = <div className="empty-state"><strong>Loading local data</strong><span>No backend connection is required.</span></div>;
+  if (loading) view = <div className="empty-state"><strong>Loading dashboard data</strong><span>BotApp is syncing through the secure relay.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
-  else if (active === "profiles") view = <Profiles groups={data.profileGroups} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message) => pushToast(message, "success")} />;
+  else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} syncError={syncError} profilesMeta={profilesMeta} loading={loading} onRefresh={() => void loadOverviewData()} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message) => pushToast(message, "success")} />;
   else if (active === "account") view = data.clientAccounts ? <ClientAccounts overview={data.clientAccounts} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} onOpenCredentials={(account) => { setSelectedCredentialsAccountId(account.accountId); setActive("credentials"); }} /> : null;
   else if (active === "credentials") view = data.credentials ? <Credentials overview={data.credentials} selectedAccountId={selectedCredentialsAccountId} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} />;
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
   else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
-  else if (active === "targets") view = <Targets targets={data.targets} onAction={requestAction} />;
-  else if (active === "templates") view = <DMTemplates templates={data.templates} onAction={requestAction} />;
-  else if (active === "notifications") view = <Notifications notifications={data.notifications} onAction={requestAction} />;
+  else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onPreviewControl={previewAutoRestartControl} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;
   else if (active === "api") view = <APIKeys apiKeys={data.apiKeys} webhooks={data.webhooks} onAction={requestAction} />;
   else view = data.settings ? <Settings settings={data.settings} onAction={requestAction} /> : null;
 

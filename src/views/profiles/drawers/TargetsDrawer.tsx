@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockClient } from "../../../api/mock-client";
+import { loadProfileDetails, mapApiTargetRow, type ProfileDetailsPayload } from "../../../api/profile-details";
 import type {
   BotProfile,
   ProfileTarget,
@@ -22,14 +23,49 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
   const [message, setMessage] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
+  async function loadTargetsFromBackend() {
+    const result = await loadProfileDetails(profile.id);
+    const payload = result.data as ProfileDetailsPayload | undefined;
+    const targets = payload?.targets;
+    if (result.ok && targets?.status === "connected") {
+      const items = (targets.items ?? []) as Record<string, unknown>[];
+      setTargets(items.map((row) => mapApiTargetRow(profile.id, row)));
+      setLastUpdatedAt(formatDateTime(new Date().toISOString()));
+      setMessage(items.length ? "" : "No targets returned from DB for this account.");
+      return { ok: true, count: items.length };
+    }
+    const error = result.error ?? targets?.error ?? "Targets backend pending.";
+    setTargets([]);
+    setMessage(error);
+    return { ok: false, error };
+  }
+
   useEffect(() => {
     let cancelled = false;
-    void mockClient.getProfileTargets(profile.id).then((result) => {
+    async function load() {
+      if (window.botappDesktop?.profiles?.details) {
+        const result = await loadProfileDetails(profile.id);
+        if (cancelled) return;
+        const payload = result.data as ProfileDetailsPayload | undefined;
+        const targets = payload?.targets;
+        if (result.ok && targets?.status === "connected") {
+          const items = (targets.items ?? []) as Record<string, unknown>[];
+          setTargets(items.map((row) => mapApiTargetRow(profile.id, row)));
+          setLastUpdatedAt(formatDateTime(new Date().toISOString()));
+          setMessage(items.length ? "" : "No targets returned from DB for this account.");
+          return;
+        }
+        setTargets([]);
+        setMessage(result.error ?? targets?.error ?? "Targets backend pending.");
+        return;
+      }
+      const result = await mockClient.getProfileTargets(profile.id);
       if (!cancelled && result.ok) {
         setTargets(result.data);
         setLastUpdatedAt(formatDateTime(new Date().toISOString()));
       }
-    });
+    }
+    void load();
     return () => { cancelled = true; };
   }, [profile.id]);
 
@@ -69,7 +105,16 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
     setLastUpdatedAt(formatDateTime(new Date().toISOString()));
   }
 
-  function refreshMock() {
+  function refreshTargets() {
+    if (window.botappDesktop?.profiles?.details) {
+      void loadTargetsFromBackend().then((result) => {
+        if (result.ok) {
+          setSelected(new Set());
+          notifyAction(`Targets refreshed from DB (${result.count}).`);
+        }
+      });
+      return;
+    }
     void mockClient.getProfileTargets(profile.id).then((result) => {
       if (result.ok) {
         setTargets(result.data);
@@ -102,6 +147,20 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
       setMessage("Duplicate target already visible in this list.");
       return;
     }
+    if (window.botappDesktop?.profiles?.addTarget) {
+      setMessage(`Adding @${username} through secure relay...`);
+      void window.botappDesktop.profiles.addTarget({ accountId: profile.id, username }).then(async (result) => {
+        if (!result.ok) {
+          setMessage(result.error ?? "Target add failed.");
+          return;
+        }
+        setSingleUsername("");
+        await loadTargetsFromBackend();
+        const row = (result.data?.row ?? {}) as Record<string, unknown>;
+        notifyAction(`Target @${String(row.target_username || username)} saved to Supabase.`);
+      });
+      return;
+    }
     setTargets((current) => [{
       id: `${profile.id}_ct_mock_${Date.now()}`,
       accountId: profile.id,
@@ -127,6 +186,23 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
   function importBulk() {
     if (bulkResult.acceptedForVerification === 0) {
       setMessage("Add one valid, non-duplicate Instagram username per line before importing.");
+      return;
+    }
+    if (window.botappDesktop?.profiles?.bulkAddTargets) {
+      const usernames = bulkResult.normalizedUsernames;
+      setMessage(`Importing ${usernames.length} target(s) through secure relay...`);
+      void window.botappDesktop.profiles.bulkAddTargets({ accountId: profile.id, usernames }).then(async (result) => {
+        if (!result.ok) {
+          setMessage(result.error ?? "Bulk target import failed.");
+          return;
+        }
+        setBulkText("");
+        await loadTargetsFromBackend();
+        const inserted = Number(result.data?.inserted ?? 0);
+        const duplicates = Number(result.data?.skipped_duplicates ?? 0);
+        const invalid = Number(result.data?.skipped_invalid ?? 0);
+        notifyAction(`Bulk import saved ${inserted}; duplicates ${duplicates}; invalid ${invalid}.`);
+      });
       return;
     }
     const now = new Date().toISOString();
@@ -236,7 +312,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
         </div>
 
         <div className="targets-actions-row">
-          <Button variant="ghost" onClick={refreshMock}>Refresh</Button>
+          <Button variant="ghost" onClick={refreshTargets}>Refresh</Button>
           <Button variant="ghost" onClick={() => exportTargets("csv")} disabled={!filteredTargets.length}>Export CSV</Button>
           <Button variant="ghost" onClick={() => exportTargets("json")} disabled={!filteredTargets.length}>Export JSON</Button>
           <Button variant="danger" onClick={() => archiveTargets([...selected])} disabled={selected.size === 0}>Delete selected{selected.size ? ` (${selected.size})` : ""}</Button>
@@ -360,7 +436,11 @@ function safeTargetAvatarSrc(value: string | null | undefined) {
   if (trimmed.includes("\\") || trimmed.includes("..") || trimmed.includes("#")) return null;
 
   // Match admin behavior: raw external avatar URLs must be proxied/sanitized server-side.
-  if (/^\/api\/botapp\/instagram-dashboard\/avatar\?kind=target&[A-Za-z0-9=&_%.-]+$/.test(trimmed) || /^\/avatars\/[A-Za-z0-9._-]+\.svg$/.test(trimmed)) {
+  if (
+    /^\/api\/botapp\/instagram-dashboard\/avatar\?kind=target&[A-Za-z0-9=&_%.-]+$/.test(trimmed) ||
+    /^https?:\/\/[^/]+\/api\/instagram-dashboard\/avatar\?kind=target&[A-Za-z0-9=&_%.-]+$/.test(trimmed) ||
+    /^\/avatars\/[A-Za-z0-9._-]+\.svg$/.test(trimmed)
+  ) {
     return trimmed;
   }
   return null;

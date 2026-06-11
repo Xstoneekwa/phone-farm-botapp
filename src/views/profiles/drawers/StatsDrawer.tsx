@@ -1,63 +1,37 @@
-import { useEffect, useState } from "react";
-import { mockClient } from "../../../api/mock-client";
-import type { BotProfile, ProfileStatsRow } from "../../../api/types";
 import { Badge, Button, Drawer } from "../../../design/components";
+import type { BotProfile } from "../../../api/types";
+import { sourceLabel, useProfileDetails } from "../use-profile-details";
 
-function enabledBadge(value: boolean) {
-  return <Badge tone={value ? "success" : "neutral"}>{value ? "enabled" : "off"}</Badge>;
+function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return <div className="settings-field"><span>{label}</span><strong className="mono">{value === null || value === undefined || value === "" ? "—" : String(value)}</strong></div>;
 }
 
 export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile; onClose: () => void; onSave: () => void }) {
-  const [rows, setRows] = useState<ProfileStatsRow[]>([]);
-  const [page, setPage] = useState(1);
-  const totalPages = 3;
-
-  useEffect(() => {
-    let cancelled = false;
-    void mockClient.getProfileStats(profile.id).then((result) => {
-      if (!cancelled && result.ok) setRows(result.data);
-    });
-    return () => { cancelled = true; };
-  }, [profile.id]);
+  const { loading, error, data } = useProfileDetails(profile.id);
+  const summary = data?.stats?.summary ?? {};
 
   return (
     <Drawer title="Statistics" subtitle={profile.username} wide onClose={onClose} footer={<>
-      <div className="drawer-pagination">
-        <Button variant="ghost" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page === 1}>Prev</Button>
-        <span className="mono">{page} / {totalPages}</span>
-        <Button variant="ghost" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page === totalPages}>Next</Button>
-        <Button variant="ghost" onClick={() => onSave()}>Refresh</Button>
-      </div>
-      <Button onClick={onSave}>Save Stats</Button>
+      <span className="subtle">{sourceLabel(data, "stats")}</span>
+      <Button variant="ghost" onClick={onSave}>Refresh</Button>
     </>}>
-      <div className="stats-table-wrap">
-        <table className="stats-table">
-          <thead>
-            <tr>
-              <th>Session time</th><th>Followers</th><th>Following</th><th>Follow-back</th><th>Like-back</th>
-              <th>Follow</th><th>Unfollow</th><th>Like</th><th>Comment</th><th>DM</th><th>Story watch</th><th>Total int.</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={`${row.sessionDate}-${row.sessionTime}`}>
-                <td><div className="mono">{row.sessionTime}</div><div className="subtle mono">{row.sessionDate}</div></td>
-                <td className="mono">{row.followers}</td>
-                <td className="mono">{row.following}</td>
-                <td>{enabledBadge(row.followBackEnabled)}</td>
-                <td>{enabledBadge(row.likeBackEnabled)}</td>
-                <td><span className="metric-pill follow">{row.follow.current}/{row.follow.target}</span></td>
-                <td><span className="metric-pill unfollow">{row.unfollow.current}/{row.unfollow.target}</span></td>
-                <td><span className="metric-pill like">{row.like.current}/{row.like.target}</span></td>
-                <td><span className="metric-pill comment">{row.comment.current}/{row.comment.target}</span></td>
-                <td><span className="metric-pill dm">{row.dm.current}/{row.dm.target}</span></td>
-                <td className="mono">{row.watch}</td>
-                <td><span className={`metric-pill total ${row.totalInteractions > 100 ? "high" : "low"}`}>{row.totalInteractions}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {loading ? <div className="empty-state">Loading statistics from Manage…</div> : null}
+      {!loading && error ? <div className="empty-state"><strong>Statistics unavailable</strong><span>{error}</span></div> : null}
+      {!loading && !error && data?.stats?.status === "backend_pending" ? (
+        <div className="empty-state"><strong>Backend endpoint pending</strong><span>{data.stats.error ?? "ig_runs / ig_action_logs"}</span></div>
+      ) : null}
+      {!loading && !error && data?.stats?.status !== "backend_pending" ? (
+        <div className="detail-list">
+          <Field label="Runs loaded" value={summary.runs_count as number | undefined} />
+          <Field label="Log events" value={summary.logs_count as number | undefined} />
+          <Field label="Latest run status" value={summary.latest_run_status as string | undefined} />
+          <Field label="Latest run started" value={summary.latest_run_started_at as string | undefined} />
+          <Field label="Follow events today" value={summary.follows_today as number | undefined} />
+          <Field label="Unfollow events today" value={summary.unfollows_today as number | undefined} />
+          <Field label="Like events today" value={summary.likes_today as number | undefined} />
+          <div className="settings-field"><span>Current run status</span><Badge tone="neutral">{profile.status}</Badge></div>
+        </div>
+      ) : null}
     </Drawer>
   );
 }

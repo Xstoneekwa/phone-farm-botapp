@@ -927,9 +927,15 @@ export type ProfileSettingsFollow = {
   doFollowsFirst: boolean;
   maxFollowPerSession: number;
   packageFollowDayCap: number;
+  packageFollowSessionCap: number;
   manualFollowDayCap: number;
   manualFollowSessionCap: number;
+  adminOverrideActive: boolean;
+  adminOverrideLabel: string;
+  legacyFollowSessionCap: number | null;
+  legacyFollowCapLabel: string;
   warmupEnabled: boolean;
+  warmupApplied: boolean;
   warmupStatus: string;
   warmupDay: number;
   packageStartedAt: string;
@@ -1389,6 +1395,7 @@ export type ProfileFollowSavePayload = {
     account_username: string;
     package_follow_day_cap: number;
     effective_follow_cap_today: number;
+    admin_override_active: boolean;
     limiting_reason: string;
     sensitive_values_excluded: true;
   };
@@ -2000,16 +2007,6 @@ export type Target = {
   notes: string;
 };
 
-export type DmTemplate = {
-  id: string;
-  name: string;
-  type: "welcome" | "outreach";
-  status: "active" | "draft";
-  body: string;
-  sent: number;
-  replies: number;
-};
-
 export type NotificationItem = {
   id: string;
   severity: Severity;
@@ -2095,12 +2092,201 @@ export type BotAppRuntimeIntegrationStatus = {
   environment: "local" | "development" | "production";
 };
 
+export type BotAppEndpointStatus =
+  | "untested"
+  | "connected"
+  | "failing"
+  | "auth_protected"
+  | "not_deployed"
+  | "planned"
+  | "wiring_missing";
+
+export type BotAppBackendEndpoint = {
+  id: string;
+  name: string;
+  method: "GET" | "POST" | "PATCH" | "DELETE";
+  path: string;
+  usedBy: string[];
+  purpose: string;
+  authRequired: boolean;
+  status: "active" | "planned" | "wiring_missing";
+  lastTestAt: string | null;
+  lastStatusCode: number | null;
+  lastSafeError: string | null;
+  testStatus: BotAppEndpointStatus;
+};
+
+export type BotAppEndpointTestResult = {
+  id: string;
+  ok: boolean;
+  status: BotAppEndpointStatus;
+  lastTestAt: string;
+  lastStatusCode: number | null;
+  lastSafeError: string | null;
+};
+
+export type BotAppConnectionProfile = {
+  generatedAt: string;
+  relayOrigin: string | null;
+  endpoints: Array<Pick<BotAppBackendEndpoint, "id" | "name" | "method" | "path" | "usedBy" | "purpose" | "authRequired" | "status">>;
+};
+
 export type AppSettings = {
   business: Record<string, string | boolean | number>;
   admin: Record<string, string | boolean | number>;
   opsSafetyCaps: Record<string, string | boolean | number>;
   killSwitches: Record<string, boolean>;
   runtimeState: Record<string, string | boolean | number>;
+};
+
+export type AutoRestartMode = "disabled" | "dry_run" | "active" | "backend_pending";
+export type AutoRestartStatus = "enabled" | "disabled" | "backend_pending" | "unavailable";
+export type AutoRestartSafetyStatus = "safe" | "watch" | "blocked" | "backend_pending";
+export type AutoRestartControlAction =
+  | "refresh_overview"
+  | "dry_run_preview"
+  | "enable_auto_restart"
+  | "disable_auto_restart"
+  | "restart_eligible_sessions"
+  | "resume_quota_paused"
+  | "pause_device_rest"
+  | "resume_phone"
+  | "open_affected_accounts"
+  | "open_device"
+  | "open_compass_issue"
+  | "open_credentials"
+  | "open_activity_log"
+  | "view_safety_gates"
+  | "view_candidates"
+  | "export_preview"
+  | "copy_safe_summary";
+
+export type AutoRestartQuotaResume = {
+  pausedDueToQuota: number;
+  eligibleToResume: number;
+  remainingDailyQuota: {
+    follows: number | null;
+    unfollows: number | null;
+    dms: number | null;
+  };
+  resumeBlockedReason: string | null;
+  lastSuccessfulAction: string | null;
+  nextResumeWindow: string | null;
+};
+
+export type AutoRestartDeviceRest = {
+  deviceId: string;
+  deviceLabel: string;
+  status: "active" | "resting" | "offline" | "unknown";
+  reason: string;
+  nextRestWindow: string | null;
+  highVolumePackageProtection: boolean;
+};
+
+export type AutoRestartAccount = {
+  accountId: string;
+  username: string;
+  clientName: string;
+  packageLabel: string;
+  status: string;
+  quotaStatus: string;
+  resumeEligibility: "eligible" | "blocked" | "unknown";
+  assignedDevice: string;
+  lastRun: string | null;
+  nextAction: string;
+  blockingReason: string | null;
+};
+
+export type AutoRestartSafetyRule = {
+  id: string;
+  label: string;
+  detail: string;
+  status: AutoRestartSafetyStatus;
+};
+
+export type AutoRestartRuleSettings = {
+  enabled: boolean;
+  restartYellowAccounts: boolean;
+  restartRedAccounts: boolean;
+  respectFixedBlackouts: boolean;
+  respectSixHourWindow: boolean;
+  checkEveryMinutes: number;
+  maxRestartsPerAccountPerDay: number;
+  maxRestartsPerAccountPerWindow: number;
+  writable: boolean;
+};
+
+export type AutoRestartQuotaCandidate = {
+  accountId: string;
+  username: string;
+  packageLabel: string;
+  phoneName: string;
+  followRemaining: number;
+  unfollowRemaining: number;
+  welcomeRemaining: number;
+  outreachRemaining: number;
+  plannedRunType: string;
+  decision: string;
+  reason: string;
+};
+
+export type AutoRestartDecisionItem = {
+  id: string;
+  account: string;
+  decisionTime: string | null;
+  action: string;
+  reason: string;
+  requestId: string | null;
+};
+
+export type AutoRestartControl = {
+  action: AutoRestartControlAction;
+  label: string;
+  detail: string;
+  requestId: string;
+  dryRun: true;
+  confirmationRequired: boolean;
+  impact: string;
+  affectedAccountsCount: number;
+  affectedDevicesCount: number;
+  targetAccountId?: string;
+  targetDeviceId?: string;
+  backendStatus: "relay_ready" | "backend_pending";
+};
+
+export type AutoRestartOverview = {
+  status: AutoRestartStatus;
+  enabled: boolean;
+  mode: AutoRestartMode;
+  lastRestartAt: string | null;
+  nextEligibleRestartAt: string | null;
+  activeAccountsAffected: number;
+  safetyStatus: AutoRestartSafetyStatus;
+  backendSyncStatus: "backend_pending" | "relay_ready";
+  sourceSummary: string;
+  sessionResume: AutoRestartQuotaResume;
+  businessSessionWindow: {
+    status: "in_window" | "outside_window" | "not_configured" | "backend_pending";
+    currentStart: string | null;
+    currentEnd: string | null;
+    timeRemaining: string | null;
+    preventOverrun: boolean;
+    timezone: string;
+    packageRelation: string;
+  };
+  phoneRest: {
+    phonesResting: number;
+    phonesActive: number;
+    nextRestWindow: string | null;
+    reason: string;
+    devices: AutoRestartDeviceRest[];
+  };
+  affectedAccounts: AutoRestartAccount[];
+  controls: AutoRestartControl[];
+  safetyRules: AutoRestartSafetyRule[];
+  rules: AutoRestartRuleSettings;
+  quotaCandidates: AutoRestartQuotaCandidate[];
+  decisions: AutoRestartDecisionItem[];
 };
 
 export type ActionPreview = {
@@ -2123,11 +2309,11 @@ export type BotAppClient = {
   listCredentialsActions(): Promise<ApiResult<BotAppCredentialsOverview>>;
   listCompass(): Promise<ApiResult<CompassOverview>>;
   analyzeCompass(overview: CompassOverview, period: "24h" | "7d" | "30d"): Promise<ApiResult<CompassAiAdvisor>>;
+  listAutoRestart(): Promise<ApiResult<AutoRestartOverview>>;
   listDevices(): Promise<ApiResult<Device[]>>;
   listNotifications(): Promise<ApiResult<NotificationItem[]>>;
   listActivityLogs(): Promise<ApiResult<ActivityLogEntry[]>>;
   listTargets(): Promise<ApiResult<Target[]>>;
-  listDmTemplates(): Promise<ApiResult<DmTemplate[]>>;
   listApiKeys(): Promise<ApiResult<ApiKeySummary[]>>;
   listWebhooks(): Promise<ApiResult<WebhookSummary[]>>;
   listSettings(): Promise<ApiResult<AppSettings>>;
