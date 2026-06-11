@@ -405,6 +405,76 @@
   font-weight: 900;
 }
 
+.client-accounts-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(12,20,30,.42);
+}
+
+.client-accounts-confirm {
+  display: grid;
+  gap: 10px;
+  width: min(460px, calc(100vw - 36px));
+  border: 1px solid rgba(143,162,176,.34);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--fg-primary);
+  box-shadow: 0 22px 56px rgba(50,73,92,.28);
+  padding: 18px;
+}
+
+.client-accounts-confirm span {
+  color: var(--fg-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.client-accounts-confirm h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.client-accounts-confirm p {
+  color: var(--fg-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.client-accounts-confirm strong {
+  color: var(--fg-primary);
+  font-size: 13px;
+}
+
+.client-accounts-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.client-accounts-confirm-actions button {
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--fg-primary);
+  cursor: pointer;
+  font-weight: 900;
+  padding: 8px 12px;
+}
+
+.client-accounts-confirm-actions button.primary {
+  border-color: #00A891;
+  background: linear-gradient(135deg, #00B8A8, #009C8E);
+  color: #fff;
+}
+
 @media (max-width: 1180px) {
   .client-accounts-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));

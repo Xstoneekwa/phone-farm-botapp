@@ -3,6 +3,7 @@ import type {
   BotAppClientAccount,
   BotAppClientAccountsFilters,
   BotAppClientAccountsOverview,
+  ClientAccountPasswordUpdatePayload,
 } from "../api/types";
 import "./client-accounts.css";
 
@@ -23,8 +24,8 @@ const filterOptions: Array<{ key: BotAppClientAccountsFilters["status"]; label: 
   { key: "needs-assistance", label: "Needs assistance" },
 ];
 
-function statusTone(value: string) {
-  const normalized = value.toLowerCase();
+function statusTone(value: string | null | undefined) {
+  const normalized = String(value ?? "").toLowerCase();
   if (normalized.includes("active") || normalized.includes("ready") || normalized.includes("connected")) return "good";
   if (normalized.includes("cancel") || normalized.includes("blocked") || normalized.includes("invalid") || normalized.includes("required")) return "danger";
   if (normalized.includes("pending") || normalized.includes("paused") || normalized.includes("onboarding") || normalized.includes("needs")) return "warning";
@@ -60,9 +61,40 @@ function relayActionPayload(account: BotAppClientAccount, action: string) {
   };
 }
 
+function passwordUpdatePayload(account: BotAppClientAccount): ClientAccountPasswordUpdatePayload {
+  return {
+    action: "request_password_update",
+    account_id: account.accountId,
+    client_id: account.clientId,
+    username: account.username,
+    requested_by: null,
+    source: "BotApp",
+    reason: "password_update_required",
+    idempotency_key: `botapp:client_accounts:${account.accountId}:password_update_required`,
+    notification: {
+      notification_type: "password_update_required",
+      audience: "client",
+      status: "pending",
+      message: `Password update required for @${account.username}. Please update your Instagram password so we can reconnect your account safely.`,
+      action_label: "Update password",
+      action_deep_link: "/instagram-client?view=account",
+    },
+    email: {
+      email_template: "instagram_password_update_required",
+      delivery_status: "pending_relay",
+      include: ["client_name", "username", "dashboard_link"],
+    },
+    metadata_safe: {
+      source_surface: "client_accounts",
+      expected_effect: "future_secure_relay_password_update_request",
+    },
+  };
+}
+
 export function ClientAccounts({ overview, onOpenProfile }: ClientAccountsProps) {
   const [filters, setFilters] = useState<BotAppClientAccountsFilters>({ query: "", status: "all" });
   const [openMenuAccountId, setOpenMenuAccountId] = useState<string | null>(null);
+  const [passwordRequestAccount, setPasswordRequestAccount] = useState<BotAppClientAccount | null>(null);
   const [message, setMessage] = useState("");
 
   const visibleItems = useMemo(
@@ -75,9 +107,20 @@ export function ClientAccounts({ overview, onOpenProfile }: ClientAccountsProps)
       onOpenProfile(account.profileId);
       return;
     }
+    if (action === "request_password_update") {
+      setPasswordRequestAccount(account);
+      return;
+    }
     const payload = relayActionPayload(account, action);
     void payload;
     setMessage(`${account.username}: ${action.replaceAll("_", " ")} payload prepared for secure relay.`);
+  }
+
+  function confirmPasswordUpdateRequest(account: BotAppClientAccount) {
+    const payload = passwordUpdatePayload(account);
+    void payload;
+    setPasswordRequestAccount(null);
+    setMessage(`${account.username}: password update request prepared. Client will receive a dashboard notification and email after secure relay approval.`);
   }
 
   return (
@@ -192,6 +235,29 @@ export function ClientAccounts({ overview, onOpenProfile }: ClientAccountsProps)
       </section>
 
       {message ? <div className="client-accounts-message">{message}</div> : null}
+
+      {passwordRequestAccount ? (
+        <div className="client-accounts-confirm-backdrop" role="presentation" onMouseDown={() => setPasswordRequestAccount(null)}>
+          <section
+            className="client-accounts-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Send password update request"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span>Request password update</span>
+            <h3>Send password update request?</h3>
+            <p>
+              Client will receive a dashboard notification and email after the secure relay accepts this request.
+            </p>
+            <strong>@{passwordRequestAccount.username}</strong>
+            <div className="client-accounts-confirm-actions">
+              <button type="button" onClick={() => setPasswordRequestAccount(null)}>Cancel</button>
+              <button type="button" className="primary" onClick={() => confirmPasswordUpdateRequest(passwordRequestAccount)}>Send request</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -238,7 +304,7 @@ function ActionList({
       <IconButton label="Open Credentials: Open the credential action worklist." onClick={() => onAction("open_credentials")}>
         <KeyIcon />
       </IconButton>
-      <IconButton label="Request password update: Requires credential assistance backend." disabled onClick={() => onAction("request_password_update")}>
+      <IconButton label="Request password update: Client will receive a dashboard notification and email." onClick={() => onAction("request_password_update")}>
         <RefreshIcon />
       </IconButton>
       <span className="client-accounts-status-menu">

@@ -514,6 +514,7 @@ export type BotAppClientAccountAction =
   | "pause"
   | "cancel"
   | "mark_needs_assistance"
+  | "request_password_update"
   | "reactivate"
   | "refresh";
 
@@ -591,6 +592,46 @@ export type BotAppClientAccountsRelayPayload = {
   metadata_safe: {
     expected_effect: "read_only_client_accounts_overview";
   };
+};
+
+export type PasswordUpdateRequestStatus = "pending" | "already_requested" | "accepted" | "failed";
+
+export type ClientAccountNotificationPayload = {
+  notification_type: "password_update_required";
+  audience: "client";
+  status: "pending";
+  message: string;
+  action_label: "Update password";
+  action_deep_link: string;
+};
+
+export type ClientAccountEmailNotificationPayload = {
+  email_template: "instagram_password_update_required";
+  delivery_status: "pending_relay";
+  include: Array<"client_name" | "username" | "dashboard_link">;
+};
+
+export type ClientAccountPasswordUpdatePayload = {
+  action: "request_password_update";
+  account_id: string;
+  client_id: string;
+  username: string;
+  requested_by: string | null;
+  source: "BotApp";
+  reason: "password_update_required";
+  idempotency_key: string;
+  notification: ClientAccountNotificationPayload;
+  email: ClientAccountEmailNotificationPayload;
+  metadata_safe: {
+    source_surface: "client_accounts";
+    expected_effect: "future_secure_relay_password_update_request";
+  };
+};
+
+export type PasswordUpdateRequestResult = {
+  status: PasswordUpdateRequestStatus;
+  payload: ClientAccountPasswordUpdatePayload;
+  message: string;
 };
 
 export type DeviceProfileGroup = {
