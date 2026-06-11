@@ -3,6 +3,10 @@ export type ApiScope =
   | "profile:write"
   | "settings:write"
   | "devices:read"
+  | "activity:read"
+  | "compass:read"
+  | "credentials:manage"
+  | "targets:manage"
   | "targets:write"
   | "templates:read"
   | "webhooks:manage"
@@ -1639,6 +1643,354 @@ export type BotAppClientSafeInteractionRecord = Pick<
   confidence: BotAppInteractionConfidence;
 };
 
+export type CompassSeverity = "critical" | "warning" | "info" | "positive";
+export type CompassConfidence = "high" | "medium" | "best_effort";
+export type CompassAiConfidence = "high" | "medium" | "low";
+export type CompassInsightCategory =
+  | "credentials"
+  | "devices"
+  | "activity_quality"
+  | "targets"
+  | "quota"
+  | "inactive"
+  | "growth"
+  | "assignment"
+  | "readiness"
+  | "global";
+export type CompassActionTargetTab = "credentials" | "devices" | "activity" | "targets" | "account" | "profiles" | "compass";
+export type CompassAiProvider = "openai" | "claude" | "comparison" | "none";
+
+export type CompassActionTarget = {
+  targetTab: CompassActionTargetTab;
+  label: string;
+  context: {
+    accountId?: string;
+    profileId?: string;
+    username?: string;
+    clientId?: string;
+    deviceId?: string;
+    ctId?: string;
+    problemId?: string;
+    filter?: string;
+  };
+};
+
+export type CompassAiTargetTab = "credentials" | "devices" | "activity_log" | "targets" | "client_accounts" | "profiles" | "compass";
+export type CompassAiHealthAssessment = "good" | "watch" | "risk" | "critical";
+export type CompassAiStatus = "rules_only" | "ai_enabled" | "ai_unavailable" | "invalid_ai_output" | "relay_pending";
+export type CompassAiActionType = "open_tab" | "open_account" | "open_problem_group" | "prepare_request" | "archive_ct_review";
+export type CompassAiRecommendationType =
+  | "credential_blocker"
+  | "device_blocker"
+  | "ct_quality"
+  | "activity_evidence"
+  | "quota_pacing_internal"
+  | "growth_trend_internal"
+  | "package_entitlement"
+  | "operational_risk";
+export type CompassAiSourceFact =
+  | "credential_blockers"
+  | "account_dashboard_actions"
+  | "login_actions"
+  | "devices_status"
+  | "compass_rules"
+  | "activity_log_evidence"
+  | "ct_quality_alerts"
+  | "target_account_status"
+  | "interaction_counters"
+  | "quota_pacing"
+  | "growth_trend"
+  | "failed_interactions"
+  | "account_status"
+  | "package_entitlement"
+  | "safe_run_evidence";
+export type CompassInternalSignalKind =
+  | "inactive_accounts"
+  | "under_quota"
+  | "growth_down"
+  | "credential_blocker"
+  | "device_blocker"
+  | "ct_quality";
+
+export type CompassAffectedAccount = {
+  accountId: string;
+  profileId: string;
+  username: string;
+  clientName: string;
+  deviceId: string | null;
+  deviceName: string | null;
+  packageLabel: BotProfile["package"];
+  reason: string;
+  target: CompassActionTarget;
+};
+
+export type CompassEvidence = {
+  source:
+    | "profiles_projection"
+    | "client_accounts_overview"
+    | "credentials_actions"
+    | "devices_overview"
+    | "activity_log_interaction_evidence"
+    | "targets_projection"
+    | "runs_projection"
+    | "derived_rules";
+  label: string;
+  value: string | number | boolean | null;
+  confidence: CompassConfidence;
+};
+
+export type CompassRecommendation = {
+  id: string;
+  severity: CompassSeverity;
+  title: string;
+  impactEstimate: string;
+  cause: string;
+  recommendedAction: string;
+  confidence: CompassConfidence;
+  clientVisible: boolean;
+  clientRawVisible: boolean;
+  clientRecommendationInput: boolean;
+  adminSummary: string;
+  clientSummary: string | null;
+  technicalReason: string | null;
+  clientSafeReason: string | null;
+  target: CompassActionTarget;
+  affectedAccounts: CompassAffectedAccount[];
+  evidence: CompassEvidence[];
+};
+
+export type CompassInsight = {
+  id: string;
+  category: CompassInsightCategory;
+  severity: CompassSeverity;
+  title: string;
+  summary: string;
+  sinceLabel: string;
+  impact: string;
+  cause: string;
+  clientVisible: boolean;
+  clientRawVisible: boolean;
+  clientRecommendationInput: boolean;
+  adminSummary: string;
+  clientSummary: string | null;
+  technicalReason: string | null;
+  clientSafeReason: string | null;
+  recommendedAction: string;
+  targetTab: CompassActionTargetTab;
+  confidence: CompassConfidence;
+  affectedAccounts: CompassAffectedAccount[];
+  evidence: CompassEvidence[];
+  recommendations: CompassRecommendation[];
+};
+
+export type CompassInternalSignal = {
+  id: string;
+  signal: CompassInternalSignalKind;
+  title: string;
+  summary: string;
+  count: number;
+  severity: CompassSeverity;
+  adminVisible: true;
+  clientRawVisible: false;
+  clientRecommendationInput: true;
+  target: CompassActionTarget;
+  affectedAccounts: CompassAffectedAccount[];
+  evidence: CompassEvidence[];
+};
+
+export type CompassClientSafeRecommendation = Pick<
+  CompassRecommendation,
+  "id" | "severity" | "title" | "clientSummary" | "clientSafeReason" | "recommendedAction" | "confidence" | "clientRecommendationInput"
+> & {
+  affectedAccounts: Array<Pick<CompassAffectedAccount, "username" | "clientName" | "reason">>;
+};
+
+export type CompassAiAffectedAccount = {
+  accountId: string;
+  username: string;
+  clientId: string;
+  reason: string;
+  target: CompassActionTarget;
+};
+
+export type CompassAiRecommendedAction = {
+  label: string;
+  target: CompassActionTarget;
+  actionType: CompassAiActionType;
+};
+
+export type CompassAiEvidence = {
+  source: string;
+  summary: string;
+  confidence: CompassAiConfidence;
+};
+
+export type CompassAiRecommendation = {
+  id: string;
+  severity: CompassSeverity;
+  confidence: CompassAiConfidence;
+  title: string;
+  summary: string;
+  recommendationType: CompassAiRecommendationType;
+  adminSummary: string;
+  clientSummary: string;
+  clientVisible: boolean;
+  clientRawVisible: boolean;
+  clientRecommendationInput: boolean;
+  technicalReason: string;
+  clientSafeReason: string;
+  affectedAccounts: CompassAiAffectedAccount[];
+  recommendedActions: CompassAiRecommendedAction[];
+  evidence: CompassAiEvidence[];
+  sourceFacts: CompassAiSourceFact[];
+  target: CompassActionTarget;
+  recommendedAction: string;
+  whyThisMatters: string;
+  whatNotToAssume: string;
+};
+
+export type CompassAiInternalSignal = {
+  signal: CompassInternalSignalKind;
+  adminVisible: true;
+  clientRawVisible: false;
+  clientRecommendationInput: true;
+  count: number;
+  summary: string;
+};
+
+export type CompassAiAnalysis = {
+  analysisId: string;
+  period: "24h" | "7d" | "30d";
+  overallSummary: string;
+  healthAssessment: CompassAiHealthAssessment;
+  recommendations: CompassAiRecommendation[];
+  internalSignals: CompassAiInternalSignal[];
+  filteredRecommendationsCount?: number;
+  filteredReasons?: string[];
+};
+
+export type CompassAiAdvisor = {
+  status: CompassAiStatus;
+  provider: CompassAiProvider;
+  model: string | null;
+  lastAnalyzedAt: string | null;
+  period: "24h" | "7d" | "30d";
+  summary: string;
+  healthAssessment: CompassAiHealthAssessment;
+  analysis: CompassAiAnalysis | null;
+  providerErrorCode?: string | null;
+  relayTarget: "/api/instagram-dashboard/compass/analyze";
+  serverSideOnly: true;
+};
+
+export type CompassAiRuntimeMode = "relay" | "local_runtime" | "rules_only";
+
+export type CompassAiRuntimeStatus = {
+  mode: CompassAiRuntimeMode;
+  status: "ready" | "relay_missing" | "key_missing" | "unavailable" | "error";
+  provider: "OpenAI";
+  model: string;
+  relayUrlConfigured: boolean;
+  relayOrigin: string | null;
+  relayKeyConfigured: boolean;
+  serverKeyStatus: "configured" | "missing" | "unknown";
+  lastConnectionTestAt: string | null;
+  lastAnalysisAt: string | null;
+  lastSafeError: string | null;
+  lastProviderErrorCode: string | null;
+  message: string;
+};
+
+export type CompassAiRuntimeAnalyzeRequest = {
+  period: "24h" | "7d" | "30d";
+  snapshot: CompassAiAnalysisPayload;
+};
+
+export type CompassAiRuntimeAnalyzeResult = {
+  ok: boolean;
+  advisor: CompassAiAdvisor;
+  runtime: CompassAiRuntimeStatus;
+  error?: string;
+};
+
+export type CompassAnalyzeResult = {
+  advisor: CompassAiAdvisor;
+  runtime: CompassAiRuntimeStatus;
+};
+
+export type CompassAiAnalysisPayload = {
+  provider: CompassAiProvider;
+  mode: "rules_only" | "server_side_openai";
+  facts: {
+    generatedAt: string;
+    insights: CompassInsight[];
+    recommendations: CompassRecommendation[];
+    internalSignals: CompassInternalSignal[];
+  };
+  outputContract: {
+    format: "json";
+    mustNotInventFacts: true;
+    allowedFields: Array<"priority" | "explanation" | "recommended_order" | "risk_notes">;
+  };
+};
+
+export type CompassProblemGroup = {
+  id: string;
+  title: string;
+  severity: CompassSeverity;
+  count: number;
+  targetTab: CompassActionTargetTab;
+  affectedAccounts: CompassAffectedAccount[];
+};
+
+export type CompassTrendMetric = {
+  label: string;
+  value: string;
+  detail: string;
+  tone: CompassSeverity;
+};
+
+export type CompassOverview = {
+  generatedAt: string;
+  healthScore: number;
+  summary: {
+    totalAccounts: number;
+    workingAccounts: number;
+    blockedAccounts: number;
+    underQuotaAccounts: number;
+    inactiveAccounts: number;
+    clientVisibleRecommendations: number;
+  };
+  trends: CompassTrendMetric[];
+  insights: CompassInsight[];
+  problemGroups: CompassProblemGroup[];
+  recommendations: CompassRecommendation[];
+  internalSignals: CompassInternalSignal[];
+  clientSafePreview: CompassClientSafeRecommendation[];
+  aiAdvisor: CompassAiAdvisor;
+  aiAnalysisPayload: CompassAiAnalysisPayload;
+  relayPayload: {
+    action: "compass_overview";
+    source: "BotApp";
+    requested_by: string | null;
+    include: Array<
+      | "client_accounts_overview"
+      | "credentials_actions"
+      | "devices_overview"
+      | "activity_log_interaction_evidence_admin_v1"
+      | "targets"
+      | "runs_eligibility"
+      | "account_run_requests"
+      | "ig_runs"
+      | "incidents"
+    >;
+    metadata_safe: {
+      expected_effect: "read_only_compass_decision_overview";
+      ai_provider: CompassAiProvider;
+    };
+  };
+};
+
 export type Target = {
   id: string;
   handle: string;
@@ -1674,15 +2026,73 @@ export type ApiKeySummary = {
   prefix: string;
   scopes: ApiScope[];
   status: "active" | "revoked";
+  createdAt: string;
   lastSeenAt: string | null;
+  callCountToday: number;
+  productionCallCount: number;
 };
 
 export type WebhookSummary = {
   id: string;
   url: string;
-  events: string[];
+  events: WebhookEvent[];
   status: "active" | "disabled";
-  lastDeliveryStatus: "ok" | "failed" | "pending";
+  lastDeliveryStatus: "ok" | "failed" | "pending" | "not_sent";
+  lastDeliveryAt: string | null;
+  provider: "slack" | "discord" | "custom";
+  latestError: string | null;
+};
+
+export type IntegrationStatus = "connected" | "running" | "disconnected" | "stopped" | "missing_key" | "unavailable" | "configured" | "pending";
+export type WebhookEvent =
+  | "slack.incident"
+  | "discord.incident"
+  | "compass.critical_recommendation"
+  | "device.offline"
+  | "credential.action_required"
+  | "account.blocked"
+  | "run.failed"
+  | "ct.quality_alert"
+  | "profile.created"
+  | "profile.updated"
+  | "profile.archived"
+  | "profile.targets.updated"
+  | "profile.session_status.changed";
+
+export type BotAppRuntimeIntegrationStatus = {
+  localGateway: {
+    status: IntegrationStatus;
+    mode: "development" | "packaged" | "browser";
+    transport: "electron_ipc" | "http";
+    port: number | null;
+    lastHealthCheck: string;
+  };
+  secureRelay: {
+    status: IntegrationStatus;
+    baseUrl: string;
+    lastHealthCheck: string | null;
+  };
+  dashboardBackend: {
+    status: IntegrationStatus;
+    baseUrl: string;
+    lastHealthCheck: string | null;
+  };
+  compassAi: {
+    status: IntegrationStatus;
+    mode: CompassAiRuntimeMode;
+    provider: "OpenAI";
+    model: string;
+    relayKeyConfigured: boolean;
+    serverKeyStatus: "configured" | "missing" | "unknown";
+    relayUrlConfigured: boolean;
+    relayOrigin: string | null;
+    lastTestAt: string | null;
+    lastAnalysisAt: string | null;
+    lastSafeError: string | null;
+    lastProviderErrorCode: string | null;
+    relayEndpoint: "/api/instagram-dashboard/compass/analyze";
+  };
+  environment: "local" | "development" | "production";
 };
 
 export type AppSettings = {
@@ -1711,6 +2121,8 @@ export type BotAppClient = {
   getProfileFilters(profileId: string): Promise<ApiResult<ProfileFilters>>;
   listClientAccounts(): Promise<ApiResult<BotAppClientAccountsOverview>>;
   listCredentialsActions(): Promise<ApiResult<BotAppCredentialsOverview>>;
+  listCompass(): Promise<ApiResult<CompassOverview>>;
+  analyzeCompass(overview: CompassOverview, period: "24h" | "7d" | "30d"): Promise<ApiResult<CompassAiAdvisor>>;
   listDevices(): Promise<ApiResult<Device[]>>;
   listNotifications(): Promise<ApiResult<NotificationItem[]>>;
   listActivityLogs(): Promise<ApiResult<ActivityLogEntry[]>>;

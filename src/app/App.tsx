@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockClient } from "../api/mock-client";
-import type { ActivityLogEntry, ApiKeySummary, AppSettings, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotProfile, Device, DeviceProfileGroup, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
+import type { ActivityLogEntry, ApiKeySummary, AppSettings, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotProfile, CompassActionTarget, CompassAnalyzeResult, CompassAiRuntimeStatus, CompassOverview, Device, DeviceProfileGroup, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
 import { Modal, Toasts, type ToastItem } from "../design/components";
 import { Sidebar } from "../layout/Sidebar";
 import { TopBar } from "../layout/TopBar";
@@ -10,6 +10,7 @@ import { ClientAccounts } from "../views/ClientAccounts";
 import { Credentials } from "../views/Credentials";
 import { Devices } from "../views/Devices";
 import { ActivityLog } from "../views/ActivityLog";
+import { Compass } from "../views/Compass";
 import { Targets } from "../views/Targets";
 import { DMTemplates } from "../views/DMTemplates";
 import { Notifications } from "../views/Notifications";
@@ -23,6 +24,7 @@ type AppData = {
   profileGroups: DeviceProfileGroup[];
   clientAccounts: BotAppClientAccountsOverview | null;
   credentials: BotAppCredentialsOverview | null;
+  compass: CompassOverview | null;
   devices: Device[];
   notifications: NotificationItem[];
   logs: ActivityLogEntry[];
@@ -33,7 +35,7 @@ type AppData = {
   settings: AppSettings | null;
 };
 
-const emptyData: AppData = { profiles: [], profileGroups: [], clientAccounts: null, credentials: null, devices: [], notifications: [], logs: [], targets: [], templates: [], apiKeys: [], webhooks: [], settings: null };
+const emptyData: AppData = { profiles: [], profileGroups: [], clientAccounts: null, credentials: null, compass: null, devices: [], notifications: [], logs: [], targets: [], templates: [], apiKeys: [], webhooks: [], settings: null };
 
 export function App() {
   const [active, setActive] = useState<RouteId>("overview");
@@ -48,8 +50,8 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [profiles, profileGroups, clientAccounts, credentials, devices, notifications, logs, targets, templates, apiKeys, webhooks, settings] = await Promise.all([
-        mockClient.listProfiles(), mockClient.listDeviceProfileGroups(), mockClient.listClientAccounts(), mockClient.listCredentialsActions(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listTargets(), mockClient.listDmTemplates(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
+      const [profiles, profileGroups, clientAccounts, credentials, compass, devices, notifications, logs, targets, templates, apiKeys, webhooks, settings] = await Promise.all([
+        mockClient.listProfiles(), mockClient.listDeviceProfileGroups(), mockClient.listClientAccounts(), mockClient.listCredentialsActions(), mockClient.listCompass(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listTargets(), mockClient.listDmTemplates(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
       ]);
       if (cancelled) return;
       setData({
@@ -57,6 +59,7 @@ export function App() {
         profileGroups: profileGroups.ok ? profileGroups.data : [],
         clientAccounts: clientAccounts.ok ? clientAccounts.data : null,
         credentials: credentials.ok ? credentials.data : null,
+        compass: compass.ok ? compass.data : null,
         devices: devices.ok ? devices.data : [],
         notifications: notifications.ok ? notifications.data : [],
         logs: logs.ok ? logs.data : [],
@@ -95,6 +98,73 @@ export function App() {
     setCommandOpen(false);
   }
 
+  function navigateCompassTarget(target: CompassActionTarget) {
+    if (target.context.profileId) setSelectedProfileId(target.context.profileId);
+    if (target.targetTab === "credentials") {
+      setSelectedCredentialsAccountId(target.context.accountId ?? null);
+      setActive("credentials");
+      return;
+    }
+    if (target.targetTab === "profiles") {
+      setActive("profiles");
+      return;
+    }
+    if (target.targetTab === "account") {
+      setActive("account");
+      return;
+    }
+    if (target.targetTab === "devices") {
+      setActive("devices");
+      return;
+    }
+    if (target.targetTab === "activity") {
+      setActive("activity");
+      return;
+    }
+    if (target.targetTab === "targets") {
+      setActive("targets");
+      return;
+    }
+    setActive("compass");
+  }
+
+  async function analyzeCompass(period: "24h" | "7d" | "30d"): Promise<CompassAnalyzeResult> {
+    if (!data.compass) {
+      throw new Error("Compass facts are not loaded.");
+    }
+    const rulesOnlyRuntime: CompassAiRuntimeStatus = {
+      mode: "rules_only",
+      status: "relay_missing",
+      provider: "OpenAI",
+      model: "gpt-5.5",
+      relayUrlConfigured: false,
+      relayOrigin: null,
+      relayKeyConfigured: false,
+      serverKeyStatus: "unknown",
+      lastConnectionTestAt: null,
+      lastAnalysisAt: null,
+      lastSafeError: null,
+      lastProviderErrorCode: null,
+      message: "Compass AI relay not configured. Add a relay URL to enable AI recommendations.",
+    };
+    const result = await window.botappDesktop?.compass?.analyze?.({
+      period,
+      snapshot: data.compass.aiAnalysisPayload,
+    });
+    if (result) {
+      return { advisor: result.advisor, runtime: result.runtime };
+    }
+    return {
+      advisor: {
+        ...data.compass.aiAdvisor,
+        status: "ai_unavailable",
+        period,
+        summary: rulesOnlyRuntime.message,
+      },
+      runtime: rulesOnlyRuntime,
+    };
+  }
+
   let view: React.ReactNode;
   if (loading) view = <div className="empty-state"><strong>Loading local data</strong><span>No backend connection is required.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
@@ -103,6 +173,7 @@ export function App() {
   else if (active === "credentials") view = data.credentials ? <Credentials overview={data.credentials} selectedAccountId={selectedCredentialsAccountId} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} />;
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
+  else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
   else if (active === "targets") view = <Targets targets={data.targets} onAction={requestAction} />;
   else if (active === "templates") view = <DMTemplates templates={data.templates} onAction={requestAction} />;
   else if (active === "notifications") view = <Notifications notifications={data.notifications} onAction={requestAction} />;

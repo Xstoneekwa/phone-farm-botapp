@@ -1,0 +1,652 @@
+.compass-screen {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 1240px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.compass-hero,
+.compass-detail-header,
+.compass-recommendation-footer,
+.compass-ai,
+.compass-advisor-main,
+.compass-advisor-actions,
+.compass-ai-rec-main,
+.compass-internal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.compass-hero {
+  border: 1px solid rgba(101, 88, 245, .16);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top left, rgba(101, 88, 245, .18), transparent 34%),
+    linear-gradient(135deg, rgba(255,255,255,.92), rgba(247,250,252,.78));
+  box-shadow: var(--shadow-card);
+  padding: 18px;
+}
+
+.compass-hero span,
+.compass-score span,
+.compass-kpi span,
+.compass-trend span,
+.compass-card-heading span,
+.compass-problem span,
+.compass-recommendation span,
+.compass-client-item span,
+.compass-detail-header span,
+.compass-field span,
+.compass-accounts span,
+.compass-evidence span,
+.compass-ai span {
+  color: var(--fg-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.compass-advisor-main span,
+.compass-advisor-meta span,
+.compass-ai-rec span,
+.compass-internal-header span,
+.compass-internal-signal span,
+.compass-period span {
+  color: var(--fg-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.compass-hero h2,
+.compass-card-heading h3,
+.compass-detail-header h3,
+.compass-recommendation h4,
+.compass-ai h3 {
+  margin: 0;
+  color: var(--fg-primary);
+}
+
+.compass-advisor h3,
+.compass-ai-rec h4,
+.compass-internal-header h3 {
+  margin: 0;
+  color: var(--fg-primary);
+}
+
+.compass-hero h2 {
+  margin-top: 3px;
+  font-size: 32px;
+  letter-spacing: -.04em;
+}
+
+.compass-hero p,
+.compass-card-heading p,
+.compass-detail-header p,
+.compass-recommendation p,
+.compass-client-item p,
+.compass-ai p {
+  color: var(--fg-secondary);
+  margin: 5px 0 0;
+}
+
+.compass-advisor p,
+.compass-ai-rec p,
+.compass-internal-header p,
+.compass-internal-signal p {
+  color: var(--fg-secondary);
+  margin: 5px 0 0;
+}
+
+.compass-score {
+  min-width: 170px;
+  border: 1px solid rgba(101, 88, 245, .16);
+  border-radius: 18px;
+  background: rgba(255,255,255,.82);
+  padding: 14px;
+}
+
+.compass-score strong {
+  display: block;
+  color: #4E46D6;
+  font-size: 40px;
+  line-height: 1;
+  margin: 8px 0;
+}
+
+.compass-score small,
+.compass-kpi small,
+.compass-trend p,
+.compass-problem small,
+.compass-recommendation small,
+.compass-client-item small,
+.compass-accounts small,
+.compass-evidence small {
+  color: var(--fg-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.compass-kpis,
+.compass-trends {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.compass-kpi,
+.compass-trend,
+.compass-card,
+.compass-client-item,
+.compass-ai-rec {
+  min-width: 0;
+  border: 1px solid rgba(143, 162, 176, .22);
+  border-radius: 17px;
+  background: rgba(255,255,255,.82);
+  box-shadow: var(--shadow-sm);
+}
+
+.compass-advisor {
+  border-color: rgba(78, 70, 214, .22);
+  background:
+    radial-gradient(circle at top right, rgba(78, 70, 214, .13), transparent 32%),
+    rgba(255,255,255,.88);
+}
+
+.compass-advisor.ai_enabled {
+  border-color: rgba(0, 155, 128, .28);
+}
+
+.compass-advisor.ai_unavailable,
+.compass-advisor.invalid_ai_output {
+  border-color: rgba(182, 106, 0, .28);
+}
+
+.compass-advisor-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compass-health {
+  min-width: 150px;
+  border-radius: 15px;
+  background: #F7FBFC;
+  padding: 11px;
+}
+
+.compass-health strong {
+  display: block;
+  font-size: 20px;
+  margin-top: 5px;
+  text-transform: capitalize;
+}
+
+.compass-health.positive strong { color: #009B80; }
+.compass-health.warning strong { color: #B66A00; }
+.compass-health.critical strong { color: #AA365A; }
+.compass-health.info strong { color: #4E46D6; }
+
+.compass-period {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border-radius: 12px;
+  background: #F7FBFC;
+  padding: 10px;
+}
+
+.compass-period select {
+  border: 0;
+  background: transparent;
+  color: var(--fg-primary);
+  font-weight: 850;
+  outline: 0;
+}
+
+.compass-advisor-actions {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.compass-advisor-actions button,
+.compass-internal-header button,
+.compass-ai-rec-actions button,
+.compass-internal-signal button {
+  border: 1px solid rgba(101,88,245,.26);
+  border-radius: 999px;
+  background: rgba(101,88,245,.1);
+  color: #4E46D6;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 8px 11px;
+}
+
+.compass-advisor-actions button:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+.compass-advisor-actions small {
+  color: var(--fg-secondary);
+  font-size: 12px;
+}
+
+.compass-kpi,
+.compass-trend {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.compass-kpi strong,
+.compass-trend strong {
+  overflow: hidden;
+  color: var(--fg-primary);
+  font-size: 25px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-kpi.positive strong,
+.compass-trend.positive strong { color: #009B80; }
+.compass-kpi.warning strong,
+.compass-trend.warning strong { color: #B66A00; }
+.compass-kpi.critical strong,
+.compass-trend.critical strong { color: #AA365A; }
+.compass-kpi.info strong,
+.compass-trend.info strong { color: #4E46D6; }
+
+.compass-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, .85fr) minmax(0, 1.6fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.compass-card {
+  display: grid;
+  gap: 13px;
+  overflow: hidden;
+  padding: 15px;
+}
+
+.compass-card-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.compass-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.compass-filters button,
+.compass-detail-header button,
+.compass-recommendation-footer button,
+.compass-account-chips button,
+.compass-accounts button {
+  border: 1px solid rgba(143,162,176,.24);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 8px 11px;
+}
+
+.compass-filters button.active {
+  border-color: rgba(101,88,245,.32);
+  background: rgba(101,88,245,.12);
+  color: #4E46D6;
+}
+
+.compass-problem-list,
+.compass-recommendations,
+.compass-ai-recommendations,
+.compass-client-preview,
+.compass-accounts,
+.compass-evidence,
+.compass-internal-list {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.compass-ai-rec {
+  display: grid;
+  gap: 11px;
+  padding: 13px;
+}
+
+.compass-ai-rec.critical { border-left: 4px solid #AA365A; }
+.compass-ai-rec.warning { border-left: 4px solid #B66A00; }
+.compass-ai-rec.info { border-left: 4px solid #4E46D6; }
+.compass-ai-rec.positive { border-left: 4px solid #009B80; }
+
+.compass-ai-rec-main {
+  align-items: flex-start;
+}
+
+.compass-ai-rec-main strong,
+.compass-ai-rec-facts span {
+  border-radius: 999px;
+  background: #F7FBFC;
+  color: var(--fg-secondary);
+  font-size: 11px;
+  padding: 6px 9px;
+  text-transform: uppercase;
+}
+
+.compass-ai-rec-badges,
+.compass-ai-rec-facts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.compass-ai-rec-facts {
+  justify-content: flex-start;
+}
+
+.compass-ai-rec-badges strong:first-child {
+  background: rgba(182, 106, 0, .12);
+  color: #8B4E00;
+}
+
+.compass-ai-rec-accounts,
+.compass-ai-rec-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.compass-ai-rec-accounts button {
+  border: 1px solid rgba(143,162,176,.2);
+  border-radius: 999px;
+  background: #F8FBFC;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 6px 9px;
+}
+
+.compass-ai-rec-evidence {
+  display: grid;
+  gap: 5px;
+  border-radius: 12px;
+  background: #FBF8EF;
+  padding: 9px;
+}
+
+.compass-ai-rec-evidence small {
+  color: var(--fg-secondary);
+  font-size: 12px;
+}
+
+.compass-ai-rec-grounding {
+  display: grid;
+  gap: 5px;
+  border-radius: 12px;
+  background: #F7FBFC;
+  padding: 9px;
+}
+
+.compass-ai-rec-grounding small {
+  color: var(--fg-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.compass-problem {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(143,162,176,.18);
+  border-radius: 14px;
+  background: #F8FBFC;
+  color: var(--fg-primary);
+  cursor: pointer;
+  padding: 11px;
+  text-align: left;
+}
+
+.compass-problem.selected {
+  border-color: rgba(101,88,245,.34);
+  background: rgba(101,88,245,.08);
+}
+
+.compass-problem.critical,
+.compass-recommendation.critical,
+.compass-insight-detail.critical { border-left: 4px solid #AA365A; }
+.compass-problem.warning,
+.compass-recommendation.warning,
+.compass-insight-detail.warning { border-left: 4px solid #B66A00; }
+.compass-problem.info,
+.compass-recommendation.info,
+.compass-insight-detail.info { border-left: 4px solid #4E46D6; }
+.compass-problem.positive,
+.compass-recommendation.positive,
+.compass-insight-detail.positive { border-left: 4px solid #009B80; }
+
+.compass-problem strong,
+.compass-client-item strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compass-insight-detail {
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+  border: 1px solid rgba(143,162,176,.18);
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px;
+}
+
+.compass-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compass-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border-radius: 12px;
+  background: #F7FBFC;
+  padding: 10px;
+}
+
+.compass-field strong {
+  overflow: hidden;
+  color: var(--fg-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.compass-accounts button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  border-radius: 13px;
+  background: #F7FBFC;
+  padding: 10px;
+  text-align: left;
+}
+
+.compass-accounts p {
+  color: var(--fg-secondary);
+  margin: 0;
+}
+
+.compass-evidence {
+  border-radius: 13px;
+  background: #FBF8EF;
+  padding: 10px;
+}
+
+.compass-recommendation {
+  display: grid;
+  gap: 11px;
+  min-width: 0;
+  border: 1px solid rgba(143,162,176,.2);
+  border-radius: 15px;
+  background: #fff;
+  padding: 13px;
+}
+
+.compass-account-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.compass-account-chips button {
+  background: #F8FBFC;
+  padding: 6px 9px;
+}
+
+.compass-recommendation-footer {
+  align-items: center;
+}
+
+.compass-client-preview {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.compass-client-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.compass-ai {
+  align-items: center;
+}
+
+.compass-ai code {
+  white-space: nowrap;
+}
+
+.compass-empty {
+  display: grid;
+  gap: 7px;
+  place-items: center;
+  min-height: 220px;
+  text-align: center;
+}
+
+.compass-empty.compact {
+  min-height: 140px;
+}
+
+.compass-empty p {
+  color: var(--fg-secondary);
+  margin: 0;
+}
+
+.compass-empty strong {
+  color: var(--fg-primary);
+}
+
+.compass-message {
+  position: sticky;
+  bottom: 12px;
+  justify-self: start;
+  max-width: min(100%, 760px);
+  border: 1px solid rgba(101,88,245,.24);
+  border-radius: 14px;
+  background: rgba(239,246,255,.96);
+  color: #1d4ed8;
+  box-shadow: var(--shadow-sm);
+  font-size: 13px;
+  font-weight: 850;
+  padding: 10px 12px;
+}
+
+.compass-internal-header {
+  align-items: center;
+}
+
+.compass-internal-signal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(143,162,176,.18);
+  border-radius: 14px;
+  background: #F8FBFC;
+  padding: 12px;
+}
+
+.compass-internal-signal.critical { border-left: 4px solid #AA365A; }
+.compass-internal-signal.warning { border-left: 4px solid #B66A00; }
+.compass-internal-signal.info { border-left: 4px solid #4E46D6; }
+.compass-internal-signal.positive { border-left: 4px solid #009B80; }
+
+.compass-internal-signal strong {
+  display: block;
+  color: var(--fg-primary);
+  margin-top: 4px;
+}
+
+@media (max-width: 1180px) {
+  .compass-grid,
+  .compass-client-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .compass-kpis,
+  .compass-trends,
+  .compass-detail-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .compass-advisor-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .compass-hero,
+  .compass-detail-header,
+  .compass-recommendation-footer,
+  .compass-ai,
+  .compass-advisor-main,
+  .compass-advisor-actions,
+  .compass-ai-rec-main,
+  .compass-internal-header,
+  .compass-internal-signal,
+  .compass-kpis,
+  .compass-trends,
+  .compass-detail-facts,
+  .compass-advisor-meta {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .compass-score {
+    min-width: 0;
+  }
+}

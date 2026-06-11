@@ -47,6 +47,19 @@ function ActivityInvestigationNavIcon() {
   );
 }
 
+function CompassNavIcon() {
+  return (
+    <svg className="nav-compass-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="m15.5 8.5-2.2 5-4.8 2 2.2-5 4.8-2Z" />
+      <path d="M12 3v2" />
+      <path d="M12 19v2" />
+      <path d="M3 12h2" />
+      <path d="M19 12h2" />
+    </svg>
+  );
+}
+
 const navIcons: Record<RouteId, ReactNode> = {
   overview: "⌁",
   profiles: "◎",
@@ -54,6 +67,7 @@ const navIcons: Record<RouteId, ReactNode> = {
   credentials: <LockNavIcon />,
   devices: <DeviceNavIcon />,
   activity: <ActivityInvestigationNavIcon />,
+  compass: <CompassNavIcon />,
   targets: "◇",
   templates: "✉",
   notifications: "!",

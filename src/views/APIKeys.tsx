@@ -1,14 +1,657 @@
-import { Badge, Button, Card, Table, Td, Th, TRow } from "../design/components";
-import type { ApiKeySummary, WebhookSummary } from "../api/types";
-import { futureApiConventions } from "../api/botapp-client";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Badge, Button, Card, Input, Modal, type BadgeTone } from "../design/components";
+import type { ApiKeySummary, BotAppRuntimeIntegrationStatus, CompassAiRuntimeStatus, IntegrationStatus, WebhookEvent, WebhookSummary } from "../api/types";
 import { redactText } from "../security/redaction";
+import "./api-keys.css";
 
-export function APIKeys({ apiKeys, webhooks, onAction }: { apiKeys: ApiKeySummary[]; webhooks: WebhookSummary[]; onAction: (action: string, target: string, danger?: boolean) => void }) {
-  return <div className="grid">
-    <Card title="Future API conventions" subtitle="Documented only. This UI does not call a backend.">
-      <div className="api-grid">{Object.entries(futureApiConventions).map(([key, value]) => <div key={key}><span className="subtle">{key}</span><code>{redactText(value)}</code></div>)}</div>
-    </Card>
-    <Card title="API Keys" subtitle="Prefixes only. Full keys are never displayed."><Table><thead><tr><Th>Name</Th><Th>Prefix</Th><Th>Scopes</Th><Th>Status</Th><Th>Actions</Th></tr></thead><tbody>{apiKeys.map((key) => <TRow key={key.id}><Td>{key.name}</Td><Td mono>{redactText(key.prefix)}</Td><Td>{key.scopes.join(", ")}</Td><Td><Badge tone={key.status === "active" ? "success" : "neutral"}>{key.status}</Badge></Td><Td><Button onClick={() => onAction("Generate API key", key.name, true)}>Generate</Button> <Button variant="danger" onClick={() => onAction("Revoke API key", key.name, true)}>Revoke</Button></Td></TRow>)}</tbody></Table></Card>
-    <Card title="Webhooks" subtitle="Endpoints use safe example domains."><Table><thead><tr><Th>URL</Th><Th>Events</Th><Th>Status</Th><Th>Delivery</Th><Th>Actions</Th></tr></thead><tbody>{webhooks.map((hook) => <TRow key={hook.id}><Td mono>{redactText(hook.url)}</Td><Td>{hook.events.join(", ")}</Td><Td><Badge tone={hook.status === "active" ? "success" : "neutral"}>{hook.status}</Badge></Td><Td>{hook.lastDeliveryStatus}</Td><Td><Button onClick={() => onAction("Save webhook", hook.url)}>Save</Button> <Button onClick={() => onAction("Retry webhook delivery", hook.url)}>Retry</Button></Td></TRow>)}</tbody></Table></Card>
-  </div>;
+const noRelayMessage = "Compass AI relay not configured. Add a relay URL to enable AI recommendations.";
+
+const webhookEvents: WebhookEvent[] = [
+  "slack.incident",
+  "discord.incident",
+  "credential.action_required",
+  "account.blocked",
+  "device.offline",
+  "run.failed",
+  "compass.critical_recommendation",
+  "ct.quality_alert",
+  "profile.created",
+  "profile.updated",
+  "profile.archived",
+  "profile.targets.updated",
+  "profile.session_status.changed",
+];
+
+type AiPromptService = {
+  service: "compass_ai" | "comment_ai" | "targeting_ai" | "dm_ai";
+  name: string;
+  status: "active" | "planned" | "backend pending";
+  source: "default" | "custom";
+  version: string;
+  lastUpdatedAt: string | null;
+  backendSyncStatus: "relay/server-side active" | "backend pending";
+  promptPreview: string;
+  defaultPrompt: string;
+  guardrails: string[];
+};
+
+const compassDefaultPrompt = [
+  "You are Compass AI Advisor for an Instagram operations dashboard.",
+  "Recommend operator actions that improve Phone Farm reliability, account readiness, CT quality, and safe growth operations.",
+  "Prioritize critical blockers first, then operational risks, then quality/pacing opportunities.",
+].join(" ");
+
+const lockedPromptGuardrails = [
+  "No fact in input = no recommendation.",
+  "Use only provided system facts; never invent accounts, CTs, devices, blockers, metrics, actions, causes, or evidence.",
+  "Allowed categories are locked to credential, device, CT quality, activity evidence, internal pacing/growth, entitlement, and operational risk.",
+  "AI can recommend only; destructive actions require separate human confirmation.",
+  "Output schema validation and recommendation filtering remain mandatory after AI response.",
+  "Prompt changes affect wording and prioritization only. Guardrails and validation cannot be disabled.",
+];
+
+const aiPromptServices: AiPromptService[] = [
+  {
+    service: "compass_ai",
+    name: "Compass AI",
+    status: "active",
+    source: "default",
+    version: "v1",
+    lastUpdatedAt: null,
+    backendSyncStatus: "relay/server-side active",
+    promptPreview: "Facts-only operator recommendations for Compass blockers, CT quality, internal pacing, and operational risks.",
+    defaultPrompt: compassDefaultPrompt,
+    guardrails: lockedPromptGuardrails,
+  },
+  {
+    service: "comment_ai",
+    name: "Comment AI",
+    status: "planned",
+    source: "default",
+    version: "draft",
+    lastUpdatedAt: null,
+    backendSyncStatus: "backend pending",
+    promptPreview: "Future comment drafting and moderation prompt. Not active in production.",
+    defaultPrompt: "Backend pending. This service has no active production prompt yet.",
+    guardrails: lockedPromptGuardrails,
+  },
+  {
+    service: "targeting_ai",
+    name: "Targeting AI",
+    status: "planned",
+    source: "default",
+    version: "draft",
+    lastUpdatedAt: null,
+    backendSyncStatus: "backend pending",
+    promptPreview: "Future CT discovery, CT quality, and audience source prompt. Not active in production.",
+    defaultPrompt: "Backend pending. This service has no active production prompt yet.",
+    guardrails: lockedPromptGuardrails,
+  },
+  {
+    service: "dm_ai",
+    name: "DM AI",
+    status: "planned",
+    source: "default",
+    version: "draft",
+    lastUpdatedAt: null,
+    backendSyncStatus: "backend pending",
+    promptPreview: "Future DM drafting and response classification prompt. Not active in production.",
+    defaultPrompt: "Backend pending. This service has no active production prompt yet.",
+    guardrails: lockedPromptGuardrails,
+  },
+];
+
+export function APIKeys({
+  onAction,
+}: {
+  apiKeys: ApiKeySummary[];
+  webhooks: WebhookSummary[];
+  onAction: (action: string, target: string, danger?: boolean) => void;
+}) {
+  const [runtime, setRuntime] = useState<BotAppRuntimeIntegrationStatus>(() => fallbackRuntimeStatus());
+  const [compassRuntime, setCompassRuntime] = useState<CompassAiRuntimeStatus>(() => fallbackCompassRuntimeStatus());
+  const [relayUrlDraft, setRelayUrlDraft] = useState("");
+  const [relayCredentialDraft, setRelayCredentialDraft] = useState("");
+  const [webhookDraft, setWebhookDraft] = useState({ label: "Web app", url: "", secret: "" });
+  const [savedWebhooks, setSavedWebhooks] = useState<WebhookSummary[]>([]);
+  const [pendingDestructive, setPendingDestructive] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    action: () => Promise<void> | void;
+  } | null>(null);
+  const [promptPanel, setPromptPanel] = useState<{ service: AiPromptService; mode: "view" | "edit" } | null>(null);
+  const [promptDrafts, setPromptDrafts] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRuntime() {
+      const [status, compassStatus, integrations] = await Promise.all([
+        window.botappDesktop?.runtime?.status?.(),
+        window.botappDesktop?.compass?.status?.(),
+        window.botappDesktop?.integrations?.list?.(),
+      ]);
+      if (!cancelled && status) setRuntime(status);
+      if (!cancelled && compassStatus) {
+        setCompassRuntime(compassStatus);
+        setRelayUrlDraft(compassStatus.relayOrigin ?? "");
+      }
+      if (!cancelled && integrations?.webhooks) setSavedWebhooks(integrations.webhooks);
+    }
+    void loadRuntime();
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeWebhooks = useMemo(() => savedWebhooks.filter((hook) => hook.status === "active").length, [savedWebhooks]);
+  const relayConfigured = compassRuntime.relayUrlConfigured;
+  const compassReady = compassRuntime.status === "ready" && compassRuntime.serverKeyStatus === "configured";
+  const checklist = [
+    { label: "Relay URL configured", ok: relayConfigured },
+    { label: "Relay reachable", ok: compassRuntime.status === "ready" },
+    { label: "Auth token configured", ok: compassRuntime.relayKeyConfigured },
+    { label: "Compass health ready", ok: compassReady },
+    { label: "Server OpenAI key configured", ok: compassRuntime.serverKeyStatus === "configured" },
+    { label: "Latest successful analysis", ok: Boolean(compassRuntime.lastAnalysisAt) },
+  ];
+
+  function prepare(action: string, target: string, danger = false) {
+    onAction(action, target, danger);
+    setMessage(`${action} is relay-ready. Backend execution is not enabled from this screen yet.`);
+  }
+
+  function scrollToRelay() {
+    document.getElementById("compass-ai-relay")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function requestDestructive(input: { title: string; message: string; confirmLabel: string; action: () => Promise<void> | void }) {
+    setPendingDestructive(input);
+  }
+
+  async function confirmDestructive() {
+    const action = pendingDestructive?.action;
+    setPendingDestructive(null);
+    await action?.();
+  }
+
+  async function refreshRuntime() {
+    const [status, compassStatus] = await Promise.all([
+      window.botappDesktop?.runtime?.status?.(),
+      window.botappDesktop?.compass?.status?.(),
+    ]);
+    if (status) setRuntime(status);
+    if (compassStatus) setCompassRuntime(compassStatus);
+    setMessage(compassStatus?.message ?? noRelayMessage);
+  }
+
+  async function saveRelayConfig() {
+    try {
+      const status = await window.botappDesktop?.compass?.saveRelayConfig?.({
+        relayUrl: relayUrlDraft,
+        relayCredential: relayCredentialDraft,
+      });
+      if (status) {
+        setCompassRuntime(status);
+        setRelayUrlDraft(status.relayOrigin ?? relayUrlDraft);
+        setRelayCredentialDraft("");
+        setMessage(status.message);
+        return;
+      }
+      setMessage("Relay config can be saved only from the packaged app runtime.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Relay config could not be saved.");
+    }
+  }
+
+  async function removeRelayConfigNow() {
+    const status = await window.botappDesktop?.compass?.removeRelayConfig?.();
+    if (status) {
+      setCompassRuntime(status);
+      setRelayUrlDraft("");
+      setRelayCredentialDraft("");
+      setMessage(status.message);
+      return;
+    }
+    setMessage("Relay config can be removed only from the packaged app runtime.");
+  }
+
+  function removeRelayConfig() {
+    requestDestructive({
+      title: "Remove Compass AI relay config?",
+      message: "This will remove the saved relay URL and auth token for this Mac. Compass AI recommendations will stop working until the relay is configured again.",
+      confirmLabel: "Remove config",
+      action: removeRelayConfigNow,
+    });
+  }
+
+  async function analyzeSampleSafely() {
+    const result = await window.botappDesktop?.compass?.analyze?.({
+      period: "7d",
+      snapshot: {
+        provider: "openai",
+        mode: "server_side_openai",
+        facts: { generatedAt: new Date().toISOString(), insights: [], recommendations: [], internalSignals: [] },
+        outputContract: { format: "json", mustNotInventFacts: true, allowedFields: ["priority", "explanation", "recommended_order", "risk_notes"] },
+      },
+    });
+    if (result) {
+      setCompassRuntime(result.runtime);
+      setMessage(result.ok ? "AI recommendations generated through secure relay." : (result.error ?? result.runtime.message));
+      return;
+    }
+    setMessage(noRelayMessage);
+  }
+
+  async function saveWebhook() {
+    try {
+      const result = await window.botappDesktop?.integrations?.saveWebhook?.({
+        label: webhookDraft.label,
+        url: webhookDraft.url,
+        secret: webhookDraft.secret,
+        events: webhookEvents,
+      });
+      if (result?.webhooks) {
+        setSavedWebhooks(result.webhooks);
+        setWebhookDraft({ label: "Web app", url: "", secret: "" });
+        setMessage("Webhook saved locally. Delivery testing remains backend pending.");
+        return;
+      }
+      prepare("Save webhook", webhookDraft.label || "Webhook");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Webhook could not be saved.");
+    }
+  }
+
+  async function removeWebhookNow(id: string) {
+    const result = await window.botappDesktop?.integrations?.removeWebhook?.({ id });
+    if (result?.webhooks) {
+      setSavedWebhooks(result.webhooks);
+      setMessage("Webhook removed from local BotApp config.");
+      return;
+    }
+    prepare("Remove webhook", id, true);
+  }
+
+  function removeWebhook(id: string) {
+    requestDestructive({
+      title: "Remove webhook?",
+      message: "This will remove the saved webhook configuration for this Mac. Delivery will stay disabled until the webhook is added again.",
+      confirmLabel: "Remove webhook",
+      action: () => removeWebhookNow(id),
+    });
+  }
+
+  function previewDestructive(action: string, target: string, confirmLabel: string) {
+    requestDestructive({
+      title: `${action}?`,
+      message: "This is a destructive integration action. It will require backend relay support and should only be confirmed when you understand the impact. No secret value will be shown.",
+      confirmLabel,
+      action: () => prepare(action, target, true),
+    });
+  }
+
+  function viewPrompt(service: AiPromptService) {
+    setPromptPanel({ service, mode: "view" });
+  }
+
+  function editPrompt(service: AiPromptService) {
+    setPromptDrafts((drafts) => ({
+      ...drafts,
+      [service.service]: drafts[service.service] ?? service.defaultPrompt,
+    }));
+    setPromptPanel({ service, mode: "edit" });
+  }
+
+  function savePromptDraft(service: AiPromptService) {
+    setPromptPanel(null);
+    setMessage(`${service.name} prompt draft saved locally for review only. It is not active until future server activation.`);
+  }
+
+  function restorePromptDefault(service: AiPromptService) {
+    setPromptDrafts((drafts) => ({ ...drafts, [service.service]: service.defaultPrompt }));
+    setMessage(`${service.name} default prompt restored in the local draft. Server activation is backend pending.`);
+  }
+
+  return (
+    <div className="integrations-screen">
+      <header className="integrations-header">
+        <div>
+          <span>{relayConfigured ? "Relay configured" : "Setup required"}</span>
+          <h2>API / Webhooks / Keys</h2>
+          <p>Configure the secure relay for this Mac. Compass AI is live only after relay health succeeds; future API keys, webhooks, and public tunnel features are clearly marked when backend support is pending.</p>
+        </div>
+        <div className="hero-actions">
+          <Badge tone={compassRuntime.status === "ready" ? "success" : compassRuntime.status === "unavailable" ? "error" : "warning"} dot>{gatewayLabel(compassRuntime)}</Badge>
+          <Button variant="primary" onClick={scrollToRelay}>Configure Compass AI relay</Button>
+          <Button onClick={() => prepare("Open setup instructions", "Compass AI relay setup")}>Open setup instructions</Button>
+        </div>
+      </header>
+
+      <section className="integrations-kpis" aria-label="Gateway status summary">
+        <Kpi label="Gateway" value={relayConfigured ? "Configured" : "Setup required"} detail={runtime.environment} tone={relayConfigured ? "success" : "warning"} />
+        <Kpi label="Relay" value={compassRuntime.status === "ready" ? "Connected" : "Not connected"} detail={compassRuntime.relayOrigin ?? "Relay URL missing"} tone={compassRuntime.status === "ready" ? "success" : "warning"} />
+        <Kpi label="Compass AI" value={compassReady ? "Ready" : "Not ready"} detail={`Server key ${compassRuntime.serverKeyStatus}`} tone={compassReady ? "success" : "warning"} />
+        <Kpi label="Webhooks" value={String(activeWebhooks)} detail={activeWebhooks ? "configured locally" : "none configured"} tone={activeWebhooks ? "success" : "neutral"} />
+        <Kpi label="Scoped Keys" value="0" detail="backend pending" tone="neutral" />
+      </section>
+
+      <section className="gateway-grid compact">
+        <Card title="Connection checklist" subtitle="Actionable setup state for this Mac.">
+          <div className="checklist">
+            {checklist.map((item) => <CheckRow key={item.label} label={item.label} ok={item.ok} />)}
+          </div>
+        </Card>
+
+        <Card title="Gateway status" subtitle="Only configured values are shown as active.">
+          <div className="status-stack">
+            <StatusTile label="Local gateway" status={runtime.localGateway.status} detail={`${runtime.localGateway.transport} · ${runtime.localGateway.mode}`} />
+            <StatusTile label="Secure relay" status={relayIntegrationStatus(compassRuntime)} detail={compassRuntime.relayOrigin ?? "Not configured"} />
+            <StatusTile label="Dashboard backend" status={runtime.dashboardBackend.status} detail={runtime.dashboardBackend.baseUrl} />
+          </div>
+        </Card>
+
+        <Card title="Public Access / Relay Endpoint" subtitle="Tunnel controls stay inactive until a real endpoint is configured.">
+          <div className="public-access">
+            <Badge tone={relayConfigured ? "success" : "neutral"}>{relayConfigured ? "Relay URL available" : "Public tunnel not configured yet."}</Badge>
+            <label>
+              <span>Relay origin</span>
+              <code>{relayConfigured ? redactText(compassRuntime.relayOrigin) : "Not configured"}</code>
+            </label>
+            <div className="button-row">
+              <Button disabled={!relayConfigured} onClick={() => prepare("Copy relay URL", compassRuntime.relayOrigin ?? "relay")}>Copy relay URL</Button>
+              <Button disabled={!relayConfigured} onClick={() => prepare("Export connection profile", "connection-profile")}>Export connection profile</Button>
+              <Button onClick={() => prepare("Setup public tunnel later", "public-access")}>Setup later</Button>
+            </div>
+          </div>
+        </Card>
+      </section>
+
+      <Card title="Compass AI Relay" subtitle="Primary setup for production AI recommendations." id="compass-ai-relay">
+        <div className="relay-console">
+          <label>
+            <span>Relay URL</span>
+            <Input value={relayUrlDraft} onChange={setRelayUrlDraft} placeholder="https://your-dashboard.example/api/instagram-dashboard/compass/analyze" mono type="url" />
+          </label>
+          <label>
+            <span>Relay auth token</span>
+            <Input value={relayCredentialDraft} onChange={setRelayCredentialDraft} placeholder={compassRuntime.relayKeyConfigured ? "Configured. Enter a new token to rotate." : "Paste scoped relay token"} mono type="password" />
+            <small>Write-only from renderer. Electron main stores it and returns only configured/missing state.</small>
+          </label>
+          <div className="relay-status-grid">
+            <StatusPill label="Relay URL" value={relayConfigured ? "configured" : "missing"} tone={relayConfigured ? "success" : "warning"} />
+            <StatusPill label="Relay" value={compassRuntime.status === "ready" ? "connected" : "disconnected"} tone={compassRuntime.status === "ready" ? "success" : "warning"} />
+            <StatusPill label="Server OpenAI key" value={compassRuntime.serverKeyStatus} tone={compassRuntime.serverKeyStatus === "configured" ? "success" : compassRuntime.serverKeyStatus === "missing" ? "error" : "warning"} />
+            <StatusPill label="Auth token" value={compassRuntime.relayKeyConfigured ? "configured" : "missing"} tone={compassRuntime.relayKeyConfigured ? "success" : "warning"} />
+          </div>
+          <div className="relay-meta">
+            <span>Last relay health check: {compassRuntime.lastConnectionTestAt ?? "Not tested"}</span>
+            <span>Last AI analysis: {compassRuntime.lastAnalysisAt ?? "Not analyzed"}</span>
+            <span>Last safe error: {compassRuntime.lastSafeError ?? "None"}</span>
+          </div>
+          <div className="button-row">
+            <Button variant="primary" onClick={saveRelayConfig}>Save relay config</Button>
+            <Button onClick={refreshRuntime}>Test relay connection</Button>
+            <Button onClick={analyzeSampleSafely}>Test AI through relay</Button>
+            <Button variant="danger" onClick={removeRelayConfig}>Remove config</Button>
+          </div>
+          {!relayConfigured ? <EmptyState title="Relay not configured." detail={noRelayMessage} /> : null}
+        </div>
+      </Card>
+
+      <Card title="AI Modules" subtitle="Compass AI is relay-backed now. Other modules are visible as future architecture only.">
+        <div className="module-grid">
+          <AiModuleCard title="Compass AI" badge={compassReady ? "Active" : relayConfigured ? "Configured" : "Not configured"} tone={compassReady ? "success" : relayConfigured ? "warning" : "neutral"} detail="Account health analysis and operator recommendations through the secure relay." meta={`${compassRuntime.provider} through relay · ${compassRuntime.model} · Last analysis ${compassRuntime.lastAnalysisAt ?? "not available"}`} actions={<><Button onClick={scrollToRelay}>Configure</Button><Button onClick={analyzeSampleSafely}>Test</Button><Button onClick={() => prepare("Open Compass", "compass")}>Open Compass</Button></>} />
+          <AiModuleCard title="Comment AI" badge="Planned" tone="neutral" detail="Future comment generation and moderation support." meta="Backend pending" actions={<Button disabled>Setup later</Button>} />
+          <AiModuleCard title="Targeting AI" badge="Planned" tone="neutral" detail="Future CT discovery, CT quality scoring, and audience suggestions." meta="Backend pending" actions={<Button disabled>Setup later</Button>} />
+          <AiModuleCard title="DM AI" badge="Planned" tone="neutral" detail="Future DM drafting and response classification." meta="Backend pending" actions={<Button disabled>Setup later</Button>} />
+        </div>
+      </Card>
+
+      <Card title="AI Prompts" subtitle="View prompt configuration. Active prompts live server-side; BotApp can prepare drafts but cannot bypass locked guardrails.">
+        <div className="prompt-notice">
+          <strong>Prompt changes affect wording and prioritization only.</strong>
+          <span>Facts-only grounding, category allowlists, schema validation, destructive-action blocks, and client-safe/internal split cannot be disabled.</span>
+        </div>
+        <div className="prompt-grid">
+          {aiPromptServices.map((service) => (
+            <article key={service.service} className={`prompt-card ${service.status === "active" ? "active" : "planned"}`}>
+              <div className="prompt-card-header">
+                <div>
+                  <span>{service.service}</span>
+                  <h3>{service.name}</h3>
+                </div>
+                <Badge tone={service.status === "active" ? "success" : "neutral"}>{service.status}</Badge>
+              </div>
+              <p>{service.promptPreview}</p>
+              <div className="prompt-meta">
+                <StatusPill label="Prompt source" value={service.source} tone={service.source === "default" ? "neutral" : "success"} />
+                <StatusPill label="Active version" value={service.version} tone={service.status === "active" ? "success" : "neutral"} />
+                <StatusPill label="Last updated" value={service.lastUpdatedAt ?? "Default"} tone="neutral" />
+                <StatusPill label="Backend sync" value={service.backendSyncStatus} tone={service.status === "active" ? "success" : "warning"} />
+              </div>
+              {service.service === "compass_ai" ? (
+                <small>Relay/server-side prompt. The facts-only validator still filters every recommendation after AI output.</small>
+              ) : (
+                <small>Planned module. UI contract is prepared, but no prompt is active in production.</small>
+              )}
+              <div className="button-row compact">
+                <Button onClick={() => viewPrompt(service)}>View prompt</Button>
+                <Button onClick={() => editPrompt(service)}>Edit prompt</Button>
+                <Button onClick={() => restorePromptDefault(service)}>Restore default</Button>
+                <Button disabled>Activate prompt · Backend pending</Button>
+                <Button disabled>Test prompt · Backend pending</Button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Scoped API Keys" subtitle="Generation is backend pending. This screen does not pretend keys exist before the relay exposes them.">
+        <div className="truthful-section">
+          {compassRuntime.relayKeyConfigured ? (
+            <article className="local-config-card">
+              <div>
+                <span>Relay auth token</span>
+                <strong>Configured locally</strong>
+                <small>Prefix and usage are not available until the backend key registry is connected.</small>
+              </div>
+              <Badge tone="warning">Local config</Badge>
+            </article>
+          ) : (
+            <EmptyState title="No scoped keys configured yet." detail="Create or connect a relay key. Backend key generation is not live in BotApp yet." />
+          )}
+          <div className="button-row">
+            <Button onClick={scrollToRelay}>Add relay token</Button>
+            <Button onClick={saveRelayConfig}>Save</Button>
+            <Button onClick={refreshRuntime}>Test</Button>
+            <Button variant="danger" onClick={removeRelayConfig}>Remove</Button>
+            <Button disabled>Generate key · Backend pending</Button>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="External Webhooks" subtitle="Local configuration is available. Real delivery, testing, and retries remain backend pending.">
+        <div className="webhook-form">
+          <Input value={webhookDraft.label} onChange={(label) => setWebhookDraft((draft) => ({ ...draft, label }))} placeholder="Webhook label" />
+          <Input value={webhookDraft.url} onChange={(url) => setWebhookDraft((draft) => ({ ...draft, url }))} placeholder="https://your-app.example/api/bot-events" mono type="url" />
+          <Input value={webhookDraft.secret} onChange={(secret) => setWebhookDraft((draft) => ({ ...draft, secret }))} placeholder="Optional signing value" mono type="password" />
+          <div className="event-chip-grid">{webhookEvents.map((event) => <span key={event}>{event}</span>)}</div>
+          <Button onClick={saveWebhook}>Save webhook</Button>
+        </div>
+        {savedWebhooks.length ? (
+          <div className="webhook-grid">
+            {savedWebhooks.map((hook) => (
+              <article key={hook.id} className="webhook-card">
+                <div>
+                  <span>{hook.provider}</span>
+                  <strong>{redactText(hook.url)}</strong>
+                  <small>{hook.events.join(", ")}</small>
+                </div>
+                <div className="webhook-status">
+                  <Badge tone={hook.status === "active" ? "success" : "neutral"}>{hook.status}</Badge>
+                  <Badge tone="warning">Delivery backend pending</Badge>
+                  <small>{hook.lastDeliveryAt ?? "No delivery yet"} · {hook.latestError ?? "No error"}</small>
+                </div>
+                <div className="button-row compact">
+                  <Button disabled>Test · Backend pending</Button>
+                  <Button disabled>Retry · Backend pending</Button>
+                  <Button disabled onClick={() => previewDestructive("Disable webhook", hook.id, "Disable webhook")}>Disable · Backend pending</Button>
+                  <Button variant="danger" onClick={() => removeWebhook(hook.id)}>Remove</Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No webhooks configured yet." detail="Add your first webhook. Delivery testing will be enabled when the relay webhook backend is connected." />
+        )}
+      </Card>
+
+      <Card title="Recent API Calls" subtitle="Only real safe request summaries should appear here.">
+        <EmptyState title="No recent API calls yet." detail="Safe request summaries will appear here once the relay receives traffic." />
+      </Card>
+
+      <Card title="Security conventions" subtitle="Contracts every integration should follow.">
+        <div className="conventions-grid">
+          <Convention label="Request id" value="X-Request-Id on every relay call" />
+          <Convention label="Idempotency" value="X-Idempotency-Key for writes and retries" />
+          <Convention label="External user" value="X-External-User-Id for audit attribution" />
+          <Convention label="Dry run" value="dry_run=true for tests and previews" />
+          <Convention label="Response" value="{ ok: true, data } / { ok: false, error }" />
+          <Convention label="Redaction" value="No full keys, provider credentials, raw logs, XML, artifact paths, or webhook signing values in UI" />
+        </div>
+      </Card>
+
+      {message ? <div className="integrations-message" role="status">{message}</div> : null}
+      {pendingDestructive ? (
+        <Modal
+          title={pendingDestructive.title}
+          confirmLabel={pendingDestructive.confirmLabel}
+          danger
+          onClose={() => setPendingDestructive(null)}
+          onConfirm={confirmDestructive}
+        >
+          <p>{pendingDestructive.message}</p>
+        </Modal>
+      ) : null}
+      {promptPanel ? (
+        <Modal
+          title={`${promptPanel.mode === "edit" ? "Edit" : "View"} ${promptPanel.service.name} prompt`}
+          confirmLabel={promptPanel.mode === "edit" ? "Save draft" : "Close"}
+          onClose={() => setPromptPanel(null)}
+          onConfirm={() => {
+            if (promptPanel.mode === "edit") savePromptDraft(promptPanel.service);
+          }}
+        >
+          <div className="prompt-modal">
+            <Badge tone={promptPanel.service.status === "active" ? "success" : "neutral"}>{promptPanel.service.backendSyncStatus}</Badge>
+            <p>Active prompt storage is relay/server-side. Local drafts are not active until future server activation.</p>
+            <label>
+              <span>Prompt text</span>
+              {promptPanel.mode === "edit" ? (
+                <textarea
+                  value={promptDrafts[promptPanel.service.service] ?? promptPanel.service.defaultPrompt}
+                  onChange={(event) => setPromptDrafts((drafts) => ({ ...drafts, [promptPanel.service.service]: event.target.value }))}
+                />
+              ) : (
+                <pre>{promptDrafts[promptPanel.service.service] ?? promptPanel.service.defaultPrompt}</pre>
+              )}
+            </label>
+            <div className="prompt-guardrails">
+              <span>Locked guardrails</span>
+              {promptPanel.service.guardrails.map((guardrail) => <small key={guardrail}>{guardrail}</small>)}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </div>
+  );
+}
+
+function fallbackRuntimeStatus(): BotAppRuntimeIntegrationStatus {
+  const now = new Date().toISOString();
+  return {
+    localGateway: { status: "running", mode: "browser", transport: "electron_ipc", port: null, lastHealthCheck: now },
+    secureRelay: { status: "disconnected", baseUrl: "Not configured", lastHealthCheck: null },
+    dashboardBackend: { status: "disconnected", baseUrl: "Not configured", lastHealthCheck: null },
+    compassAi: {
+      status: "missing_key",
+      mode: "rules_only",
+      provider: "OpenAI",
+      model: "gpt-5.5",
+      relayKeyConfigured: false,
+      serverKeyStatus: "unknown",
+      relayUrlConfigured: false,
+      relayOrigin: null,
+      lastTestAt: null,
+      lastAnalysisAt: null,
+      lastSafeError: null,
+      lastProviderErrorCode: null,
+      relayEndpoint: "/api/instagram-dashboard/compass/analyze",
+    },
+    environment: "local",
+  };
+}
+
+function fallbackCompassRuntimeStatus(): CompassAiRuntimeStatus {
+  return {
+    mode: "rules_only",
+    status: "relay_missing",
+    provider: "OpenAI",
+    model: "gpt-5.5",
+    relayUrlConfigured: false,
+    relayOrigin: null,
+    relayKeyConfigured: false,
+    serverKeyStatus: "unknown",
+    lastConnectionTestAt: null,
+    lastAnalysisAt: null,
+    lastSafeError: null,
+    lastProviderErrorCode: null,
+    message: noRelayMessage,
+  };
+}
+
+function gatewayLabel(runtime: CompassAiRuntimeStatus) {
+  if (runtime.status === "ready") return "Relay active";
+  if (runtime.status === "unavailable") return "Relay disconnected";
+  return "Setup required";
+}
+
+function toneForStatus(status: IntegrationStatus): BadgeTone {
+  if (status === "connected" || status === "running" || status === "configured") return "success";
+  if (status === "missing_key" || status === "pending" || status === "unavailable") return "warning";
+  return "error";
+}
+
+function Kpi({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: BadgeTone }) {
+  return <article className={`integrations-kpi ${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
+}
+
+function StatusTile({ label, status, detail }: { label: string; status: IntegrationStatus; detail: string }) {
+  return <article className="status-tile"><div><span>{label}</span><strong>{detail}</strong></div><Badge tone={toneForStatus(status)}>{status}</Badge></article>;
+}
+
+function StatusPill({ label, value, tone }: { label: string; value: string; tone: BadgeTone }) {
+  return <div className="status-pill"><span>{label}</span><Badge tone={tone}>{value}</Badge></div>;
+}
+
+function relayIntegrationStatus(runtime: CompassAiRuntimeStatus): IntegrationStatus {
+  if (runtime.status === "ready") return "connected";
+  if (runtime.mode === "relay") return "unavailable";
+  return "missing_key";
+}
+
+function CheckRow({ label, ok }: { label: string; ok: boolean }) {
+  return <div className={`check-row ${ok ? "ok" : "pending"}`}><span>{ok ? "OK" : "--"}</span><strong>{label}</strong></div>;
+}
+
+function EmptyState({ title, detail }: { title: string; detail: string }) {
+  return <div className="empty-state"><strong>{title}</strong><span>{detail}</span></div>;
+}
+
+function AiModuleCard({ title, badge, tone, detail, meta, actions }: { title: string; badge: string; tone: BadgeTone; detail: string; meta: string; actions: ReactNode }) {
+  return <article className="module-card"><div><Badge tone={tone}>{badge}</Badge><h3>{title}</h3><p>{detail}</p><small>{meta}</small></div><div className="button-row compact">{actions}</div></article>;
+}
+
+function Convention({ label, value }: { label: string; value: string }) {
+  return <div className="convention"><span>{label}</span><strong>{value}</strong></div>;
 }
