@@ -43,6 +43,8 @@
 - Client Accounts future sync via secure relay; no direct DB access from BotApp
 - Credentials tab with lock icon, focused operator worklist, selected account context from Client Accounts, and relay-ready mappings for safe credential actions
 - Credentials actions map to dashboard admin routes for password update, verification-code submit, and dashboard-action review through the future BotApp relay
+- Activity Log repositioned as an Interaction Investigation Lab: search by CT, search by interacted account, recent interactions, evidence summaries, and CT archive/remove relay payloads
+- Server Check will own technical/runtime/system logs later: runtime events, worker health, heartbeats, incidents, notification deliveries, and process diagnostics
 - Password update notification/email contract remains pending backend until dashboard client onboarding captures/validates client email and a real provider/queue/template exists
 
 ## Done (foundation)
@@ -65,16 +67,16 @@
 
 ## Next milestone
 
-Profiles toolbar/settings/drawers, Devices, Client Accounts, and Credentials are now checkpoint-ready. The next large chantier is remaining top-level polish and the secure BotApp API relay.
+Profiles toolbar/settings/drawers, Devices, Client Accounts, Credentials, and Activity Log investigation are now checkpoint-ready pending validation. The next large chantier is dashboard/admin parity for interaction search and the secure BotApp API relay.
 
 Required order from here:
 
-1. Polish remaining top-level routes (Overview, global Targets, Settings)
-2. BotApp API relay — read-only profiles, stats, logs, targets, client accounts, credentials actions
-3. Guarded write paths (settings, filters, targets, runs, credential action updates)
-4. Dashboard client onboarding email capture/validation and real provider/queue/template wiring
-5. Realtime events through relay
-6. Focused tests: filter validation, target export redaction, run-control payloads, avatar sanitizer, credential action redaction
+1. Replace dashboard admin Activity Log with the same interaction investigation concept once backend projections are ready.
+2. Add read-only interaction investigation relay: `ig_interacted_users`, `ig_targets`, `ct_target_audit_events`, `ig_runs`, `account_run_requests`, and safe account labels.
+3. Add client-safe Activity Log variant with tenant scoping and CT archive/remove actions.
+4. BotApp API relay — read-only profiles, stats, targets, client accounts, credentials actions, and interaction evidence.
+5. Guarded write paths (settings, filters, targets, runs, credential action updates, CT archive/remove).
+6. Build future Server Check for runtime/system/worker logs currently out of Activity Log scope.
 
 Future write/action implementation rules remain:
 

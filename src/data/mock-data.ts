@@ -52,10 +52,12 @@ export const mockDevices: Device[] = Array.from({ length: 41 }, (_item, index) =
 export const mockDeviceProfileGroups = buildDeviceProfileGroups(mockProfiles, mockDevices);
 
 export const mockActivityLogs: ActivityLogEntry[] = [
-  { id: "log_001", timestamp: "10:12:43 2026-06-09", level: "info", actor: "operator", event: "profile.preview_start", target: "studio_lumiere", detail: "Start payload prepared. request_id=req_preview_001" },
-  { id: "log_002", timestamp: "10:11:03 2026-06-09", level: "warning", actor: "system", event: "device.lock_reserved", target: "Phone 01", detail: "Device-level lock prevents multiple active UI sessions on one phone." },
-  { id: "log_003", timestamp: "10:08:25 2026-06-09", level: "error", actor: "api-gateway", event: "webhook.delivery_failed", target: "webhook_prod", detail: "Webhook delivery failed in preview mode. Sensitive payload fields are omitted." },
-  { id: "log_004", timestamp: "10:04:12 2026-06-09", level: "info", actor: "botapp", event: "settings.loaded", target: "BotApp", detail: "Loaded local settings projection." },
+  { id: "int_001", timestamp: "2026-06-11 10:32", level: "info", actor: "worker", event: "follow", target: "atelier_lumiere", detail: "Interaction found: @liam_bel_epee followed @atelier_lumiere from CT @architectes.paris. Evidence from interacted users and run summary.", domain: "targets", source: "worker", account: "liam_bel_epee", device: "PHONE 1", status: "success" },
+  { id: "int_002", timestamp: "2026-06-11 09:58", level: "info", actor: "worker", event: "like", target: "studio_nord", detail: "Interaction found: @j_automatise_pour_toi liked @studio_nord from CT @renovation_lille. Evidence source is best-effort from action logs.", domain: "targets", source: "worker", account: "j_automatise_pour_toi", device: "PHONE 1", status: "success" },
+  { id: "int_003", timestamp: "2026-06-10 14:32", level: "warning", actor: "operator", event: "unfollow", target: "old_fashion_ct", detail: "Interaction found: unfollow action for @old_fashion_ct. CT source @old_target_source is low quality and should be reviewed.", domain: "targets", source: "operator", account: "i_m_your_traker", device: "PHONE 2", status: "review" },
+  { id: "int_004", timestamp: "2026-06-09 18:07", level: "info", actor: "worker", event: "story_view", target: "galerie_vintage", detail: "Interaction found: story view linked to CT @architectes.paris with medium confidence.", domain: "targets", source: "worker", account: "liam_bel_epee", device: "PHONE 1", status: "success" },
+  { id: "int_005", timestamp: "2026-06-08 11:18", level: "info", actor: "worker", event: "dm", target: "maison_verte", detail: "Interaction found: welcome DM sent after followback, linked to CT @mode_paris_fr through derived projection.", domain: "targets", source: "worker", account: "test_account_ops", device: "PHONE 3", status: "success" },
+  { id: "int_006", timestamp: "2026-06-05 16:44", level: "warning", actor: "system", event: "comment", target: "atelier_lumiere", detail: "Comment attempt failed for @atelier_lumiere. Reason: action blocked by account status.", domain: "targets", source: "system", account: "liam_bel_epee", device: "PHONE 1", status: "failed" },
 ];
 
 export const mockTargets: Target[] = [

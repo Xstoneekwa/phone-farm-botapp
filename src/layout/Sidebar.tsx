@@ -34,13 +34,26 @@ function LockNavIcon() {
   );
 }
 
+function ActivityInvestigationNavIcon() {
+  return (
+    <svg className="nav-activity-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 3.5h8l4 4V13" />
+      <path d="M14 3.5v4h4" />
+      <path d="M8 11h5" />
+      <path d="M8 14h3" />
+      <circle cx="15.5" cy="16.5" r="3" />
+      <path d="m18 19 2.5 2.5" />
+    </svg>
+  );
+}
+
 const navIcons: Record<RouteId, ReactNode> = {
   overview: "⌁",
   profiles: "◎",
   account: <ClientAccountsNavIcon />,
   credentials: <LockNavIcon />,
   devices: <DeviceNavIcon />,
-  activity: "⌘",
+  activity: <ActivityInvestigationNavIcon />,
   targets: "◇",
   templates: "✉",
   notifications: "!",

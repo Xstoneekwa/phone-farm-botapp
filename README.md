@@ -2,7 +2,7 @@
 
 BotApp is the macOS operator application for the Phone Farm system at Boost My Businesses. It provides a dense desktop control surface for phones, Instagram/TikTok profiles, runtime state, logs, target accounts, settings, and safety-gated actions.
 
-The current checkpoint delivers the complete **Profiles** workspace, the **Devices** phone inventory workspace, the **Client Accounts** admin-parity worklist, and the **Credentials** operator worklist with local data only. Operator UI labels are product-ready; write actions prepare admin-backed payloads and do **not** call the real backend until a secure BotApp API relay is validated.
+The current checkpoint delivers the complete **Profiles** workspace, the **Devices** phone inventory workspace, the **Client Accounts** admin-parity worklist, the **Credentials** operator worklist, and the **Activity Log** interaction investigation lab with local data only. Operator UI labels are product-ready; write actions prepare admin-backed payloads and do **not** call the real backend until a secure BotApp API relay is validated.
 
 ## Product vision
 
@@ -34,6 +34,9 @@ Profiles, Devices, and Client Accounts foundation (branch `botapp-mac-foundation
 - Credentials tab with lock sidebar icon, compact credential action cards, filters, and selected account context from Client Accounts
 - Credentials sync contract targets `account_dashboard_actions`, `account_credentials`, `client_instagram_accounts`, manage overview, and radar overview through the future secure relay only
 - Credentials action contracts target dashboard admin routes for password update, verification-code submit, and dashboard-action review through the future relay
+- Activity Log uses an investigation icon and focuses on CT-source and interacted-account analysis, not runtime/system logs
+- Activity Log prepares client-safe evidence export and CT archive/remove payloads; no CT deletion or DB mutation runs from BotApp
+- Future Server Check owns technical/runtime/system logs, worker health, incidents, delivery diagnostics, and process events
 - Password update email delivery remains relay-ready/pending until client onboarding captures and validates the client email and a real provider/queue/template exists
 - Client Accounts future sync via secure relay (`client_accounts_overview`); no direct Supabase/DB access from BotApp
 - Complete profile toolbar: Stats, Logs, Targets, Start, Auto Login, Check Login, Stop, Settings, Filters, Assign Now, Archive, Delete

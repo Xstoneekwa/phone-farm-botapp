@@ -174,6 +174,9 @@ Replace or wrap `mockClient` with a real client when the relay is validated. Kee
 | Credentials worklist | Lock-icon tab with compact cards for password, verification, credentials, and review actions |
 | Credentials data contract | Future relay reads from `account_dashboard_actions`, `account_credentials`, `client_instagram_accounts`, manage overview, and radar overview |
 | Credentials action contract | Password update, submit verification code, and mark reviewed map to dashboard admin routes through the secure relay |
+| Activity Log investigation | Search by CT, search by interacted account, recent interactions, evidence summary, and CT archive/remove relay payload |
+| Activity Log evidence contract | Future relay should read admin projection `activity_log_interaction_evidence_admin_v1` / `get_activity_log_interaction_evidence_admin`; BotApp never opens Supabase directly |
+| Server Check boundary | Future owner of technical/runtime/system logs; Activity Log must not become a raw worker log table |
 | Add Phone | Admin parity with `add_physical_phone`; relay-ready only |
 | Local device mapping | `BOTAPP_DEVICE_SERIAL_MAP`, gitignored `.botapp.devices.local.json`, example placeholders only |
 | Complete toolbar | Stats, Logs, Targets, Start, Auto Login, Check Login, Stop, Settings, Filters, Assign Now, Archive, Delete |
@@ -245,6 +248,8 @@ Never commit: `dist/`, `release/`, `.env*`, logs, screenshots, temp inspection f
 | Add Phone | `add_physical_phone` via admin-dashboard relay | drawer + payload preview only |
 | Device control | future secure device-control relay | phone view IPC only; restart payload preview only |
 | Credentials actions | `account_dashboard_actions`, `account_credentials`, `client_instagram_accounts` | focused worklist + relay-ready action payloads only |
+| Activity investigation | `ig_interacted_users`, `ig_targets`, `ct_target_audit_events`, `ig_runs`, `account_run_requests` | local interaction evidence projection + safe exports only |
+| Server Check | `runtime_events`, `ig_action_logs`, heartbeats, incidents, delivery/process logs | future tab; not rendered in Activity Log |
 | Operational email | dashboard client onboarding + future provider/queue/template | pending relay contract only; no real send claim |
 | Avatars | sanitized proxy URL | `/avatars/*.svg` |
 
@@ -283,14 +288,14 @@ Workflow:
 
 ## 7. Immediate roadmap
 
-Profiles toolbar/settings/drawers, Devices, Client Accounts, and Credentials are complete for this checkpoint. The next large milestone is remaining top-level screen polish and the secure BotApp API relay.
+Profiles toolbar/settings/drawers, Devices, Client Accounts, Credentials, and Activity Log investigation are complete for this checkpoint pending validation. The next large milestone is dashboard/admin parity for interaction search and the secure BotApp API relay.
 
-1. Remaining top-level screens polish
-2. BotApp API relay — read-only profiles/stats/logs/targets/client accounts/credentials actions
-3. Guarded write actions (settings, filters, targets, runs, credential action updates)
-4. Dashboard client onboarding email capture/validation and real provider/queue/template wiring
-5. Realtime log/event stream through relay
-6. Automated tests for filters validation, target export redaction, run-control payloads, avatar sanitizer, credential redaction
+1. Dashboard admin Activity Log replacement with the same Interaction Investigation Lab UX.
+2. BotApp API relay — read-only profiles/stats/targets/client accounts/credentials actions/interaction evidence.
+3. Guarded write actions (settings, filters, targets, runs, credential action updates, CT archive/remove).
+4. Dashboard client onboarding email capture/validation and real provider/queue/template wiring.
+5. Future Server Check for runtime/system logs and health signals.
+6. Automated tests for filters validation, target export redaction, run-control payloads, avatar sanitizer, credential redaction, and activity evidence redaction.
 
 Each toolbar action must be inspected first in `boost-ai-frontend` before implementation: role, enabled/disabled states, modals/drawers, endpoints, RPC/tables, payloads, validations, and backend effects. BotApp should prepare future types/payloads but must not execute real mutations until the secure relay is validated.
 

@@ -17,6 +17,7 @@
 .nav-phone-icon { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .nav-users-icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .nav-lock-icon { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.nav-activity-icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .nav-tooltip { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%) translateX(-4px); opacity: 0; pointer-events: none; z-index: 80; background: #0B1220; color: #F8FAFC; border: 1px solid #243149; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; box-shadow: var(--shadow-modal); }
 .sidebar button:hover .nav-tooltip { opacity: 1; transform: translateY(-50%) translateX(0); }
 .nav-badge { position: absolute; right: -3px; top: -4px; transform: scale(.78); transform-origin: top right; }

@@ -7,7 +7,7 @@ This handoff captures the current implementation checkpoint for future developer
 - Repository: BotApp workspace root
 - Branch: `botapp-mac-foundation`
 - Mode: local-data macOS app foundation, prepared for future secure relay
-- Current checkpoint: Profiles actions, settings, drawers, Devices inventory, Client Accounts admin parity, Credentials worklist, and phone-level View complete
+- Current checkpoint: Profiles actions, settings, drawers, Devices inventory, Client Accounts admin parity, Credentials worklist, Activity Log investigation, and phone-level View complete
 - Backend posture: no real backend calls, no Supabase direct access, no worker/device mutations
 
 ## Completed In This Checkpoint
@@ -37,6 +37,21 @@ This handoff captures the current implementation checkpoint for future developer
   - Delete
 
 All write/action operations are prepared for the future secure relay only.
+
+### Activity Log
+
+- Sidebar uses an investigation/search icon, not a generic list symbol.
+- Product role: Interaction Investigation Lab for CT-source and interacted-account analysis.
+- Modes: Search by CT, Search by Account, Recent interactions, Disputes / Evidence.
+- Supported local contracts:
+  - search by CT source;
+  - search by interacted username;
+  - period filters 24h / 7d / 30d;
+  - action type and client account filters;
+  - safe evidence summary copy/export;
+  - relay-ready CT archive/remove payload.
+- This tab must not render raw runtime, worker, system, delivery, device diagnostic, or process logs. Those belong in the future Server Check tab.
+- Dashboard admin should converge on the same Activity Log concept. Client dashboard reuse must be tenant-scoped and must hide internal device/run details.
 
 ### Add Profile Drawer
 

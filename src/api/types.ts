@@ -1509,6 +1509,134 @@ export type ActivityLogEntry = {
   event: string;
   target: string;
   detail: string;
+  domain?: "settings" | "targets" | "lifecycle" | "device" | "credentials" | "run" | "account" | "system";
+  source?: "operator" | "system" | "relay" | "worker" | "device";
+  account?: string | null;
+  device?: string | null;
+  status?: "success" | "failed" | "pending" | "accepted" | "review" | "blocked";
+};
+
+export type BotAppActivityInvestigationMode = "search_by_ct" | "search_by_account" | "recent_interactions" | "disputes_evidence";
+export type BotAppInteractionActionType = "follow" | "unfollow" | "like" | "comment" | "dm" | "story_view" | "profile_visit" | "followback" | "unknown";
+export type BotAppInteractionStatus = "success" | "failed" | "pending" | "not_found" | "unknown";
+export type BotAppInteractionConfidence = "high" | "medium" | "best_effort" | "unknown";
+
+export type BotAppInteractionEvidence = {
+  evidenceSource:
+    | "ig_interacted_users"
+    | "ig_interaction_events"
+    | "ig_action_logs"
+    | "ig_runs"
+    | "ct_target_audit_events"
+    | "activity_log_interaction_evidence_admin_v1"
+    | "derived_projection";
+  evidenceSourceTable?: "ig_interacted_users" | "ig_interaction_events" | "derived_projection";
+  evidenceSummary: string;
+  sourceRef: string | null;
+  confidence: BotAppInteractionConfidence;
+  metadataSafe: Record<string, string | number | boolean | null>;
+};
+
+export type BotAppCtSourceSummary = {
+  ctId: string;
+  ctUsername: string;
+  source: string;
+  qualityStatus: "approved" | "review" | "low_quality" | "archived" | "unknown";
+  interactionsCount: number;
+  lastInteractionAt: string | null;
+};
+
+export type BotAppInteractionRecord = {
+  id: string;
+  sourceRecordId?: string;
+  accountId: string;
+  clientId: string;
+  clientAccountUsername: string;
+  ct: BotAppCtSourceSummary;
+  interactedUsername: string;
+  actionType: BotAppInteractionActionType;
+  actionStatus: BotAppInteractionStatus;
+  occurredAt: string;
+  periodBucket: "24h" | "7d" | "30d";
+  runId: string | null;
+  requestId: string | null;
+  deviceIdSafe: string | null;
+  safeDeviceLabel?: string | null;
+  result: string;
+  reason: string | null;
+  evidence: BotAppInteractionEvidence;
+};
+
+export type BotAppInteractionEvidenceProjectionRow = {
+  source_record_id: string;
+  evidence_source_table: "ig_interacted_users" | "ig_interaction_events";
+  account_id: string;
+  client_id: string | null;
+  client_account_username: string | null;
+  ct_id: string | null;
+  ct_username: string | null;
+  interacted_username: string;
+  action_type: BotAppInteractionActionType | string;
+  action_status: BotAppInteractionStatus | string;
+  occurred_at: string;
+  run_id: string | null;
+  request_id: string | null;
+  safe_device_label: string | null;
+  evidence_source: BotAppInteractionEvidence["evidenceSource"] | string;
+  evidence_confidence: BotAppInteractionConfidence | string;
+  evidence_summary: string;
+  metadata_safe: Record<string, string | number | boolean | null>;
+};
+
+export type BotAppInteractionSearchQuery = {
+  mode: BotAppActivityInvestigationMode;
+  query: string;
+  period: "24h" | "7d" | "30d";
+  actionType: BotAppInteractionActionType | "all";
+  clientAccountUsername: string | "all";
+};
+
+export type BotAppInteractionSearchResult = {
+  status: "found" | "not_found";
+  query: BotAppInteractionSearchQuery;
+  records: BotAppInteractionRecord[];
+  summary: string;
+};
+
+export type BotAppCtRemovalPayload = {
+  action: "archive_ct_from_campaign";
+  account_id: string;
+  client_id: string;
+  ct_id: string;
+  ct_username: string;
+  source: "BotApp";
+  requested_by: string | null;
+  idempotency_key: string;
+  metadata_safe: {
+    reason: "operator_marked_low_quality" | "client_dispute" | "not_relevant";
+    evidence_record_id: string;
+    expected_effect: "future_secure_relay_archive_ct";
+  };
+};
+
+export type BotAppActivityLogRelayPayload = {
+  action: "interaction_investigation_search";
+  source: "BotApp";
+  requested_by: string | null;
+  query: BotAppInteractionSearchQuery;
+  include: Array<"ig_interacted_users" | "ig_interaction_events" | "ig_targets" | "ct_target_audit_events" | "ig_action_logs" | "ig_runs" | "account_run_requests" | "activity_log_interaction_evidence_admin_v1">;
+  metadata_safe: {
+    expected_effect: "read_only_interaction_investigation";
+  };
+};
+
+export type BotAppClientSafeInteractionRecord = Pick<
+  BotAppInteractionRecord,
+  "clientAccountUsername" | "interactedUsername" | "actionType" | "actionStatus" | "occurredAt" | "result" | "reason"
+> & {
+  ctUsername: string;
+  evidenceSummary: string;
+  confidence: BotAppInteractionConfidence;
 };
 
 export type Target = {
