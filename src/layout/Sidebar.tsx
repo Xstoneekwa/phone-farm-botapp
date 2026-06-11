@@ -24,10 +24,21 @@ function ClientAccountsNavIcon() {
   );
 }
 
+function LockNavIcon() {
+  return (
+    <svg className="nav-lock-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="5.5" y="10" width="13" height="10" rx="2.5" />
+      <path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10" />
+      <path d="M12 14v2.5" />
+    </svg>
+  );
+}
+
 const navIcons: Record<RouteId, ReactNode> = {
   overview: "⌁",
   profiles: "◎",
   account: <ClientAccountsNavIcon />,
+  credentials: <LockNavIcon />,
   devices: <DeviceNavIcon />,
   activity: "⌘",
   targets: "◇",

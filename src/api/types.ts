@@ -634,6 +634,78 @@ export type PasswordUpdateRequestResult = {
   message: string;
 };
 
+export type BotAppCredentialsActionType =
+  | "submit_instagram_credentials"
+  | "update_instagram_password"
+  | "enter_email_verification_code"
+  | "complete_two_factor"
+  | "resolve_checkpoint"
+  | "review_login_challenge"
+  | "review_login_failure"
+  | "review_account_mismatch"
+  | "review_credentials"
+  | "reconnect_instagram";
+
+export type BotAppCredentialsActionStatus = "pending" | "acknowledged" | "pending_verification" | "code_submitted" | "resolved" | "dismissed";
+export type BotAppCredentialsPriority = "critical" | "warning" | "info";
+export type BotAppCredentialsAudience = "client" | "admin" | "ops";
+
+export type BotAppCredentialsAction = {
+  id: string;
+  accountId: string;
+  clientId: string;
+  profileId: string;
+  username: string;
+  clientName: string;
+  actionType: BotAppCredentialsActionType;
+  title: string;
+  description: string;
+  status: BotAppCredentialsActionStatus;
+  priority: BotAppCredentialsPriority;
+  audience: BotAppCredentialsAudience;
+  requiresClientAction: boolean;
+  blockingCampaign: boolean;
+  credentialStatus: string;
+  loginStatus: string;
+  provisioningStatus: string;
+  sourceLabel: "account_dashboard_actions" | "derived from dashboard overview";
+  assignedPhone: string;
+  createdAtLabel: string;
+  updatedAtLabel: string;
+  ageLabel: string;
+  nextAction: string;
+};
+
+export type BotAppCredentialsFilter = "all" | "password" | "verification_code" | "credentials" | "needs_review" | "completed";
+
+export type BotAppCredentialsOverview = {
+  actions: BotAppCredentialsAction[];
+  summary: {
+    openActions: number;
+    passwordUpdates: number;
+    verificationCodes: number;
+    needsReview: number;
+    clientActionRequired: number;
+  };
+  relayPayload: BotAppCredentialsRelayPayload;
+};
+
+export type BotAppCredentialsRelayPayload = {
+  action: "credentials_actions_overview";
+  source: "BotApp";
+  requested_by: string | null;
+  include: Array<"account_dashboard_actions" | "account_credentials" | "client_instagram_accounts" | "manage_overview" | "radar_overview">;
+  metadata_safe: {
+    expected_effect: "read_only_credentials_actions_overview";
+  };
+};
+
+export type BotAppCredentialsActionResult = {
+  status: "prepared" | "disabled";
+  action: BotAppCredentialsActionType | "refresh" | "open_account";
+  payload: Record<string, unknown>;
+};
+
 export type DeviceProfileGroup = {
   deviceId: string;
   deviceLabel: string;
@@ -1510,6 +1582,7 @@ export type BotAppClient = {
   getProfileSettings(profileId: string): Promise<ApiResult<ProfileSettings>>;
   getProfileFilters(profileId: string): Promise<ApiResult<ProfileFilters>>;
   listClientAccounts(): Promise<ApiResult<BotAppClientAccountsOverview>>;
+  listCredentialsActions(): Promise<ApiResult<BotAppCredentialsOverview>>;
   listDevices(): Promise<ApiResult<Device[]>>;
   listNotifications(): Promise<ApiResult<NotificationItem[]>>;
   listActivityLogs(): Promise<ApiResult<ActivityLogEntry[]>>;

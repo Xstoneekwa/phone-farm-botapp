@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockClient } from "../api/mock-client";
-import type { ActivityLogEntry, ApiKeySummary, AppSettings, BotAppClientAccountsOverview, BotProfile, Device, DeviceProfileGroup, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
+import type { ActivityLogEntry, ApiKeySummary, AppSettings, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotProfile, Device, DeviceProfileGroup, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
 import { Modal, Toasts, type ToastItem } from "../design/components";
 import { Sidebar } from "../layout/Sidebar";
 import { TopBar } from "../layout/TopBar";
 import { Overview } from "../views/Overview";
 import { Profiles } from "../views/Profiles";
 import { ClientAccounts } from "../views/ClientAccounts";
+import { Credentials } from "../views/Credentials";
 import { Devices } from "../views/Devices";
 import { ActivityLog } from "../views/ActivityLog";
 import { Targets } from "../views/Targets";
@@ -21,6 +22,7 @@ type AppData = {
   profiles: BotProfile[];
   profileGroups: DeviceProfileGroup[];
   clientAccounts: BotAppClientAccountsOverview | null;
+  credentials: BotAppCredentialsOverview | null;
   devices: Device[];
   notifications: NotificationItem[];
   logs: ActivityLogEntry[];
@@ -31,11 +33,12 @@ type AppData = {
   settings: AppSettings | null;
 };
 
-const emptyData: AppData = { profiles: [], profileGroups: [], clientAccounts: null, devices: [], notifications: [], logs: [], targets: [], templates: [], apiKeys: [], webhooks: [], settings: null };
+const emptyData: AppData = { profiles: [], profileGroups: [], clientAccounts: null, credentials: null, devices: [], notifications: [], logs: [], targets: [], templates: [], apiKeys: [], webhooks: [], settings: null };
 
 export function App() {
   const [active, setActive] = useState<RouteId>("overview");
   const [, setSelectedProfileId] = useState("prof_001");
+  const [selectedCredentialsAccountId, setSelectedCredentialsAccountId] = useState<string | null>(null);
   const [data, setData] = useState<AppData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -45,14 +48,15 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [profiles, profileGroups, clientAccounts, devices, notifications, logs, targets, templates, apiKeys, webhooks, settings] = await Promise.all([
-        mockClient.listProfiles(), mockClient.listDeviceProfileGroups(), mockClient.listClientAccounts(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listTargets(), mockClient.listDmTemplates(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
+      const [profiles, profileGroups, clientAccounts, credentials, devices, notifications, logs, targets, templates, apiKeys, webhooks, settings] = await Promise.all([
+        mockClient.listProfiles(), mockClient.listDeviceProfileGroups(), mockClient.listClientAccounts(), mockClient.listCredentialsActions(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listTargets(), mockClient.listDmTemplates(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
       ]);
       if (cancelled) return;
       setData({
         profiles: profiles.ok ? profiles.data : [],
         profileGroups: profileGroups.ok ? profileGroups.data : [],
         clientAccounts: clientAccounts.ok ? clientAccounts.data : null,
+        credentials: credentials.ok ? credentials.data : null,
         devices: devices.ok ? devices.data : [],
         notifications: notifications.ok ? notifications.data : [],
         logs: logs.ok ? logs.data : [],
@@ -95,7 +99,8 @@ export function App() {
   if (loading) view = <div className="empty-state"><strong>Loading local data</strong><span>No backend connection is required.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
   else if (active === "profiles") view = <Profiles groups={data.profileGroups} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message) => pushToast(message, "success")} />;
-  else if (active === "account") view = data.clientAccounts ? <ClientAccounts overview={data.clientAccounts} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
+  else if (active === "account") view = data.clientAccounts ? <ClientAccounts overview={data.clientAccounts} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} onOpenCredentials={(account) => { setSelectedCredentialsAccountId(account.accountId); setActive("credentials"); }} /> : null;
+  else if (active === "credentials") view = data.credentials ? <Credentials overview={data.credentials} selectedAccountId={selectedCredentialsAccountId} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} />;
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
   else if (active === "targets") view = <Targets targets={data.targets} onAction={requestAction} />;

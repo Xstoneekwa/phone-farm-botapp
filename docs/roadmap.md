@@ -2,7 +2,7 @@
 
 ## Latest checkpoint
 
-**Message:** `feat(botapp): add client accounts admin parity`
+**Message:** `feat(botapp): enable client password update requests`
 
 **Branch:** `botapp-mac-foundation`
 
@@ -38,9 +38,12 @@
 - Client Accounts tab renamed from Account Detail with users-group sidebar icon
 - Client Accounts strict admin parity: 7 KPIs, 7 status filters, 7 table columns
 - Client Accounts columns: Account, Email, Password, 2FA, Created At, Status, Actions
-- Client Accounts row actions: view account, open credentials, request password update (disabled), status menu
+- Client Accounts row actions: view account, open credentials worklist, request password update, status menu
 - Client Accounts status actions prepared: pause, cancel, mark_needs_assistance, reactivate
 - Client Accounts future sync via secure relay; no direct DB access from BotApp
+- Credentials tab with lock icon, focused operator worklist, selected account context from Client Accounts, and relay-ready mappings for safe credential actions
+- Credentials actions map to dashboard admin routes for password update, verification-code submit, and dashboard-action review through the future BotApp relay
+- Password update notification/email contract remains pending backend until dashboard client onboarding captures/validates client email and a real provider/queue/template exists
 
 ## Done (foundation)
 
@@ -62,15 +65,16 @@
 
 ## Next milestone
 
-Profiles toolbar/settings/drawers, Devices, and Client Accounts are now checkpoint-complete. The next large chantier is remaining top-level polish and the secure BotApp API relay.
+Profiles toolbar/settings/drawers, Devices, Client Accounts, and Credentials are now checkpoint-ready. The next large chantier is remaining top-level polish and the secure BotApp API relay.
 
 Required order from here:
 
 1. Polish remaining top-level routes (Overview, global Targets, Settings)
-2. BotApp API relay — read-only profiles, stats, logs, targets
-3. Guarded write paths (settings, filters, targets, runs)
-4. Realtime events through relay
-5. Focused tests: filter validation, target export redaction, run-control payloads, avatar sanitizer
+2. BotApp API relay — read-only profiles, stats, logs, targets, client accounts, credentials actions
+3. Guarded write paths (settings, filters, targets, runs, credential action updates)
+4. Dashboard client onboarding email capture/validation and real provider/queue/template wiring
+5. Realtime events through relay
+6. Focused tests: filter validation, target export redaction, run-control payloads, avatar sanitizer, credential action redaction
 
 Future write/action implementation rules remain:
 

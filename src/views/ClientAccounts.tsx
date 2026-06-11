@@ -10,6 +10,7 @@ import "./client-accounts.css";
 type ClientAccountsProps = {
   overview: BotAppClientAccountsOverview;
   onOpenProfile: (profileId: string) => void;
+  onOpenCredentials: (account: BotAppClientAccount) => void;
 };
 
 type AccountStatusAction = "pause" | "cancel" | "mark_needs_assistance" | "reactivate";
@@ -91,7 +92,7 @@ function passwordUpdatePayload(account: BotAppClientAccount): ClientAccountPassw
   };
 }
 
-export function ClientAccounts({ overview, onOpenProfile }: ClientAccountsProps) {
+export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials }: ClientAccountsProps) {
   const [filters, setFilters] = useState<BotAppClientAccountsFilters>({ query: "", status: "all" });
   const [openMenuAccountId, setOpenMenuAccountId] = useState<string | null>(null);
   const [passwordRequestAccount, setPasswordRequestAccount] = useState<BotAppClientAccount | null>(null);
@@ -105,6 +106,10 @@ export function ClientAccounts({ overview, onOpenProfile }: ClientAccountsProps)
   function prepareAction(account: BotAppClientAccount, action: string) {
     if (action === "view_account") {
       onOpenProfile(account.profileId);
+      return;
+    }
+    if (action === "open_credentials") {
+      onOpenCredentials(account);
       return;
     }
     if (action === "request_password_update") {
@@ -301,7 +306,7 @@ function ActionList({
       <IconButton label="View Account: Open the read-only account detail." onClick={() => onAction("view_account")}>
         <UserIcon />
       </IconButton>
-      <IconButton label="Open Credentials: Open the credential action worklist." onClick={() => onAction("open_credentials")}>
+      <IconButton label="Open credentials worklist" onClick={() => onAction("open_credentials")}>
         <KeyIcon />
       </IconButton>
       <IconButton label="Request password update: Client will receive a dashboard notification and email." onClick={() => onAction("request_password_update")}>

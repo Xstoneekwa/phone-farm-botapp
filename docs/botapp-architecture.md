@@ -156,7 +156,7 @@ Replace or wrap `mockClient` with a real client when the relay is validated. Kee
 
 ---
 
-## 3. Checkpoint status (Profiles + Devices + Client Accounts)
+## 3. Checkpoint status (Profiles + Devices + Client Accounts + Credentials)
 
 ### Done in this checkpoint
 
@@ -170,7 +170,10 @@ Replace or wrap `mockClient` with a real client when the relay is validated. Kee
 | Client Accounts KPIs | Total, Active, Pending, Onboarding, Paused, Cancelled, Needs assistance |
 | Client Accounts filters | All, Active, Pending, Onboarding, Paused, Cancelled, Needs assistance |
 | Client Accounts table | Account, Email, Password, 2FA, Created At, Status, Actions |
-| Client Accounts actions | View account, open credentials, request password update (disabled), status menu |
+| Client Accounts actions | View account, open credentials worklist, request password update, status menu |
+| Credentials worklist | Lock-icon tab with compact cards for password, verification, credentials, and review actions |
+| Credentials data contract | Future relay reads from `account_dashboard_actions`, `account_credentials`, `client_instagram_accounts`, manage overview, and radar overview |
+| Credentials action contract | Password update, submit verification code, and mark reviewed map to dashboard admin routes through the secure relay |
 | Add Phone | Admin parity with `add_physical_phone`; relay-ready only |
 | Local device mapping | `BOTAPP_DEVICE_SERIAL_MAP`, gitignored `.botapp.devices.local.json`, example placeholders only |
 | Complete toolbar | Stats, Logs, Targets, Start, Auto Login, Check Login, Stop, Settings, Filters, Assign Now, Archive, Delete |
@@ -241,6 +244,8 @@ Never commit: `dist/`, `release/`, `.env*`, logs, screenshots, temp inspection f
 | Devices overview | `devices_overview`, `phone_devices`, `phone_app_instances` | local 41-phone inventory |
 | Add Phone | `add_physical_phone` via admin-dashboard relay | drawer + payload preview only |
 | Device control | future secure device-control relay | phone view IPC only; restart payload preview only |
+| Credentials actions | `account_dashboard_actions`, `account_credentials`, `client_instagram_accounts` | focused worklist + relay-ready action payloads only |
+| Operational email | dashboard client onboarding + future provider/queue/template | pending relay contract only; no real send claim |
 | Avatars | sanitized proxy URL | `/avatars/*.svg` |
 
 Sync order recommended: **read-only API** → guarded writes → realtime events.
@@ -278,13 +283,14 @@ Workflow:
 
 ## 7. Immediate roadmap
 
-Profiles toolbar/settings/drawers, Devices, and Client Accounts are complete for this checkpoint. The next large milestone is remaining top-level screen polish and the secure BotApp API relay.
+Profiles toolbar/settings/drawers, Devices, Client Accounts, and Credentials are complete for this checkpoint. The next large milestone is remaining top-level screen polish and the secure BotApp API relay.
 
 1. Remaining top-level screens polish
-2. BotApp API relay — read-only profiles/stats/logs/targets
-3. Guarded write actions (settings, filters, targets, runs)
-4. Realtime log/event stream through relay
-5. Automated tests for filters validation, target export redaction, run-control payloads, avatar sanitizer
+2. BotApp API relay — read-only profiles/stats/logs/targets/client accounts/credentials actions
+3. Guarded write actions (settings, filters, targets, runs, credential action updates)
+4. Dashboard client onboarding email capture/validation and real provider/queue/template wiring
+5. Realtime log/event stream through relay
+6. Automated tests for filters validation, target export redaction, run-control payloads, avatar sanitizer, credential redaction
 
 Each toolbar action must be inspected first in `boost-ai-frontend` before implementation: role, enabled/disabled states, modals/drawers, endpoints, RPC/tables, payloads, validations, and backend effects. BotApp should prepare future types/payloads but must not execute real mutations until the secure relay is validated.
 

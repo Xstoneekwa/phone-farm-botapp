@@ -1,9 +1,10 @@
-export type RouteId = "overview" | "profiles" | "account" | "devices" | "activity" | "targets" | "templates" | "notifications" | "api" | "settings";
+export type RouteId = "overview" | "profiles" | "account" | "credentials" | "devices" | "activity" | "targets" | "templates" | "notifications" | "api" | "settings";
 
 export const routes: Array<{ id: RouteId; label: string; group: string; shortcut: string }> = [
   { id: "overview", label: "Overview", group: "Ops", shortcut: "O" },
   { id: "profiles", label: "Profiles", group: "Ops", shortcut: "P" },
   { id: "account", label: "Client Accounts", group: "Ops", shortcut: "C" },
+  { id: "credentials", label: "Credentials", group: "Ops", shortcut: "K" },
   { id: "devices", label: "Devices", group: "Ops", shortcut: "V" },
   { id: "activity", label: "Activity Log", group: "Monitoring", shortcut: "L" },
   { id: "targets", label: "Targets / CT", group: "Growth", shortcut: "T" },

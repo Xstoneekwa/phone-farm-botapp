@@ -7,7 +7,7 @@ This handoff captures the current implementation checkpoint for future developer
 - Repository: BotApp workspace root
 - Branch: `botapp-mac-foundation`
 - Mode: local-data macOS app foundation, prepared for future secure relay
-- Current checkpoint: Profiles actions, settings, drawers, Devices inventory, Client Accounts admin parity, and phone-level View complete
+- Current checkpoint: Profiles actions, settings, drawers, Devices inventory, Client Accounts admin parity, Credentials worklist, and phone-level View complete
 - Backend posture: no real backend calls, no Supabase direct access, no worker/device mutations
 
 ## Completed In This Checkpoint
@@ -119,10 +119,27 @@ All write/action operations are prepared for the future secure relay only.
 - KPIs: Total, Active, Pending, Onboarding, Paused, Cancelled, Needs assistance.
 - Filters: All, Active, Pending, Onboarding, Paused, Cancelled, Needs assistance.
 - Table columns: Account, Email, Password, 2FA, Created At, Status, Actions.
-- Row actions: view account, open credentials, request password update (disabled), status menu.
+- Row actions: view account, open credentials worklist, request password update, status menu.
 - Status menu actions prepared: pause, cancel, mark_needs_assistance, reactivate.
 - Local projection in `src/data/client-accounts-data.ts`; future sync via secure relay only.
 - No direct Supabase/DB access; no secrets, passwords, tokens, or raw artifacts in UI/bundle.
+
+### Credentials Tab
+
+- Sidebar tab `Credentials` uses a lock icon.
+- Mirrors the useful operator subset of admin `/instagram-dashboard/credentials-actions`:
+  - KPIs: Open actions, Password updates, Verification codes, Needs review, Client action required.
+  - Filters: All, Password, Verification code, Credentials, Needs review, Completed.
+  - Cards show account, client, action type, status, priority, safe credential/login status, assigned phone, age/update labels, source, and recommended next action.
+- Client Accounts key icon opens this tab with the selected account context.
+- Actions are prepared for a future secure relay only: open account, request password update, enter verification code, mark reviewed, refresh.
+- Relay targets:
+  - password update: `/api/instagram-dashboard/client-accounts/password-update-request`;
+  - verification code: `/api/instagram-dashboard/dashboard-actions/submit-verification-code`;
+  - mark reviewed: `/api/instagram-dashboard/dashboard-actions/review`.
+- The UI never displays passwords, full secret refs, Vault UUIDs, tokens, verification codes, raw payloads, XML, screenshot paths, or ADB serials.
+- Future real reads should come through the secure relay from `account_dashboard_actions`, `account_credentials`, `client_instagram_accounts`, `ig_accounts`, manage overview, and radar overview.
+- Real email sending is intentionally out of scope here. Client onboarding in the dashboard client should capture/validate the client email and later provide the provider/queue/template used by password update and operational notifications. Until then, email delivery stays relay-ready/pending.
 
 ### Phone-Level View
 
