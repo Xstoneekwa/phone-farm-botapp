@@ -232,7 +232,21 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
 
   function archiveTargets(ids: string[]) {
     if (!ids.length) return;
-    if (!window.confirm(`${ids.length} target(s) will be archived in the local view. Continue?`)) return;
+    if (!window.confirm(`${ids.length} target(s) will be archived. Continue?`)) return;
+    if (window.botappDesktop?.profiles?.deleteTargets) {
+      setMessage(`Archiving ${ids.length} target(s) through secure relay...`);
+      void window.botappDesktop.profiles.deleteTargets({ accountId: profile.id, ids }).then(async (result) => {
+        if (!result.ok) {
+          setMessage(result.error ?? "Target archive failed.");
+          return;
+        }
+        setSelected(new Set());
+        await loadTargetsFromBackend();
+        const archived = Number(result.data?.archived ?? ids.length);
+        notifyAction(archived === 1 ? "Target archived in Supabase." : `${archived} targets archived in Supabase.`);
+      });
+      return;
+    }
     const now = new Date().toISOString();
     setTargets((current) => current.map((target) => ids.includes(target.id) ? { ...target, status: "archived", archivedAt: now, reason: "dashboard_archive" } : target));
     setSelected(new Set());
@@ -240,6 +254,19 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
   }
 
   function resetTarget(id: string) {
+    if (window.botappDesktop?.profiles?.resetTargets) {
+      setMessage("Resetting target through secure relay...");
+      void window.botappDesktop.profiles.resetTargets({ accountId: profile.id, ids: [id] }).then(async (result) => {
+        if (!result.ok) {
+          setMessage(result.error ?? "Target reset failed.");
+          return;
+        }
+        await loadTargetsFromBackend();
+        const reset = Number(result.data?.reset ?? 1);
+        notifyAction(reset === 1 ? "Target reset to pending verification in Supabase." : `${reset} targets reset in Supabase.`);
+      });
+      return;
+    }
     setTargets((current) => current.map((target) => target.id === id ? {
       ...target,
       status: "pending_verification",

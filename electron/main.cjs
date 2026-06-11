@@ -448,6 +448,17 @@ const botappEndpointRegistry = [
     testStrategy: "none",
   },
   {
+    id: "targets_reset",
+    name: "Targets reset",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/targets/reset",
+    usedBy: ["Profile targets"],
+    purpose: "Reset CT target verification state through secure relay and Supabase",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
     id: "client_accounts_overview",
     name: "Client accounts overview",
     method: "GET",
@@ -1014,12 +1025,16 @@ async function dashboardGet(pathnameSuffix, routeParams = {}) {
 }
 
 async function dashboardPost(endpointId, body, routeParams = {}) {
+  return dashboardRequest("POST", endpointId, body, routeParams);
+}
+
+async function dashboardRequest(method, endpointId, body, routeParams = {}) {
   const cfg = compassConfig();
   const endpoint = endpointById(endpointId);
   const url = endpoint ? endpointUrl(endpoint, routeParams) : dashboardApiUrl(endpointId);
   if (!url) throw new Error("Relay URL is not configured.");
   const response = await fetch(url, {
-    method: "POST",
+    method,
     headers: relayHeaders(cfg),
     body: JSON.stringify(body || {}),
   });
@@ -1083,6 +1098,45 @@ async function bulkAddProfileTargets(input) {
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Bulk target add failed.") };
   }
+}
+
+async function deleteProfileTargets(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const ids = normalizeTargetIds(input);
+  if (!accountId || !ids.length) return { ok: false, error: "Missing account id or target ids." };
+  try {
+    const data = await dashboardRequest("DELETE", "targets_collection", {
+      account_id: accountId,
+      ids,
+      actor_type: "admin",
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Target delete failed.") };
+  }
+}
+
+async function resetProfileTargets(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const ids = normalizeTargetIds(input);
+  if (!accountId || !ids.length) return { ok: false, error: "Missing account id or target ids." };
+  try {
+    const data = await dashboardRequest("PATCH", "targets_reset", {
+      account_id: accountId,
+      ids,
+      actor_type: "admin",
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Target reset failed.") };
+  }
+}
+
+function normalizeTargetIds(input) {
+  if (Array.isArray(input?.ids)) return input.ids.map((item) => String(item || "").trim()).filter(Boolean);
+  if (Array.isArray(input?.targetIds)) return input.targetIds.map((item) => String(item || "").trim()).filter(Boolean);
+  const single = String(input?.id || input?.targetId || input?.target_id || "").trim();
+  return single ? [single] : [];
 }
 
 function sanitizeAddProfilePayload(input) {
@@ -2292,6 +2346,8 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));
   ipcMain.handle("botapp:profiles:targets:add", (_event, input) => addProfileTarget(input));
   ipcMain.handle("botapp:profiles:targets:bulk-add", (_event, input) => bulkAddProfileTargets(input));
+  ipcMain.handle("botapp:profiles:targets:delete", (_event, input) => deleteProfileTargets(input));
+  ipcMain.handle("botapp:profiles:targets:reset", (_event, input) => resetProfileTargets(input));
   ipcMain.handle("botapp:endpoints:list", () => endpointRegistryList());
   ipcMain.handle("botapp:endpoints:test", (_event, input) => testBotappEndpoint(input?.id));
   ipcMain.handle("botapp:endpoints:test-all", () => testAllBotappEndpoints());

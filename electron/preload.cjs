@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     createDryRun: (input) => ipcRenderer.invoke("botapp:profiles:create-dry-run", input),
     addTarget: (input) => ipcRenderer.invoke("botapp:profiles:targets:add", input),
     bulkAddTargets: (input) => ipcRenderer.invoke("botapp:profiles:targets:bulk-add", input),
+    deleteTargets: (input) => ipcRenderer.invoke("botapp:profiles:targets:delete", input),
+    resetTargets: (input) => ipcRenderer.invoke("botapp:profiles:targets:reset", input),
   },
   endpoints: {
     list: () => ipcRenderer.invoke("botapp:endpoints:list"),
