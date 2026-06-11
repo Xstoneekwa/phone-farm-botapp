@@ -3,7 +3,7 @@ export type RouteId = "overview" | "profiles" | "account" | "devices" | "activit
 export const routes: Array<{ id: RouteId; label: string; group: string; shortcut: string }> = [
   { id: "overview", label: "Overview", group: "Ops", shortcut: "O" },
   { id: "profiles", label: "Profiles", group: "Ops", shortcut: "P" },
-  { id: "account", label: "Account Detail", group: "Ops", shortcut: "D" },
+  { id: "account", label: "Client Accounts", group: "Ops", shortcut: "C" },
   { id: "devices", label: "Devices", group: "Ops", shortcut: "V" },
   { id: "activity", label: "Activity Log", group: "Monitoring", shortcut: "L" },
   { id: "targets", label: "Targets / CT", group: "Growth", shortcut: "T" },

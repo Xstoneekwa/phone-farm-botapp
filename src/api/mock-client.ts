@@ -6,6 +6,7 @@ import {
   getMockProfileStats,
   getMockProfileTargets,
 } from "../data/profile-mock-data";
+import { buildClientAccountsOverview } from "../data/client-accounts-data";
 import { mockActivityLogs, mockApiKeys, mockDevices, mockDmTemplates, mockNotifications, mockProfiles, mockSettings, mockTargets, mockWebhooks } from "../data/mock-data";
 import type { ActionPreview, ApiResult, BotAppClient } from "./types";
 
@@ -41,6 +42,7 @@ export const mockClient: BotAppClient = {
     const profile = mockProfiles.find((item) => item.id === profileId) ?? mockProfiles[0];
     return delay(ok(getMockProfileFilters(profile)));
   },
+  listClientAccounts: () => delay(ok(buildClientAccountsOverview(mockProfiles, mockDevices))),
   listDevices: () => delay(ok(mockDevices)),
   listNotifications: () => delay(ok(mockNotifications)),
   listActivityLogs: () => delay(ok(mockActivityLogs)),

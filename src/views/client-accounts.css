@@ -1,0 +1,423 @@
+.client-accounts-screen {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.client-accounts-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 4px 0 12px;
+}
+
+.client-accounts-header span,
+.client-accounts-card-heading span,
+.client-accounts-kpi span,
+.client-accounts-filters span,
+.client-accounts-table th,
+.client-accounts-status-cell span,
+.client-accounts-empty span {
+  color: var(--fg-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.client-accounts-header h2 {
+  margin: 2px 0 0;
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.client-accounts-kpis {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.client-accounts-kpi,
+.client-accounts-empty {
+  border: 1px solid rgba(143, 162, 176, .22);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.client-accounts-kpi {
+  min-width: 0;
+  min-height: 112px;
+  overflow: hidden;
+  padding: 14px;
+}
+
+.client-accounts-kpi strong {
+  display: block;
+  color: var(--fg-primary);
+  font-size: 24px;
+  line-height: 1;
+  margin: 14px 0 8px;
+}
+
+.client-accounts-kpi small,
+.client-accounts-table td,
+.client-accounts-empty p {
+  color: var(--fg-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.client-accounts-kpi small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-accounts-kpi.good strong { color: #009B80; }
+.client-accounts-kpi.warning strong { color: #B66A00; }
+.client-accounts-kpi.danger strong { color: #AA365A; }
+
+.client-accounts-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(143, 162, 176, .24);
+  border-radius: 16px;
+  background: rgba(255,255,255,.74);
+  box-shadow: 0 10px 28px rgba(50,73,92,.08);
+  padding: 14px;
+}
+
+.client-accounts-card-heading h3 {
+  margin: 4px 0 0;
+  color: var(--fg-primary);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.client-accounts-filters {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.client-accounts-filters button {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  border: 1px solid rgba(143,162,176,.24);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  padding: 0 12px;
+}
+
+.client-accounts-filters span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-accounts-filters button.active {
+  border-color: rgba(101,88,245,.32);
+  background: rgba(101,88,245,.12);
+  color: #4E46D6;
+}
+
+.client-accounts-filters strong {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.client-accounts-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.client-accounts-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: 0 7px;
+  table-layout: fixed;
+}
+
+.client-accounts-table th {
+  padding: 0 8px 6px;
+  text-align: left;
+}
+
+.client-accounts-table td {
+  background: #F7FBFC;
+  border-top: 1px solid rgba(143,162,176,.18);
+  border-bottom: 1px solid rgba(143,162,176,.18);
+  padding: 10px 6px;
+  vertical-align: middle;
+}
+
+.client-accounts-table td:first-child {
+  border-left: 1px solid rgba(143,162,176,.18);
+  border-radius: 10px 0 0 10px;
+}
+
+.client-accounts-table td:last-child {
+  border-right: 1px solid rgba(143,162,176,.18);
+  border-radius: 0 10px 10px 0;
+}
+
+.client-accounts-account-row,
+.client-accounts-actions {
+  display: flex;
+  align-items: center;
+}
+
+.client-accounts-account-row {
+  gap: 8px;
+  min-width: 0;
+}
+
+.client-accounts-account-cell {
+  min-width: 0;
+}
+
+.client-accounts-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(143,162,176,.18);
+  border-radius: 999px;
+  background: #EEF3F6;
+  color: var(--fg-secondary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.client-account-link {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--fg-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-account-link:hover {
+  color: #4E46D6;
+}
+
+.client-accounts-table small {
+  color: var(--fg-tertiary);
+  display: block;
+  font-size: 11px;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.client-account-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  border: 1px solid rgba(143,162,176,.24);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--fg-secondary);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 0 8px;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.client-account-badge.good {
+  border-color: rgba(0,168,145,.18);
+  background: #DDF6F2;
+  color: #007C70;
+}
+
+.client-account-badge.warning {
+  border-color: rgba(234,179,8,.20);
+  background: #FFECC2;
+  color: #9A5B00;
+}
+
+.client-account-badge.danger {
+  border-color: rgba(196,74,122,.20);
+  background: #F2DCE4;
+  color: #A43D5E;
+}
+
+.client-accounts-status-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.client-accounts-status-cell small.good { color: #009B80; }
+.client-accounts-status-cell small.warning { color: #B66A00; }
+.client-accounts-status-cell small.danger { color: #AA365A; }
+.client-accounts-account-cell small.good { color: #009B80; }
+.client-accounts-account-cell small.warning { color: #B66A00; }
+.client-accounts-account-cell small.danger { color: #AA365A; }
+
+.client-accounts-actions {
+  gap: 4px;
+  position: relative;
+}
+
+.client-accounts-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(143,162,176,.22);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.client-accounts-icon-button:hover:not(:disabled) {
+  border-color: rgba(101,88,245,.32);
+  color: #4E46D6;
+}
+
+.client-accounts-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.client-accounts-icon-button svg,
+.client-accounts-status-popover svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.client-accounts-status-menu {
+  position: relative;
+}
+
+.client-accounts-status-popover {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  width: 290px;
+  border: 1px solid rgba(143,162,176,.28);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(50,73,92,.22);
+  padding: 8px;
+}
+
+.client-accounts-status-popover button {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  padding: 8px;
+  text-align: left;
+}
+
+.client-accounts-status-popover button:hover:not(:disabled) {
+  background: #EEF3F6;
+}
+
+.client-accounts-status-popover button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.client-accounts-status-popover button.danger strong {
+  color: #AA365A;
+}
+
+.client-accounts-status-popover strong {
+  display: block;
+  color: var(--fg-primary);
+  font-size: 12px;
+}
+
+.client-accounts-status-popover small {
+  color: var(--fg-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.client-accounts-empty,
+.client-accounts-message {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(143,162,176,.22);
+  border-radius: 10px;
+  background: #F7FBFC;
+  color: var(--fg-secondary);
+  padding: 12px;
+}
+
+.client-accounts-empty strong {
+  color: var(--fg-primary);
+  font-size: 14px;
+}
+
+.client-accounts-message {
+  border-color: rgba(0,168,145,.18);
+  background: #E2F7F3;
+  color: #007C70;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (max-width: 1180px) {
+  .client-accounts-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .client-accounts-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .client-accounts-kpis,
+  .client-accounts-filters {
+    grid-template-columns: 1fr;
+  }
+}

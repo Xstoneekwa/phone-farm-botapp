@@ -485,6 +485,114 @@ export type BotProfile = {
   runtimeLock: "none" | "device_level_lock" | "assignment_reserved";
 };
 
+export type BotAppClientAccountStatus = "active" | "pending" | "onboarding" | "paused" | "cancelled" | "unknown";
+export type BotAppClientAccountLoginStatus = ProfileLoginStatus;
+export type BotAppClientAccountCredentialStatus = CredentialStatus;
+export type BotAppClientAccountReadiness = BotProfile["readiness"];
+export type BotAppClientAccountEntitlement = string;
+
+export type BotAppClientAccountAssignment = {
+  deviceId: string;
+  deviceName: string;
+  deviceStatus: DeviceStatus;
+  appInstanceLabel: string;
+  packageName: string;
+  assignmentStatus: BotProfile["assignmentState"];
+  slotKind: string;
+  activeWindow: string;
+};
+
+export type BotAppClientAccountAction =
+  | "view_account"
+  | "open_profile"
+  | "open_targets"
+  | "open_settings"
+  | "check_readiness"
+  | "auto_login"
+  | "archive"
+  | "trash"
+  | "pause"
+  | "cancel"
+  | "mark_needs_assistance"
+  | "reactivate"
+  | "refresh";
+
+export type BotAppClientAccount = {
+  accountId: string;
+  profileId: string;
+  clientId: string;
+  clientName: string;
+  username: string;
+  displayName: string;
+  platform: BotProfile["platform"];
+  createdAtLabel: string;
+  accountStatus: BotAppClientAccountStatus;
+  adminStatus: string;
+  customerStatus: string;
+  subscriptionStatus: string;
+  lifecycleStatus: ProfileLifecycleStatus;
+  loginStatus: BotAppClientAccountLoginStatus;
+  credentialStatus: BotAppClientAccountCredentialStatus;
+  credentialsConfigured: boolean;
+  reauthRequired: boolean;
+  twoFactorStatus: "enabled" | "disabled" | "code_required" | "unknown";
+  readiness: BotAppClientAccountReadiness;
+  eligibility: BotProfile["eligibility"];
+  eligibilityReason: string;
+  reasonLabel: string;
+  packageLabel: BotProfile["package"];
+  entitlementSummary: string;
+  entitlements: BotAppClientAccountEntitlement[];
+  assignment: BotAppClientAccountAssignment;
+  lastActivityAt: string | null;
+  targetsCount: number;
+  actionsNeeded: string[];
+  safeEmailDisplay: string;
+  sourceLabel: "admin-dashboard manage_overview" | "local projection";
+  profileImageUrl: string | null;
+  instagramVerificationStatus: "verified" | "pending" | "unknown";
+  passwordStatus: "configured" | "missing" | "reauth_required" | "update_needed" | "unknown";
+  twoFactorDisplay: "enabled" | "disabled" | "code required" | "pending action" | "checkpoint" | "blocked" | "unknown";
+};
+
+export type BotAppClientAccountsSummary = {
+  total: number;
+  active: number;
+  pending: number;
+  onboarding: number;
+  paused: number;
+  cancelled: number;
+  needsAssistance: number;
+  reauthRequired: number;
+};
+
+export type BotAppClientAccountsFilters = {
+  query: string;
+  status: "all" | BotAppClientAccountStatus | "needs-assistance";
+};
+
+export type BotAppClientAccountsOverview = {
+  items: BotAppClientAccount[];
+  summary: BotAppClientAccountsSummary;
+  sourceStatus: {
+    manageOverview: "connected" | "pending";
+    credentialsActions: "connected" | "pending";
+    statusMutations: "pending";
+    botAppRelay: "pending";
+  };
+  relayPayload: BotAppClientAccountsRelayPayload;
+};
+
+export type BotAppClientAccountsRelayPayload = {
+  action: "client_accounts_overview";
+  source: "BotApp";
+  requested_by: string | null;
+  include: Array<"manage_overview" | "credentials_actions" | "readiness_projection" | "assignments" | "targets_summary">;
+  metadata_safe: {
+    expected_effect: "read_only_client_accounts_overview";
+  };
+};
+
 export type DeviceProfileGroup = {
   deviceId: string;
   deviceLabel: string;
@@ -1360,6 +1468,7 @@ export type BotAppClient = {
   getProfileTargets(profileId: string): Promise<ApiResult<ProfileTarget[]>>;
   getProfileSettings(profileId: string): Promise<ApiResult<ProfileSettings>>;
   getProfileFilters(profileId: string): Promise<ApiResult<ProfileFilters>>;
+  listClientAccounts(): Promise<ApiResult<BotAppClientAccountsOverview>>;
   listDevices(): Promise<ApiResult<Device[]>>;
   listNotifications(): Promise<ApiResult<NotificationItem[]>>;
   listActivityLogs(): Promise<ApiResult<ActivityLogEntry[]>>;

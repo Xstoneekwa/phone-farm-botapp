@@ -2,7 +2,7 @@
 
 BotApp is the macOS operator application for the Phone Farm system at Boost My Businesses. It provides a dense desktop control surface for phones, Instagram/TikTok profiles, runtime state, logs, target accounts, settings, and safety-gated actions.
 
-The current checkpoint delivers the complete **Profiles** workspace plus the **Devices** phone inventory workspace with local data only. Operator UI labels are product-ready; write actions prepare admin-backed payloads and do **not** call the real backend until a secure BotApp API relay is validated.
+The current checkpoint delivers the complete **Profiles** workspace, the **Devices** phone inventory workspace, and the **Client Accounts** admin-parity worklist with local data only. Operator UI labels are product-ready; write actions prepare admin-backed payloads and do **not** call the real backend until a secure BotApp API relay is validated.
 
 ## Product vision
 
@@ -18,7 +18,7 @@ The renderer must never receive secrets, service-role credentials, raw device ar
 
 ## Current checkpoint
 
-Profiles and Devices foundation (branch `botapp-mac-foundation`):
+Profiles, Devices, and Client Accounts foundation (branch `botapp-mac-foundation`):
 
 - Profiles grouped by phone/device with search and platform filters
 - Phone-level View mirror through Electron IPC and `scrcpy`
@@ -27,6 +27,11 @@ Profiles and Devices foundation (branch `botapp-mac-foundation`):
 - **Add Phone** drawer aligned to the dashboard admin `add_physical_phone` contract
 - Device actions: phone view open/focus/close, Open All, Close All, Restart All, Restart phone, History, Edit, Delete
 - Device actions are relay-ready only; restarts, edits, deletes, and Add Phone do not perform real mutations from BotApp
+- Client Accounts tab renamed from Account Detail with users-group sidebar icon
+- Client Accounts strict admin parity: 7 KPIs, 7 status filters, 7 table columns, row action icons, and status menu
+- Client Accounts columns: Account, Email, Password, 2FA, Created At, Status, Actions
+- Client Accounts actions prepared only: view account, open credentials, request password update (disabled), pause/cancel/mark needs assistance/reactivate
+- Client Accounts future sync via secure relay (`client_accounts_overview`); no direct Supabase/DB access from BotApp
 - Complete profile toolbar: Stats, Logs, Targets, Start, Auto Login, Check Login, Stop, Settings, Filters, Assign Now, Archive, Delete
 - **Add Profile** — six-step wizard with admin create contract payload
 - **Stats** — follow-back / like-back columns, Save Stats

@@ -7,7 +7,7 @@ This handoff captures the current implementation checkpoint for future developer
 - Repository: BotApp workspace root
 - Branch: `botapp-mac-foundation`
 - Mode: local-data macOS app foundation, prepared for future secure relay
-- Current checkpoint: Profiles actions, settings, drawers, Devices inventory, and phone-level View complete
+- Current checkpoint: Profiles actions, settings, drawers, Devices inventory, Client Accounts admin parity, and phone-level View complete
 - Backend posture: no real backend calls, no Supabase direct access, no worker/device mutations
 
 ## Completed In This Checkpoint
@@ -112,6 +112,18 @@ All write/action operations are prepared for the future secure relay only.
 - Restart All / Restart phone prepare secure relay payloads only.
 - History/Edit/Delete are prepared safe UI paths only and do not mutate backend/device state.
 
+### Client Accounts Tab
+
+- Sidebar label renamed to `Client Accounts` with users-group icon.
+- Strict dashboard admin parity — no extra search, no detail drawer, no extra columns.
+- KPIs: Total, Active, Pending, Onboarding, Paused, Cancelled, Needs assistance.
+- Filters: All, Active, Pending, Onboarding, Paused, Cancelled, Needs assistance.
+- Table columns: Account, Email, Password, 2FA, Created At, Status, Actions.
+- Row actions: view account, open credentials, request password update (disabled), status menu.
+- Status menu actions prepared: pause, cancel, mark_needs_assistance, reactivate.
+- Local projection in `src/data/client-accounts-data.ts`; future sync via secure relay only.
+- No direct Supabase/DB access; no secrets, passwords, tokens, or raw artifacts in UI/bundle.
+
 ### Phone-Level View
 
 - `electron/device-view-manager.cjs` owns `scrcpy` processes in the Electron main process.
@@ -199,9 +211,9 @@ Before any checkpoint commit:
 
 Recommended next milestone:
 
-`Client Accounts`
+`Top-level polish + BotApp API relay`
 
-Profiles toolbar/settings/drawers and Devices are complete for this checkpoint. For future real actions or Client Accounts work, inspect `boost-ai-frontend` first and document admin role, enabled/disabled states, modals/drawers, endpoints/API/RPC/tables, payloads, validations, and backend effects. BotApp should replicate the operator UX, prepare future relay payloads, and keep execution preview-only until the secure BotApp relay is validated.
+Profiles toolbar/settings/drawers, Devices, and Client Accounts are complete for this checkpoint. For future real actions, inspect `boost-ai-frontend` first and document admin role, enabled/disabled states, modals/drawers, endpoints/API/RPC/tables, payloads, validations, and backend effects. BotApp should replicate the operator UX, prepare future relay payloads, and keep execution preview-only until the secure BotApp relay is validated.
 
 Archive/Delete are now modeled from the admin lifecycle route: archive schedules Trash after 30 days, delete means move to Trash with restore available for 30 days, and permanent delete remains pending/disabled in the admin dashboard.
 
@@ -222,6 +234,9 @@ Check Login / Readiness is modeled from the admin readiness route: admin audienc
 - `src/views/profiles/profiles.css`
 - `src/views/Devices.tsx`
 - `src/views/devices.css`
+- `src/views/ClientAccounts.tsx`
+- `src/views/client-accounts.css`
+- `src/data/client-accounts-data.ts`
 - `src/desktop/device-views.ts`
 - `electron/device-view-manager.cjs`
 - `src/api/types.ts`

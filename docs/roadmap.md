@@ -2,7 +2,7 @@
 
 ## Latest checkpoint
 
-**Message:** `feat(botapp): add devices tab with phone controls`
+**Message:** `feat(botapp): add client accounts admin parity`
 
 **Branch:** `botapp-mac-foundation`
 
@@ -35,6 +35,12 @@
 - Local phone view mapping via `BOTAPP_DEVICE_SERIAL_MAP`; `.botapp.devices.local.json` is gitignored and only `.botapp.devices.local.example.json` is committed
 - Open All / Close All target phone views only and ignore unavailable fixtures
 - Restart All / Restart phone, History/Edit/Delete are relay-ready only
+- Client Accounts tab renamed from Account Detail with users-group sidebar icon
+- Client Accounts strict admin parity: 7 KPIs, 7 status filters, 7 table columns
+- Client Accounts columns: Account, Email, Password, 2FA, Created At, Status, Actions
+- Client Accounts row actions: view account, open credentials, request password update (disabled), status menu
+- Client Accounts status actions prepared: pause, cancel, mark_needs_assistance, reactivate
+- Client Accounts future sync via secure relay; no direct DB access from BotApp
 
 ## Done (foundation)
 
@@ -56,16 +62,15 @@
 
 ## Next milestone
 
-Profiles toolbar/settings/drawers and Devices are now checkpoint-complete. The next large chantier is **Client Accounts** parity with the dashboard admin.
+Profiles toolbar/settings/drawers, Devices, and Client Accounts are now checkpoint-complete. The next large chantier is remaining top-level polish and the secure BotApp API relay.
 
 Required order from here:
 
-1. Client Accounts tab
-2. Polish remaining top-level routes (Overview, global Targets, Settings)
-3. BotApp API relay — read-only profiles, stats, logs, targets
-4. Guarded write paths (settings, filters, targets, runs)
-5. Realtime events through relay
-6. Focused tests: filter validation, target export redaction, run-control payloads, avatar sanitizer
+1. Polish remaining top-level routes (Overview, global Targets, Settings)
+2. BotApp API relay — read-only profiles, stats, logs, targets
+3. Guarded write paths (settings, filters, targets, runs)
+4. Realtime events through relay
+5. Focused tests: filter validation, target export redaction, run-control payloads, avatar sanitizer
 
 Future write/action implementation rules remain:
 

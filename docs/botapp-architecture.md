@@ -156,7 +156,7 @@ Replace or wrap `mockClient` with a real client when the relay is validated. Kee
 
 ---
 
-## 3. Checkpoint status (Profiles + Devices)
+## 3. Checkpoint status (Profiles + Devices + Client Accounts)
 
 ### Done in this checkpoint
 
@@ -166,6 +166,11 @@ Replace or wrap `mockClient` with a real client when the relay is validated. Kee
 | Sidebar | Icon-only nav with hover labels, counters, phone icon for Devices |
 | Devices inventory | Two-column phone table, 41 saved / 40 active / 1 offline |
 | Devices actions | Add Phone, Open All, Close All, Restart All, History, Edit, Delete |
+| Client Accounts | Renamed tab; strict admin parity worklist with users-group sidebar icon |
+| Client Accounts KPIs | Total, Active, Pending, Onboarding, Paused, Cancelled, Needs assistance |
+| Client Accounts filters | All, Active, Pending, Onboarding, Paused, Cancelled, Needs assistance |
+| Client Accounts table | Account, Email, Password, 2FA, Created At, Status, Actions |
+| Client Accounts actions | View account, open credentials, request password update (disabled), status menu |
 | Add Phone | Admin parity with `add_physical_phone`; relay-ready only |
 | Local device mapping | `BOTAPP_DEVICE_SERIAL_MAP`, gitignored `.botapp.devices.local.json`, example placeholders only |
 | Complete toolbar | Stats, Logs, Targets, Start, Auto Login, Check Login, Stop, Settings, Filters, Assign Now, Archive, Delete |
@@ -187,6 +192,7 @@ Replace or wrap `mockClient` with a real client when the relay is validated. Kee
 - CT validation and avatar relay
 - Device control and worker dispatch
 - Devices Add/Edit/Delete/Restart execution
+- Client Accounts status mutations (`/api/instagram-dashboard/accounts/status` PATCH equivalent)
 
 ---
 
@@ -272,14 +278,13 @@ Workflow:
 
 ## 7. Immediate roadmap
 
-Profiles toolbar/settings/drawers and Devices are complete for this checkpoint. The next large milestone is **Client Accounts** parity with the dashboard admin.
+Profiles toolbar/settings/drawers, Devices, and Client Accounts are complete for this checkpoint. The next large milestone is remaining top-level screen polish and the secure BotApp API relay.
 
-1. Client Accounts tab
-2. Remaining top-level screens polish
-3. BotApp API relay — read-only profiles/stats/logs/targets
-4. Guarded write actions (settings, filters, targets, runs)
-5. Realtime log/event stream through relay
-6. Automated tests for filters validation, target export redaction, run-control payloads, avatar sanitizer
+1. Remaining top-level screens polish
+2. BotApp API relay — read-only profiles/stats/logs/targets
+3. Guarded write actions (settings, filters, targets, runs)
+4. Realtime log/event stream through relay
+5. Automated tests for filters validation, target export redaction, run-control payloads, avatar sanitizer
 
 Each toolbar action must be inspected first in `boost-ai-frontend` before implementation: role, enabled/disabled states, modals/drawers, endpoints, RPC/tables, payloads, validations, and backend effects. BotApp should prepare future types/payloads but must not execute real mutations until the secure relay is validated.
 

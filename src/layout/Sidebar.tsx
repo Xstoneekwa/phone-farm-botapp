@@ -13,10 +13,21 @@ function DeviceNavIcon() {
   );
 }
 
+function ClientAccountsNavIcon() {
+  return (
+    <svg className="nav-users-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20" />
+      <circle cx="10" cy="7.5" r="3.5" />
+      <path d="M20 20v-1.2a3 3 0 0 0-2.4-2.9" />
+      <path d="M15.8 4.3a3.2 3.2 0 0 1 0 6.2" />
+    </svg>
+  );
+}
+
 const navIcons: Record<RouteId, ReactNode> = {
   overview: "⌁",
   profiles: "◎",
-  account: "◉",
+  account: <ClientAccountsNavIcon />,
   devices: <DeviceNavIcon />,
   activity: "⌘",
   targets: "◇",
