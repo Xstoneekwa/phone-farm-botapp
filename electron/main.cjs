@@ -448,6 +448,28 @@ const botappEndpointRegistry = [
     testStrategy: "none",
   },
   {
+    id: "profiles_account_status",
+    name: "Profile account status action",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/accounts/status",
+    usedBy: ["Profiles"],
+    purpose: "Pause or reactivate account admin status through secure relay without login/provisioning/run",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_account_lifecycle",
+    name: "Profile account lifecycle action",
+    method: "POST",
+    path: "/api/instagram-dashboard/accounts/lifecycle",
+    usedBy: ["Profiles"],
+    purpose: "Archive or restore account lifecycle through secure relay without login/provisioning/run",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
     id: "targets_collection",
     name: "Targets collection",
     method: "POST",
@@ -1124,6 +1146,44 @@ async function profileCredentialsSubmit(input) {
     return { ok: true, data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Credentials submit failed.") };
+  }
+}
+
+async function performProfileAction(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const action = String(input?.action || "").trim().toLowerCase();
+  const reason = String(input?.reason || "botapp_account_action").trim().slice(0, 160) || "botapp_account_action";
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  if (!["start", "stop", "archive", "restore"].includes(action)) return { ok: false, error: "Unsupported account action." };
+  try {
+    const common = {
+      account_id: accountId,
+      reason,
+      actor_type: "botapp",
+      start_run: false,
+      provisioning_enabled: false,
+      login_enabled: false,
+    };
+    const data = action === "start" || action === "stop"
+      ? await dashboardRequest("PATCH", "profiles_account_status", {
+        ...common,
+        action: action === "start" ? "reactivate" : "pause",
+        metadata: {
+          botapp_action: action,
+          expected_effect: "safe_status_write_only",
+        },
+      })
+      : await dashboardPost("profiles_account_lifecycle", {
+        ...common,
+        action,
+        metadata: {
+          botapp_action: action,
+          expected_effect: "safe_lifecycle_write_only",
+        },
+      });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Profile account action failed.") };
   }
 }
 
@@ -2405,6 +2465,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));
   ipcMain.handle("botapp:profiles:create", (_event, input) => profileCreate(input));
   ipcMain.handle("botapp:profiles:credentials:submit", (_event, input) => profileCredentialsSubmit(input));
+  ipcMain.handle("botapp:profiles:action", (_event, input) => performProfileAction(input));
   ipcMain.handle("botapp:profiles:targets:add", (_event, input) => addProfileTarget(input));
   ipcMain.handle("botapp:profiles:targets:bulk-add", (_event, input) => bulkAddProfileTargets(input));
   ipcMain.handle("botapp:profiles:targets:delete", (_event, input) => deleteProfileTargets(input));

@@ -1,5 +1,4 @@
 import type { BotProfile, ProfileToolbarAction, ProfileRequirementState } from "../../api/types";
-import { isStartDisabled, isStopEnabled, startDisabledReason, stopDisabledReason } from "./run-control";
 
 const toolbarActions: Array<{ id: ProfileToolbarAction; label: string; danger?: boolean }> = [
   { id: "stats", label: "Stats" },
@@ -40,8 +39,8 @@ function disabledReason(profile: BotProfile, action: ProfileToolbarAction): Prof
 }
 
 function runControlDisabledReason(profile: BotProfile, action: ProfileToolbarAction) {
-  if (action === "play" && isStartDisabled(profile)) return startDisabledReason(profile);
-  if (action === "stop" && !isStopEnabled(profile)) return stopDisabledReason(profile);
+  void profile;
+  void action;
   return null;
 }
 
@@ -50,9 +49,9 @@ function tooltipText(profile: BotProfile, action: ProfileToolbarAction, label: s
   const runControlReason = runControlDisabledReason(profile, action);
   if (runControlReason) return `${label} · ${runControlReason}`;
   if (requirementReason) return `${label} · ${requirementReason.label}: ${requirementReason.detail}`;
-  if (action === "play") return "Start manual account_session run through future secure BotApp relay.";
+  if (action === "play") return "Reactivate account status through secure BotApp relay. Does not start a run.";
   if (action === "check_readiness") return "Check login/readiness now without starting a Growth session.";
-  if (action === "stop") return "Cancel queued run request and request stop for active run through future secure BotApp relay.";
+  if (action === "stop") return "Pause account status through secure BotApp relay. Does not stop worker runtime.";
   return label;
 }
 

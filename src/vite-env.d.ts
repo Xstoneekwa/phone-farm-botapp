@@ -59,6 +59,9 @@ interface Window {
       credentials?: {
         submit: (input: { accountId: string; username: string; password: string; dryRun?: boolean }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       };
+      actions?: {
+        perform: (input: { accountId: string; action: "start" | "stop" | "archive" | "restore"; reason?: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      };
       addTarget: (input: { accountId: string; username: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       bulkAddTargets: (input: { accountId: string; usernames: string[] }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       deleteTargets: (input: { accountId: string; ids: string[] }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;

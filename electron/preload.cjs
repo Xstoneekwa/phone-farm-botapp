@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     credentials: {
       submit: (input) => ipcRenderer.invoke("botapp:profiles:credentials:submit", input),
     },
+    actions: {
+      perform: (input) => ipcRenderer.invoke("botapp:profiles:action", input),
+    },
     addTarget: (input) => ipcRenderer.invoke("botapp:profiles:targets:add", input),
     bulkAddTargets: (input) => ipcRenderer.invoke("botapp:profiles:targets:bulk-add", input),
     deleteTargets: (input) => ipcRenderer.invoke("botapp:profiles:targets:delete", input),
