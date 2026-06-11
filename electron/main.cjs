@@ -1068,6 +1068,30 @@ async function profileCreateDryRun(input) {
   }
 }
 
+async function profileCreate(input) {
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) return { ok: false, error: "Configure the relay URL in API / Webhooks / Keys to create profiles." };
+  try {
+    const payload = sanitizeAddProfilePayload(input);
+    if (String(payload.login_method || "manual") !== "manual") {
+      return { ok: false, error: "BotApp real create currently supports manual login only; credentials are not submitted from BotApp." };
+    }
+    delete payload.password;
+    delete payload.email;
+    const data = await dashboardPost("profiles_create", {
+      ...payload,
+      dry_run: false,
+      login_method: "manual",
+      provisioning_enabled: false,
+      login_enabled: false,
+      start_run: false,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Profile create failed.") };
+  }
+}
+
 async function addProfileTarget(input) {
   const accountId = String(input?.accountId || input?.account_id || "").trim();
   const username = String(input?.username || input?.target_username || "").trim();
@@ -2344,6 +2368,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:data:overview", () => botappOverviewData());
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));
+  ipcMain.handle("botapp:profiles:create", (_event, input) => profileCreate(input));
   ipcMain.handle("botapp:profiles:targets:add", (_event, input) => addProfileTarget(input));
   ipcMain.handle("botapp:profiles:targets:bulk-add", (_event, input) => bulkAddProfileTargets(input));
   ipcMain.handle("botapp:profiles:targets:delete", (_event, input) => deleteProfileTargets(input));

@@ -574,21 +574,26 @@ export function ProfilesView({
         <AddProfileDrawer
           groups={groups}
           onClose={() => setAddProfileOpen(false)}
-          onSubmit={async (payload) => {
-            if (!window.botappDesktop?.profiles?.createDryRun) {
-              const message = "Add Profile backend dry-run unavailable in this runtime.";
+          onSubmit={async (payload, mode) => {
+            const createFn = mode === "create" ? window.botappDesktop?.profiles?.create : window.botappDesktop?.profiles?.createDryRun;
+            if (!createFn) {
+              const message = mode === "create" ? "Add Profile backend create unavailable in this runtime." : "Add Profile backend dry-run unavailable in this runtime.";
               onMockSubmit(message);
               return { ok: false, message };
             }
-            const result = await window.botappDesktop.profiles.createDryRun(payload);
+            const result = await createFn(payload);
             if (!result.ok) {
-              const message = result.error || "Add Profile backend dry-run failed.";
+              const message = result.error || (mode === "create" ? "Add Profile backend create failed." : "Add Profile backend dry-run failed.");
               onMockSubmit(message);
               return { ok: false, message };
             }
             const account = (result.data?.account ?? {}) as Record<string, unknown>;
-            const message = `Add Profile dry-run OK: @${String(account.username || "unknown")} · ${String(account.status || "validated")} · no mutation executed.`;
+            const automation = (result.data?.automation ?? {}) as Record<string, unknown>;
+            const message = mode === "create"
+              ? `Add Profile created: @${String(account.username || "unknown")} · ${String(account.status || "created")} · login=${String(automation.login_started ?? false)} · run=${String(automation.run_started ?? false)}.`
+              : `Add Profile dry-run OK: @${String(account.username || "unknown")} · ${String(account.status || "validated")} · no mutation executed.`;
             onMockSubmit(message);
+            if (mode === "create") onRefresh();
             return { ok: true, message };
           }}
         />

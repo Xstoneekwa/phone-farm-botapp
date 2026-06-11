@@ -87,7 +87,7 @@ export function AddProfileDrawer({
 }: {
   groups: DeviceProfileGroup[];
   onClose: () => void;
-  onSubmit: (payload: Record<string, unknown>) => Promise<{ ok: boolean; message: string }>;
+  onSubmit: (payload: Record<string, unknown>, mode: "dry_run" | "create") => Promise<{ ok: boolean; message: string }>;
 }) {
   const [step, setStep] = useState<AddProfileStep>(0);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -136,15 +136,19 @@ export function AddProfileDrawer({
     });
   }
 
-  async function submitProfile() {
+  async function submitProfile(mode: "dry_run" | "create") {
+    if (mode === "create" && form.login_method !== "manual") {
+      setSubmitState({ loading: false, message: "Backend create from BotApp is manual-login only; credentials are not submitted from BotApp yet." });
+      return;
+    }
     const payload = {
       endpoint_contract: "/api/instagram-dashboard/accounts/create",
-      mode: "backend_dry_run",
+      mode: mode === "create" ? "backend_real_write" : "backend_dry_run",
       username: verification?.canonical_username || form.username.trim().toLowerCase(),
       login_method: form.login_method,
-      password: form.login_method === "credentials" ? form.password : "",
-      password_status: form.login_method === "credentials" ? "write_only_dry_run" : "not_submitted",
-      email: form.email.trim(),
+      password: mode === "dry_run" && form.login_method === "credentials" ? form.password : "",
+      password_status: form.login_method === "credentials" ? (mode === "dry_run" ? "write_only_dry_run" : "blocked_from_botapp_real_write") : "not_submitted",
+      email: mode === "dry_run" ? form.email.trim() : "",
       email_present: Boolean(form.email.trim()),
       display_name: form.display_name.trim(),
       internal_label: form.internal_label.trim(),
@@ -165,10 +169,13 @@ export function AddProfileDrawer({
         login_started: false,
         run_started: false,
       },
+      provisioning_enabled: false,
+      login_enabled: false,
+      start_run: false,
       sync_targets: ["admin_dashboard", "client_dashboard", "database", "botapp"],
     };
-    setSubmitState({ loading: true, message: "Validating create contract through secure relay..." });
-    const result = await onSubmit(payload);
+    setSubmitState({ loading: true, message: mode === "create" ? "Creating account in Supabase through secure relay..." : "Validating create contract through secure relay..." });
+    const result = await onSubmit(payload, mode);
     setSubmitState({ loading: false, message: result.message });
     if (!result.ok) return;
     setShowConfirm(false);
@@ -292,8 +299,8 @@ export function AddProfileDrawer({
             <div><dt>Runtime mode</dt><dd>{selectedRuntime.label}</dd></div>
             <div><dt>Add-ons</dt><dd>{selectedAddons.length ? selectedAddons.map((addon) => addon.label).join(", ") : "none"}</dd></div>
             <div><dt>Schedule</dt><dd>{selectedSlot?.label || "-"} · visible later in Schedule drawer</dd></div>
-            <div><dt>Safety</dt><dd>No Supabase, Instagram, ADB, worker, provisioning, login, or run is called from this preview.</dd></div>
-            <div><dt>Submit contract</dt><dd>Dry-run POST `/api/instagram-dashboard/accounts/create` through secure relay.</dd></div>
+            <div><dt>Safety</dt><dd>Create writes Supabase/backend records only. It does not log in, provision a phone, start a worker, or start a run.</dd></div>
+            <div><dt>Submit contract</dt><dd>POST `/api/instagram-dashboard/accounts/create` through secure relay. Credentials real-write from BotApp is blocked.</dd></div>
             {submitState.message ? <div><dt>Backend status</dt><dd>{submitState.message}</dd></div> : null}
           </dl>
         ) : null}
@@ -303,10 +310,12 @@ export function AddProfileDrawer({
       <div className="add-profile-confirm-backdrop" role="presentation" onMouseDown={() => setShowConfirm(false)}>
         <section className="add-profile-confirm" role="dialog" aria-modal="true" aria-labelledby="add-profile-confirm-title" onMouseDown={(event) => event.stopPropagation()}>
           <h3 id="add-profile-confirm-title">Create this profile?</h3>
-          <p>This validates the admin create contract through the secure backend relay in dry-run mode. It does not create an account, launch login, provisioning, or a run.</p>
+          <p>This can validate the contract in dry-run mode or create the account in Supabase only. It will not log in, provision a phone, start a worker, or start a run.</p>
+          {form.login_method !== "manual" ? <p className="ig-profile-message">Create in backend is manual-login only from BotApp; credentials are not submitted in this step.</p> : null}
           <div className="add-profile-confirm-actions">
             <Button variant="ghost" onClick={() => setShowConfirm(false)} disabled={submitState.loading}>Cancel</Button>
-            <Button onClick={() => void submitProfile()} disabled={submitState.loading}>{submitState.loading ? "Validating..." : "Dry-run create"}</Button>
+            <Button onClick={() => void submitProfile("dry_run")} disabled={submitState.loading}>{submitState.loading ? "Working..." : "Dry-run"}</Button>
+            <Button variant="primary" onClick={() => void submitProfile("create")} disabled={submitState.loading || form.login_method !== "manual"}>{submitState.loading ? "Working..." : "Create in backend"}</Button>
           </div>
         </section>
       </div>
