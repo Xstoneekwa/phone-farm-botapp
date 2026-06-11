@@ -15,7 +15,7 @@ BotApp Packaging V1 uses Electron + electron-builder. The app is a Vite/React UI
 
 This build is UI-first with **local fixture data**. It does not call Supabase, Instagram, ADB, devices, workers, or runtime actions directly.
 
-Start, stop, settings save, targets mutations, and Add Profile prepare admin-backed payloads and show confirmation/toast feedback only. Real execution requires a future **secure BotApp API relay**.
+Start, stop, settings save, targets mutations, Add Profile, Add Phone, Restart All, Restart phone, Edit Device, and Delete Device prepare admin/device-control payloads and show confirmation/toast feedback only. Real execution requires a future **secure BotApp API relay**.
 
 ## Phone View / scrcpy
 
@@ -25,10 +25,13 @@ Runtime rules:
 
 - `scrcpy` must be installed on operator Macs.
 - `BOTAPP_SCRCPY_PATH=/absolute/path/to/scrcpy` overrides PATH resolution.
-- `BOTAPP_DEVICE_SERIAL_MAP='{"phone_01":"adb-serial"}'` can map local fixture phone ids/labels to development devices.
+- `BOTAPP_DEVICE_SERIAL_MAP='phone_01:YOUR_ADB_SERIAL_1,phone_02:YOUR_ADB_SERIAL_2'` can map local fixture phone ids/labels to development devices.
+- `.botapp.devices.local.example.json` documents the local override shape. `.botapp.devices.local.json` is gitignored and can hold machine-local serials for testing.
 - Product source must not hardcode real ADB serials.
 - One phone opens one mirror view; duplicate opens focus the existing view.
 - Multiple phones can be mirrored at once.
+- Devices Open All targets only mapped available phone ids and skips unavailable/offline fixtures.
+- Devices Close All closes open phone mirrors through the same IPC bridge.
 - Closing a mirror window cleans up the associated process.
 - The renderer only calls the narrow `botappDeviceViews` preload bridge; it does not spawn processes or access ADB directly.
 

@@ -13,7 +13,7 @@ export type ApiFailure = { ok: false; error: { code: string; message: string }; 
 export type ApiResult<T> = ApiSuccess<T> | ApiFailure;
 
 export type ProfileStatus = "running" | "ready" | "blocked" | "paused" | "archived";
-export type DeviceStatus = "online" | "reserved" | "offline" | "maintenance";
+export type DeviceStatus = "connected" | "online" | "reserved" | "offline" | "maintenance";
 export type Severity = "info" | "warning" | "error" | "critical";
 
 export type PhoneSession = {
@@ -1198,11 +1198,86 @@ export type Device = {
   name: string;
   model: string;
   status: DeviceStatus;
+  adbSerial: string;
+  shortSerial: string;
+  deviceKind: "physical_phone" | "emulator";
+  pool: "full_cycle" | "outreach_only";
+  product: string;
+  deviceCode: string;
+  profileCount: number;
+  latencyMs: number | null;
+  appInstancesCount: number;
+  appInstancesAvailableCount: number;
+  appInstancesOccupiedCount: number;
+  heartbeatStatus: "connected" | "offline" | "unknown" | "stale";
+  hostLabel: string | null;
+  hubLabel: string | null;
+  hubPort: string | null;
+  viewAvailable: boolean;
+  viewUnavailableReason: string | null;
   battery: number;
   cloneCount: number;
   activeSession: PhoneSession | null;
   nextBufferEndsAt: string | null;
   lockReason: string | null;
+};
+
+export type BotAppDeviceStatus = DeviceStatus;
+export type BotAppDeviceHealth = "connected" | "offline" | "warning" | "unknown";
+export type BotAppDeviceLatency = number | null;
+export type BotAppDeviceProfileCount = number;
+export type BotAppDeviceAction = "add" | "open_all" | "close_all" | "restart_all" | "history" | "edit" | "delete" | "open_view" | "restart_phone";
+
+export type BotAppAddPhonePayload = {
+  action: "add_physical_phone";
+  display_name: string;
+  adb_serial: string;
+  model: string | null;
+  product: string | null;
+  device: string | null;
+  pool: "full_cycle" | "outreach_only";
+  max_clones: number;
+  hub_label: string | null;
+  hub_port: string | null;
+  host_label: string | null;
+  packages_mode: "standard_instagram_4_packages";
+  requested_by: string | null;
+  source: "BotApp";
+  metadata_safe: {
+    expected_effect: "register_phone_inventory_only";
+    app_instances_package_set: "standard_instagram_4_packages";
+  };
+};
+
+export type BotAppRestartPhonePayload = {
+  action: "restart_phone" | "restart_all_phones";
+  device_ids: string[];
+  requested_by: string | null;
+  source: "BotApp";
+  idempotency_key: string;
+  metadata_safe: {
+    device_labels: string[];
+    connected_count: number;
+    offline_skipped_count: number;
+    expected_effect: "restart_phone_via_secure_device_control";
+  };
+};
+
+export type BotAppDeviceHistoryEntry = {
+  id: string;
+  deviceId: string;
+  timestamp: string;
+  event: string;
+  status: BotAppDeviceHealth;
+  detail: string;
+};
+
+export type BotAppDeviceBulkActionResult = {
+  requested: number;
+  opened: number;
+  skipped: number;
+  failed: number;
+  message: string;
 };
 
 export type ActivityLogEntry = {

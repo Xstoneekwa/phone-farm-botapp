@@ -447,7 +447,7 @@ export function buildDeviceProfileGroups(profiles: BotProfile[], devices: Device
       : device?.status === "offline"
         ? "inactive"
         : "idle";
-    const viewAvailable = deviceStatus === "online" || deviceStatus === "reserved";
+    const viewAvailable = deviceStatus === "connected" || deviceStatus === "online" || deviceStatus === "reserved";
 
     return {
       deviceId,

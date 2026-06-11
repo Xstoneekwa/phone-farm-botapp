@@ -63,6 +63,7 @@ src/
   layout/                 # Sidebar, TopBar
   security/               # redaction helpers
   views/                  # Top-level screens
+  views/devices.css       # Compact Devices inventory layout
   views/profiles/         # Profiles module (checkpoint focus)
     drawers/              # Stats, Logs, Targets, Settings, Filters, AddProfile
     ProfileToolbar.tsx
@@ -100,13 +101,26 @@ docs/                     # Developer documentation
 
 The phone mirror is owned by the Electron main process:
 
-- renderer calls `window.botappDeviceViews.*` from `src/desktop/device-views.ts`
+- renderer calls `window.botappDesktop.deviceViews.*` through `src/desktop/device-views.ts`
 - preload exposes a narrow IPC bridge, not a generic shell bridge
 - main process starts one `scrcpy` process per phone serial and focuses the existing window on duplicate opens
 - `BOTAPP_SCRCPY_PATH` can point to a custom `scrcpy` binary
-- `BOTAPP_DEVICE_SERIAL_MAP` can map fixture phone ids/labels to local serials for development
+- `BOTAPP_DEVICE_SERIAL_MAP` can map fixture phone ids/labels to local serials for development (`phone_01:YOUR_ADB_SERIAL_1,phone_02:YOUR_ADB_SERIAL_2`)
+- `.botapp.devices.local.example.json` documents the local override shape; `.botapp.devices.local.json` is gitignored
 - no ADB serial is hardcoded into product source; fixture ids are labels only
 - process cleanup runs when the phone window closes or the app exits
+
+### Devices module
+
+`src/views/Devices.tsx` mirrors the dashboard admin Devices/Add Phone contract in a compact Mac operator view:
+
+- 41 saved phones with 40 active and 1 offline fixture row
+- two-column phone list, phone-style sidebar icon, status/latency/profile-count badges
+- right-side action panel: Add, Open All, Close All, Restart All, History, Edit, Delete
+- Add Phone drawer follows admin `add_physical_phone` fields: display name, ADB serial, pool, model/product/device, max clones, hub label/port, host label, standard Instagram package set
+- Open All / Close All use the phone-view bridge and target only locally mapped available phones
+- Restart All and per-phone restart prepare `restart_all_phones` / `restart_phone` payloads for the future secure device-control relay
+- History/Edit/Delete are safe drawers/modals only; no real mutation is performed from BotApp
 
 ### Shared Filters implementation
 
@@ -142,14 +156,18 @@ Replace or wrap `mockClient` with a real client when the relay is validated. Kee
 
 ---
 
-## 3. Checkpoint status (Profiles)
+## 3. Checkpoint status (Profiles + Devices)
 
 ### Done in this checkpoint
 
 | Feature | Notes |
 |---------|-------|
 | Profiles phone groups | Grouped by device; status badge; simplified summary |
-| Sidebar | Icon-only nav with hover labels and counters |
+| Sidebar | Icon-only nav with hover labels, counters, phone icon for Devices |
+| Devices inventory | Two-column phone table, 41 saved / 40 active / 1 offline |
+| Devices actions | Add Phone, Open All, Close All, Restart All, History, Edit, Delete |
+| Add Phone | Admin parity with `add_physical_phone`; relay-ready only |
+| Local device mapping | `BOTAPP_DEVICE_SERIAL_MAP`, gitignored `.botapp.devices.local.json`, example placeholders only |
 | Complete toolbar | Stats, Logs, Targets, Start, Auto Login, Check Login, Stop, Settings, Filters, Assign Now, Archive, Delete |
 | Add Profile | Six-step wizard; admin create contract payload |
 | Stats drawer | Follow-back / like-back columns; Save Stats |
@@ -168,6 +186,7 @@ Replace or wrap `mockClient` with a real client when the relay is validated. Kee
 - Realtime log WebSocket
 - CT validation and avatar relay
 - Device control and worker dispatch
+- Devices Add/Edit/Delete/Restart execution
 
 ---
 
@@ -213,6 +232,9 @@ Never commit: `dist/`, `release/`, `.env*`, logs, screenshots, temp inspection f
 | Assign Now | `assignments/now` | candidate and payload preview only |
 | Archive/Delete | account lifecycle route | 30-day archive/trash policy preview only |
 | Check Login / Readiness | `readiness/now` / `login_provisioning` | readiness projection and payload preview only |
+| Devices overview | `devices_overview`, `phone_devices`, `phone_app_instances` | local 41-phone inventory |
+| Add Phone | `add_physical_phone` via admin-dashboard relay | drawer + payload preview only |
+| Device control | future secure device-control relay | phone view IPC only; restart payload preview only |
 | Avatars | sanitized proxy URL | `/avatars/*.svg` |
 
 Sync order recommended: **read-only API** → guarded writes → realtime events.
@@ -250,9 +272,9 @@ Workflow:
 
 ## 7. Immediate roadmap
 
-Profiles toolbar/settings/drawers are complete for this checkpoint. The next large milestone is **Devices tab**.
+Profiles toolbar/settings/drawers and Devices are complete for this checkpoint. The next large milestone is **Client Accounts** parity with the dashboard admin.
 
-1. Devices tab
+1. Client Accounts tab
 2. Remaining top-level screens polish
 3. BotApp API relay — read-only profiles/stats/logs/targets
 4. Guarded write actions (settings, filters, targets, runs)

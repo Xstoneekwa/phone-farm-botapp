@@ -3,12 +3,51 @@ import { buildDeviceProfileGroups, mockProfilesExpanded } from "./profile-mock-d
 
 export const mockProfiles = mockProfilesExpanded;
 
-export const mockDevices: Device[] = [
-  { id: "phone_01", name: "PHONE 1", model: "Samsung A52", status: "reserved", battery: 84, cloneCount: 3, activeSession: { id: "sess_001", profileId: "prof_001", username: "rareparis.usa", state: "active_ui", startedAt: "10:04:22 2026-06-09" }, nextBufferEndsAt: "10:18:00 2026-06-09", lockReason: "1 phone = 1 active UI session" },
-  { id: "phone_02", name: "PHONE 2", model: "Samsung A32", status: "online", battery: 67, cloneCount: 4, activeSession: null, nextBufferEndsAt: null, lockReason: null },
-  { id: "phone_03", name: "PHONE 3", model: "Pixel 6a", status: "maintenance", battery: 51, cloneCount: 2, activeSession: { id: "sess_002", profileId: "prof_006", username: "runclub_paris", state: "buffer", startedAt: "09:47:10 2026-06-09" }, nextBufferEndsAt: "10:22:00 2026-06-09", lockReason: "clone buffer active" },
-  { id: "phone_04", name: "PHONE 4", model: "Samsung S21", status: "offline", battery: 0, cloneCount: 1, activeSession: null, nextBufferEndsAt: null, lockReason: "last heartbeat missed" },
-];
+const latencies = [48, 42, 68, 67, 53, 59, 78, 55, 86, 79, 60, 68, 44, null, 65, 58, 49, 116, 70, 127, 59, null, 59, 60, 61, 68, null, null, 136, null, 60, 74, 84, 52, 71, 63, 57, 88, 92, 45, null];
+const serialPrefixes = ["R38M", "R38H", "R38F", "R38N", "RF8H", "R38M", "R38H", "R38N"];
+
+function fixtureSerial(index: number) {
+  const prefix = serialPrefixes[(index - 1) % serialPrefixes.length];
+  const seed = (4070000 + index * 7919).toString(36).toUpperCase().padStart(7, "0");
+  return `${prefix}${seed}`.slice(0, 11);
+}
+
+function buildDevice(index: number): Device {
+  const id = `phone_${String(index).padStart(2, "0")}`;
+  const profileCount = [3, 3, 4, 3, 5, 4, 4, 6, 6, 2, 4, 5, 4, 4, 1, 3, 4, 5, 5, 5, 5, 4, 5, 4, 6, 2, 4, 4, 3, 4, 3, 3, 2, 6, 4, 5, 3, 4, 2, 4, 1][index - 1] ?? 3;
+  const status = index === 41 ? "offline" : "connected";
+  const viewAvailable = index <= 2 && status === "connected";
+  return {
+    id,
+    name: `PHONE ${index}`,
+    model: "Samsung A16",
+    status,
+    adbSerial: fixtureSerial(index),
+    shortSerial: fixtureSerial(index),
+    deviceKind: "physical_phone",
+    pool: index % 5 === 0 ? "outreach_only" : "full_cycle",
+    product: "a16nsxx",
+    deviceCode: "a16",
+    profileCount,
+    latencyMs: status === "offline" ? null : latencies[index - 1] ?? null,
+    appInstancesCount: profileCount,
+    appInstancesAvailableCount: status === "offline" ? 0 : Math.max(0, profileCount - 1),
+    appInstancesOccupiedCount: status === "offline" ? 0 : Math.min(1, profileCount),
+    heartbeatStatus: status === "offline" ? "offline" : "connected",
+    hostLabel: index <= 20 ? "mac-hub-a" : "mac-hub-b",
+    hubLabel: index <= 20 ? "hub-a" : "hub-b",
+    hubPort: String(index),
+    viewAvailable,
+    viewUnavailableReason: viewAvailable ? null : status === "offline" ? "Phone is offline." : "Add a local serial mapping to enable this phone view.",
+    battery: status === "offline" ? 0 : 42 + ((index * 7) % 56),
+    cloneCount: profileCount,
+    activeSession: index === 1 ? { id: "sess_001", profileId: "prof_001", username: "rareparis.usa", state: "active_ui", startedAt: "10:04:22 2026-06-09" } : null,
+    nextBufferEndsAt: null,
+    lockReason: status === "offline" ? "last heartbeat missed" : null,
+  };
+}
+
+export const mockDevices: Device[] = Array.from({ length: 41 }, (_item, index) => buildDevice(index + 1));
 
 export const mockDeviceProfileGroups = buildDeviceProfileGroups(mockProfiles, mockDevices);
 

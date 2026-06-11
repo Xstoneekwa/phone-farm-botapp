@@ -14,6 +14,7 @@
 .sidebar button { position: relative; width: 42px; height: 42px; margin: 2px 8px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: #8F96A6; display: grid; place-items: center; text-align: center; }
 .sidebar button.active, .sidebar button:hover { color: white; background: rgba(255,255,255,.1); }
 .nav-icon { font-size: 15px; font-weight: 800; line-height: 1; }
+.nav-phone-icon { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .nav-tooltip { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%) translateX(-4px); opacity: 0; pointer-events: none; z-index: 80; background: #0B1220; color: #F8FAFC; border: 1px solid #243149; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; box-shadow: var(--shadow-modal); }
 .sidebar button:hover .nav-tooltip { opacity: 1; transform: translateY(-50%) translateX(0); }
 .nav-badge { position: absolute; right: -3px; top: -4px; transform: scale(.78); transform-origin: top right; }

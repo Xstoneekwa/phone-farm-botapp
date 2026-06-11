@@ -7,7 +7,7 @@ This handoff captures the current implementation checkpoint for future developer
 - Repository: BotApp workspace root
 - Branch: `botapp-mac-foundation`
 - Mode: local-data macOS app foundation, prepared for future secure relay
-- Current checkpoint: Profiles actions, settings, drawers, and phone-level View complete
+- Current checkpoint: Profiles actions, settings, drawers, Devices inventory, and phone-level View complete
 - Backend posture: no real backend calls, no Supabase direct access, no worker/device mutations
 
 ## Completed In This Checkpoint
@@ -96,6 +96,22 @@ All write/action operations are prepared for the future secure relay only.
 - Packaged renderer uses relative Vite base to avoid black screen in Electron.
 - `release/` and `dist/` remain build artifacts and should not be committed.
 
+### Devices Tab
+
+- Compact Devices workspace matches the target operator layout:
+  - `41 saved`, `40 active`, `1 offline`;
+  - two-column phone list;
+  - phone-style sidebar icon;
+  - right-side action panel.
+- Phone rows show view icon, phone label, short fixture serial, profile count, latency, status, and per-phone restart.
+- Fixtures use fake serials only. Product source must not include personal ADB serials.
+- `BOTAPP_DEVICE_SERIAL_MAP` maps local fixture ids to real phones during development.
+- `.botapp.devices.local.example.json` is safe to commit; `.botapp.devices.local.json` is gitignored.
+- Open All / Close All operate on phone views only, target mapped available phones, and ignore unavailable fixtures.
+- Add Phone drawer follows dashboard admin `add_physical_phone` fields.
+- Restart All / Restart phone prepare secure relay payloads only.
+- History/Edit/Delete are prepared safe UI paths only and do not mutate backend/device state.
+
 ### Phone-Level View
 
 - `electron/device-view-manager.cjs` owns `scrcpy` processes in the Electron main process.
@@ -183,9 +199,9 @@ Before any checkpoint commit:
 
 Recommended next milestone:
 
-`Devices tab`
+`Client Accounts`
 
-Profiles toolbar/settings/drawers are complete for this checkpoint. For future real actions or Devices work, inspect `boost-ai-frontend` first and document admin role, enabled/disabled states, modals/drawers, endpoints/API/RPC/tables, payloads, validations, and backend effects. BotApp should replicate the operator UX, prepare future relay payloads, and keep execution preview-only until the secure BotApp relay is validated.
+Profiles toolbar/settings/drawers and Devices are complete for this checkpoint. For future real actions or Client Accounts work, inspect `boost-ai-frontend` first and document admin role, enabled/disabled states, modals/drawers, endpoints/API/RPC/tables, payloads, validations, and backend effects. BotApp should replicate the operator UX, prepare future relay payloads, and keep execution preview-only until the secure BotApp relay is validated.
 
 Archive/Delete are now modeled from the admin lifecycle route: archive schedules Trash after 30 days, delete means move to Trash with restore available for 30 days, and permanent delete remains pending/disabled in the admin dashboard.
 
@@ -204,6 +220,8 @@ Check Login / Readiness is modeled from the admin readiness route: admin audienc
 - `src/views/profiles/lifecycle-flow.ts`
 - `src/views/profiles/readiness-now-flow.ts`
 - `src/views/profiles/profiles.css`
+- `src/views/Devices.tsx`
+- `src/views/devices.css`
 - `src/desktop/device-views.ts`
 - `electron/device-view-manager.cjs`
 - `src/api/types.ts`

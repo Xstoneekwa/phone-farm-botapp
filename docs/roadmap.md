@@ -2,7 +2,7 @@
 
 ## Latest checkpoint
 
-**Message:** `feat(botapp): complete profiles actions settings and device view checkpoint`
+**Message:** `feat(botapp): add devices tab with phone controls`
 
 **Branch:** `botapp-mac-foundation`
 
@@ -27,6 +27,14 @@
 - `+ New profile` accent button styling
 - Full developer docs (`docs/botapp-architecture.md`, README updates)
 - Mac packaging + no-leak validation
+- Devices tab with phone-style sidebar icon
+- 41 saved devices, 40 active, 1 offline
+- Two-column phone inventory with latency, status, profile-count badges, and per-phone view/restart actions
+- Right action panel: Add, Open All, Close All, Restart All, History, Edit, Delete
+- Add Phone drawer aligned to dashboard admin `add_physical_phone`
+- Local phone view mapping via `BOTAPP_DEVICE_SERIAL_MAP`; `.botapp.devices.local.json` is gitignored and only `.botapp.devices.local.example.json` is committed
+- Open All / Close All target phone views only and ignore unavailable fixtures
+- Restart All / Restart phone, History/Edit/Delete are relay-ready only
 
 ## Done (foundation)
 
@@ -42,17 +50,17 @@
 - Stats / logs / targets persistence
 - Settings and Filters save
 - Start / Stop / Auto Login / Assign / Archive / Delete / Check Login execution
-- Device runtime actions
+- Device runtime mutations
 - Avatar relay and CT validation
 - Realtime WebSocket log stream
 
 ## Next milestone
 
-Profiles toolbar/settings/drawers are now checkpoint-complete. The next large chantier is **Devices tab**.
+Profiles toolbar/settings/drawers and Devices are now checkpoint-complete. The next large chantier is **Client Accounts** parity with the dashboard admin.
 
 Required order from here:
 
-1. Devices tab
+1. Client Accounts tab
 2. Polish remaining top-level routes (Overview, global Targets, Settings)
 3. BotApp API relay — read-only profiles, stats, logs, targets
 4. Guarded write paths (settings, filters, targets, runs)

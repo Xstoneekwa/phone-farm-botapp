@@ -2,7 +2,7 @@
 
 BotApp is the macOS operator application for the Phone Farm system at Boost My Businesses. It provides a dense desktop control surface for phones, Instagram/TikTok profiles, runtime state, logs, target accounts, settings, and safety-gated actions.
 
-The current checkpoint delivers the complete **Profiles** workspace with local data only. Operator UI labels are product-ready; write actions prepare admin-backed payloads and do **not** call the real backend until a secure BotApp API relay is validated.
+The current checkpoint delivers the complete **Profiles** workspace plus the **Devices** phone inventory workspace with local data only. Operator UI labels are product-ready; write actions prepare admin-backed payloads and do **not** call the real backend until a secure BotApp API relay is validated.
 
 ## Product vision
 
@@ -18,11 +18,15 @@ The renderer must never receive secrets, service-role credentials, raw device ar
 
 ## Current checkpoint
 
-Profiles foundation (branch `botapp-mac-foundation`):
+Profiles and Devices foundation (branch `botapp-mac-foundation`):
 
 - Profiles grouped by phone/device with search and platform filters
 - Phone-level View mirror through Electron IPC and `scrcpy`
 - Icon-only sidebar with hover labels and counters
+- Devices tab with phone-style sidebar icon, 41 saved phones, two-column inventory, status/latency/profile badges, and a fixed action panel
+- **Add Phone** drawer aligned to the dashboard admin `add_physical_phone` contract
+- Device actions: phone view open/focus/close, Open All, Close All, Restart All, Restart phone, History, Edit, Delete
+- Device actions are relay-ready only; restarts, edits, deletes, and Add Phone do not perform real mutations from BotApp
 - Complete profile toolbar: Stats, Logs, Targets, Start, Auto Login, Check Login, Stop, Settings, Filters, Assign Now, Archive, Delete
 - **Add Profile** — six-step wizard with admin create contract payload
 - **Stats** — follow-back / like-back columns, Save Stats
@@ -99,7 +103,7 @@ Use `redactText()` / `redactRecord()` for exports and runtime strings.
 
 ## Phone View
 
-Phone-level View requires `scrcpy` on operator Macs. BotApp resolves it from `BOTAPP_SCRCPY_PATH` first, then the normal `PATH`. Development can map fixture phone ids to local devices with `BOTAPP_DEVICE_SERIAL_MAP` JSON. The product must not hardcode ADB serials; one phone opens one mirror window, duplicate opens focus the existing view, and cleanup happens when the window closes.
+Phone-level View requires `scrcpy` on operator Macs. BotApp resolves it from `BOTAPP_SCRCPY_PATH` first, then the normal `PATH`. Development can map fixture phone ids to local devices with `BOTAPP_DEVICE_SERIAL_MAP`, for example `phone_01:YOUR_ADB_SERIAL_1,phone_02:YOUR_ADB_SERIAL_2`. `.botapp.devices.local.example.json` documents the local-only shape; `.botapp.devices.local.json` is gitignored and must never be committed. The product must not hardcode ADB serials; one phone opens one mirror window, duplicate opens focus the existing view, Open All targets only locally mapped available phones, Close All cleans up open views, and cleanup also happens when the window closes.
 
 ## Future sync model
 

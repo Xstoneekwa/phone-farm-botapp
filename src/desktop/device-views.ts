@@ -62,6 +62,22 @@ export async function focusDeviceView(deviceSerial: string) {
   return api.focus(deviceSerial);
 }
 
+export async function closeDeviceView(deviceSerial: string) {
+  const api = bridge();
+  if (!api) return { ok: true, data: [] } satisfies DeviceViewResult;
+  return api.close(deviceSerial);
+}
+
+export async function closeAllDeviceViews(deviceSerials: string[]) {
+  const api = bridge();
+  if (!api) return { ok: true, data: [] } satisfies DeviceViewResult;
+  let lastResult: DeviceViewResult = { ok: true, data: [] };
+  for (const deviceSerial of deviceSerials) {
+    lastResult = await api.close(deviceSerial);
+  }
+  return lastResult;
+}
+
 export function subscribeDeviceViewState(callback: (state: DeviceViewState[]) => void) {
   const api = bridge();
   if (!api) return () => undefined;

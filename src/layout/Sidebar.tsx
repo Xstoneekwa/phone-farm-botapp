@@ -1,12 +1,23 @@
+import type { ReactNode } from "react";
 import type { RouteId } from "../app/routes";
 import { routes } from "../app/routes";
 import { Badge } from "../design/components";
 
-const navIcons: Record<RouteId, string> = {
+function DeviceNavIcon() {
+  return (
+    <svg className="nav-phone-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="7" y="3" width="10" height="18" rx="2.4" />
+      <path d="M10.5 5.5h3" />
+      <path d="M11 18.5h2" />
+    </svg>
+  );
+}
+
+const navIcons: Record<RouteId, ReactNode> = {
   overview: "⌁",
   profiles: "◎",
   account: "◉",
-  devices: "▣",
+  devices: <DeviceNavIcon />,
   activity: "⌘",
   targets: "◇",
   templates: "✉",

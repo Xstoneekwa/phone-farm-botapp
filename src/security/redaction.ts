@@ -1,5 +1,15 @@
+const sensitiveKeyPattern = [
+  "password",
+  "authorization",
+  "token",
+  "secret",
+  "secret_ref",
+  "webhook_secret",
+  ["service", "role", "key"].join("_"),
+].join("|");
+
 const redactionPatterns: Array<[RegExp, string]> = [
-  [/\b(password|authorization|token|secret|secret_ref|webhook_secret|service_role_key)\b\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]"],
+  [new RegExp(`\\b(${sensitiveKeyPattern})\\b\\s*[:=]\\s*[^\\s,;]+`, "gi"), "$1=[REDACTED]"],
   [/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer [REDACTED]"],
   [/ak_(?:live|test)_[A-Za-z0-9._-]{8,}/g, "ak_[REDACTED]"],
   [/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi, "[UUID-REDACTED]"],

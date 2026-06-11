@@ -1,0 +1,20 @@
+{
+  "description": "Optional local-only mapping reference. Copy to .botapp.devices.local.json or export BOTAPP_DEVICE_SERIAL_MAP. Do not commit real ADB serials.",
+  "BOTAPP_DEVICE_SERIAL_MAP": "phone_01:YOUR_ADB_SERIAL_1,phone_02:YOUR_ADB_SERIAL_2",
+  "devices": [
+    {
+      "id": "phone_01",
+      "name": "PHONE 1",
+      "adbSerial": "YOUR_ADB_SERIAL_1",
+      "status": "connected",
+      "profileCount": 3
+    },
+    {
+      "id": "phone_02",
+      "name": "PHONE 2",
+      "adbSerial": "YOUR_ADB_SERIAL_2",
+      "status": "connected",
+      "profileCount": 3
+    }
+  ]
+}

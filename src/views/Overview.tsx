@@ -4,7 +4,7 @@ import type { ActivityLogEntry, BotProfile, Device, NotificationItem } from "../
 
 export function Overview({ profiles, devices, notifications, logs, onAction }: { profiles: BotProfile[]; devices: Device[]; notifications: NotificationItem[]; logs: ActivityLogEntry[]; onAction: (action: string, target: string, danger?: boolean) => void }) {
   const running = profiles.filter((profile) => profile.status === "running").length;
-  const online = devices.filter((device) => device.status === "online" || device.status === "reserved").length;
+  const online = devices.filter((device) => device.status === "connected" || device.status === "online" || device.status === "reserved").length;
   const blocked = profiles.filter((profile) => profile.eligibility === "blocked_now").length;
   return <div className="grid" style={{ gap: 16 }}>
     <div className="grid metrics">
