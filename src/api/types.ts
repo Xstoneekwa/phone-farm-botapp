@@ -794,6 +794,12 @@ export type ProfileTarget = {
   followersCount: number | null;
   isVerified?: boolean | null;
   isPrivate?: boolean | null;
+  providerCheckedAt?: string | null;
+  lastVerifiedAt?: string | null;
+  jobStatus?: string | null;
+  jobProviderStatus?: string | null;
+  jobNextAttemptAt?: string | null;
+  jobLastErrorCode?: string | null;
   performance: ProfileTargetPerformance;
   followbackRatio: number | null;
   followsSent: number | null;

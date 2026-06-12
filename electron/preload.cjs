@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     details: (accountId) => ipcRenderer.invoke("botapp:profiles:details", accountId),
     createDryRun: (input) => ipcRenderer.invoke("botapp:profiles:create-dry-run", input),
     create: (input) => ipcRenderer.invoke("botapp:profiles:create", input),
+    verifyUsername: (input) => ipcRenderer.invoke("botapp:profiles:verify-username", input),
     credentials: {
       submit: (input) => ipcRenderer.invoke("botapp:profiles:credentials:submit", input),
     },

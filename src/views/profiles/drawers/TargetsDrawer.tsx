@@ -201,7 +201,9 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
         const inserted = Number(result.data?.inserted ?? 0);
         const duplicates = Number(result.data?.skipped_duplicates ?? 0);
         const invalid = Number(result.data?.skipped_invalid ?? 0);
-        notifyAction(`Bulk import saved ${inserted}; duplicates ${duplicates}; invalid ${invalid}.`);
+        const jobsQueued = Number(result.data?.jobs_queued ?? 0);
+        const jobStatus = String(result.data?.job_status || "unknown");
+        notifyAction(`Bulk import saved ${inserted}; duplicates ${duplicates}; invalid ${invalid}; jobs ${jobsQueued} ${jobStatus}.`);
       });
       return;
     }
@@ -255,15 +257,16 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
 
   function resetTarget(id: string) {
     if (window.botappDesktop?.profiles?.resetTargets) {
-      setMessage("Resetting target through secure relay...");
-      void window.botappDesktop.profiles.resetTargets({ accountId: profile.id, ids: [id] }).then(async (result) => {
+      setMessage("Resetting target and requeueing verification through secure relay...");
+      void window.botappDesktop.profiles.resetTargets({ accountId: profile.id, ids: [id], mode: "reset_and_requeue_verification" }).then(async (result) => {
         if (!result.ok) {
           setMessage(result.error ?? "Target reset failed.");
           return;
         }
         await loadTargetsFromBackend();
         const reset = Number(result.data?.reset ?? 1);
-        notifyAction(reset === 1 ? "Target reset to pending verification in Supabase." : `${reset} targets reset in Supabase.`);
+        const jobsQueued = Number(result.data?.jobs_queued ?? 0);
+        notifyAction(reset === 1 ? `Target reset and verification requeued (${jobsQueued}).` : `${reset} targets reset and verification requeued (${jobsQueued}).`);
       });
       return;
     }
@@ -400,8 +403,11 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
                         <div><strong>@{redactText(target.username)}</strong>{target.canonicalUsername && target.canonicalUsername !== target.username ? <small>canonical @{redactText(target.canonicalUsername)}</small> : null}</div>
                       </div>
                     </td>
-                    <td><span className="mono" title={target.verificationReason ?? undefined}>{target.verification}</span></td>
-                    <td><EligibilityBadge status={target.eligibility} /></td>
+                    <td>
+                      <span className="mono" title={target.verificationReason ?? undefined}>{target.verification}</span>
+                      <small>{target.verificationReason || target.jobStatus || "reason unavailable"}</small>
+                    </td>
+                    <td><EligibilityBadge status={target.eligibility} /><small>{target.providerCheckedAt ? `checked ${formatShortDate(target.providerCheckedAt)}` : pendingReasonLabel(target)}</small></td>
                     <td className="mono">{metricText(target.followersCount)}</td>
                     <td><PerformanceBadge status={target.performance} /></td>
                     <td className="mono" title="Followback Ratio: followers gained / follows sent from this CT">{fbrText(target)}</td>
@@ -453,7 +459,10 @@ function TargetAvatar({ target }: { target: ProfileTarget }) {
     return <span className="target-avatar" aria-hidden>{initial}</span>;
   }
 
-  return <img className="target-avatar target-avatar-img" src={avatarSrc} alt="" onError={() => setImageFailed(true)} />;
+  return <img className="target-avatar target-avatar-img" src={avatarSrc} alt="" onError={() => {
+    console.warn("target_avatar_proxy_failed", { target_id: target.id, status: target.status });
+    setImageFailed(true);
+  }} />;
 }
 
 function safeTargetAvatarSrc(value: string | null | undefined) {
@@ -513,6 +522,14 @@ function eligibilityLabel(status: ProfileTargetEligibility) {
   if (status === "rejected_not_found") return "Not found";
   if (status === "review_provider_unavailable" || status === "review_username_changed") return "Review";
   return "Pending";
+}
+
+function pendingReasonLabel(target: ProfileTarget) {
+  if (target.jobStatus === "pending" || target.jobStatus === "retry_scheduled") return target.jobStatus;
+  if (target.verification === "pending") return target.verificationReason || "verification_not_run";
+  if (target.verification === "provider_error" || target.verification === "unavailable" || target.verification === "rate_limited") return target.verificationReason || "provider_error";
+  if (target.eligibility === "unknown") return target.followersCount === null ? "missing_followers_count" : "backend_pending";
+  return target.reason || "ready";
 }
 
 function performanceLabel(status: ProfileTargetPerformance) {

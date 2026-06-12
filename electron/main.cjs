@@ -380,6 +380,37 @@ function attachRelayHeadersForDashboardAvatars() {
 }
 
 const endpointTestState = new Map();
+const botappBuildCommit = "9cf02ad";
+const runtimeIpcHandlers = [
+  "botapp:runtime:status",
+  "botapp:compass:ai-status",
+  "botapp:compass:save-relay-config",
+  "botapp:compass:remove-relay-config",
+  "botapp:compass:analyze",
+  "botapp:auto-restart:overview",
+  "botapp:auto-restart:dry-run",
+  "botapp:auto-restart:action-preview",
+  "botapp:data:overview",
+  "botapp:profiles:details",
+  "botapp:profiles:create-dry-run",
+  "botapp:profiles:create",
+  "botapp:profiles:verify-username",
+  "botapp:profiles:credentials:submit",
+  "botapp:profiles:action",
+  "botapp:profiles:assign-now",
+  "botapp:profiles:readiness-now",
+  "botapp:profiles:targets:add",
+  "botapp:profiles:targets:bulk-add",
+  "botapp:profiles:targets:delete",
+  "botapp:profiles:targets:reset",
+  "botapp:endpoints:list",
+  "botapp:endpoints:test",
+  "botapp:endpoints:test-all",
+  "botapp:endpoints:export-profile",
+  "botapp:integrations:list",
+  "botapp:integrations:save-webhook",
+  "botapp:integrations:remove-webhook",
+];
 const botappEndpointRegistry = [
   {
     id: "botapp_overview",
@@ -432,6 +463,17 @@ const botappEndpointRegistry = [
     path: "/api/instagram-dashboard/accounts/create",
     usedBy: ["Profiles", "Add Profile"],
     purpose: "Validate profile create contract through secure relay without mutation",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_verify_username",
+    name: "Profile username verification",
+    method: "POST",
+    path: "/api/instagram-dashboard/profiles/verify-username",
+    usedBy: ["Profiles", "Add Profile"],
+    purpose: "Verify an Instagram username through the secure backend provider without exposing provider credentials",
     authRequired: true,
     status: "active",
     testStrategy: "none",
@@ -1171,6 +1213,21 @@ async function profileCredentialsSubmit(input) {
   }
 }
 
+async function profileVerifyUsername(input) {
+  const username = String(input?.username || "").trim().replace(/^@+/, "").toLowerCase();
+  if (!username) return { ok: false, error: "Missing username." };
+  try {
+    const data = await dashboardPost("profiles_verify_username", {
+      username,
+      platform: "instagram",
+      source: "botapp_add_profile",
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Username verification failed.") };
+  }
+}
+
 async function performProfileAction(input) {
   const accountId = String(input?.accountId || input?.account_id || "").trim();
   const action = String(input?.action || "").trim().toLowerCase();
@@ -1297,6 +1354,7 @@ async function resetProfileTargets(input) {
       account_id: accountId,
       ids,
       actor_type: "admin",
+      mode: input?.mode === "reset_state_only" ? "reset_state_only" : "reset_and_requeue_verification",
     });
     return { ok: true, data };
   } catch (error) {
@@ -2517,6 +2575,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));
   ipcMain.handle("botapp:profiles:create", (_event, input) => profileCreate(input));
+  ipcMain.handle("botapp:profiles:verify-username", (_event, input) => profileVerifyUsername(input));
   ipcMain.handle("botapp:profiles:credentials:submit", (_event, input) => profileCredentialsSubmit(input));
   ipcMain.handle("botapp:profiles:action", (_event, input) => performProfileAction(input));
   ipcMain.handle("botapp:profiles:assign-now", (_event, input) => assignProfileNow(input));
@@ -2532,6 +2591,20 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:integrations:list", () => listIntegrationConfig());
   ipcMain.handle("botapp:integrations:save-webhook", (_event, input) => saveWebhookConfig(input));
   ipcMain.handle("botapp:integrations:remove-webhook", (_event, input) => removeWebhookConfig(input));
+}
+
+function logBuildMarker() {
+  const cfg = compassConfig();
+  console.log("[botapp] build_marker", {
+    buildCommit: process.env.BOTAPP_BUILD_COMMIT || botappBuildCommit,
+    packaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    relayOrigin: dashboardOrigin(cfg) || null,
+    relayUrlConfigured: Boolean(cfg.relayUrl),
+    relayKeyConfigured: Boolean(cfg.relayKey),
+    endpointRegistryKeys: botappEndpointRegistry.map((endpoint) => endpoint.id),
+    ipcHandlers: runtimeIpcHandlers,
+  });
 }
 
 function createMainWindow() {
@@ -2588,6 +2661,7 @@ app.whenReady().then(() => {
   attachRelayHeadersForDashboardAvatars();
   registerRuntimeIpc();
   registerDeviceViewIpc();
+  logBuildMarker();
   createMainWindow();
 
   if (process.env.BOTAPP_DEVICE_VIEW_SELF_TEST) {

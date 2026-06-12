@@ -56,6 +56,7 @@ interface Window {
       details: (accountId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       createDryRun: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       create: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      verifyUsername?: (input: { username: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       credentials?: {
         submit: (input: { accountId: string; username: string; password: string; dryRun?: boolean }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       };
@@ -67,7 +68,7 @@ interface Window {
       addTarget: (input: { accountId: string; username: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       bulkAddTargets: (input: { accountId: string; usernames: string[] }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       deleteTargets: (input: { accountId: string; ids: string[] }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
-      resetTargets: (input: { accountId: string; ids: string[] }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      resetTargets: (input: { accountId: string; ids: string[]; mode?: "reset_state_only" | "reset_and_requeue_verification" }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
     };
     endpoints?: {
       list: () => Promise<BotAppBackendEndpoint[]>;

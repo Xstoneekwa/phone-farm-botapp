@@ -722,10 +722,10 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
   const unfollowEnabled = readBoolean(settings, ["unfollow_enabled"], profile.entitlements.includes("unfollow"));
   const targetRows = targets.filter((target) => target && typeof target === "object") as Record<string, unknown>[];
   const activeTargets = targetRows.filter((target) => /active|valid/i.test(readString(target, ["status"], "")));
-  const pendingTargets = targetRows.filter((target) => /pending|review/i.test(readString(target, ["status"], "")));
+  const eligibleTargets = targetRows.filter((target) => readString(target, ["quality_status"], "") === "eligible" && /active|valid/i.test(readString(target, ["status"], "")));
+  const pendingTargets = targetRows.filter((target) => /pending|review/i.test(readString(target, ["status"], "")) || readString(target, ["quality_status"], "") === "unknown" || readString(target, ["quality_status"], "").startsWith("review_"));
   const rejectedTargets = targetRows.filter((target) => /reject/i.test(readString(target, ["status", "quality_status"], "")));
   const archivedTargets = targetRows.filter((target) => /archive|delete/i.test(`${readString(target, ["status"], "")} ${readString(target, ["archived_at", "deleted_at"], "")}`));
-  const eligibleTargets = activeTargets.length ? activeTargets : targetRows.filter((target) => !/reject|archive|delete/i.test(readString(target, ["status"], "")));
   const sourceHealth = targetsStatus !== "connected" ? "review" : eligibleTargets.length ? "healthy" : pendingTargets.length ? "review" : "blocked";
   const credentialStatus = String(credentials.credentialStatus || profile.credentialStatus);
   const credentialStatusSafe = credentialStatus === "missing" || credentialStatus === "needs_update" ? credentialStatus : "active";

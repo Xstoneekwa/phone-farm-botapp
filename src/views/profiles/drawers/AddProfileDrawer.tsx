@@ -6,6 +6,16 @@ type AddProfileStep = 0 | 1 | 2 | 3 | 4 | 5;
 type LoginMethod = "manual" | "credentials";
 type RuntimeMode = "safe_setup" | "follow_only_test" | "full_cycle" | "outreach_only";
 type CommercialPackage = "growth" | "pro" | "premium" | "custom" | "internal_test";
+type UsernameVerification = {
+  status: string;
+  normalized_username: string | null;
+  verification_status: string;
+  provider: string;
+  reason: string;
+  followers_count?: number | null;
+  is_private?: boolean | null;
+  is_verified?: boolean | null;
+};
 
 const steps = ["Device", "Account", "App Instance", "Package & Add-ons", "Schedule", "Review"];
 
@@ -92,7 +102,8 @@ export function AddProfileDrawer({
   const [step, setStep] = useState<AddProfileStep>(0);
   const [showConfirm, setShowConfirm] = useState(false);
   const [form, setForm] = useState(() => defaultForm(groups));
-  const [verification, setVerification] = useState<{ status: string; canonical_username: string | null; reason: string } | null>(null);
+  const [verification, setVerification] = useState<UsernameVerification | null>(null);
+  const [isVerifyingUsername, setIsVerifyingUsername] = useState(false);
   const [submitState, setSubmitState] = useState<{ loading: boolean; message: string }>({ loading: false, message: "" });
   const selectedGroup = useMemo(() => groups.find((group) => group.deviceId === form.device_id) ?? groups[0], [form.device_id, groups]);
   const appInstances = useMemo(() => appInstancesForGroup(selectedGroup), [selectedGroup]);
@@ -118,22 +129,55 @@ export function AddProfileDrawer({
 
   function canMoveNext() {
     if (step === 0) return Boolean(selectedGroup);
-    if (step === 1) return Boolean(form.username.trim()) && (form.login_method !== "credentials" || Boolean(form.password.trim()));
+    if (step === 1) return verification?.status === "found" && (form.login_method !== "credentials" || Boolean(form.password.trim()));
     if (step === 2) return Boolean(selectedApp?.selectable);
     if (step === 3) return Boolean(selectedPackage.selectable && form.runtime_mode);
     if (step === 4) return Boolean(selectedSlot?.available);
     return Boolean(selectedGroup && selectedApp && selectedSlot);
   }
 
-  function verifyUsername() {
+  async function verifyUsername() {
     const username = form.username.trim().replace(/^@/, "");
     if (!username) return;
-    const valid = /^[a-z0-9._]{2,30}$/i.test(username);
-    setVerification({
-      status: valid ? "pending_verification" : "invalid_format",
-      canonical_username: valid ? username.toLowerCase() : null,
-      reason: valid ? "provider_not_configured" : "invalid_format",
-    });
+    setIsVerifyingUsername(true);
+    setVerification(null);
+    try {
+      const verify = window.botappDesktop?.profiles?.verifyUsername;
+      if (!verify) {
+        setVerification({
+          status: "error",
+          normalized_username: null,
+          verification_status: "unavailable",
+          provider: "botapp_ipc",
+          reason: "verification_relay_unavailable",
+        });
+        return;
+      }
+      const result = await verify({ username });
+      if (!result.ok) {
+        setVerification({
+          status: "error",
+          normalized_username: null,
+          verification_status: "error",
+          provider: "dashboard_relay",
+          reason: result.error || "verification_failed",
+        });
+        return;
+      }
+      const data = (result.data ?? {}) as Record<string, unknown>;
+      setVerification({
+        status: String(data.status || "error"),
+        normalized_username: String(data.normalized_username || data.username || username).toLowerCase(),
+        verification_status: String(data.verification_status || data.status || "error"),
+        provider: String(data.provider || "unknown"),
+        reason: String(data.reason || data.status || "unknown"),
+        followers_count: typeof data.followers_count === "number" ? data.followers_count : null,
+        is_private: typeof data.is_private === "boolean" ? data.is_private : null,
+        is_verified: typeof data.is_verified === "boolean" ? data.is_verified : null,
+      });
+    } finally {
+      setIsVerifyingUsername(false);
+    }
   }
 
   async function submitProfile(mode: "dry_run" | "create") {
@@ -144,7 +188,7 @@ export function AddProfileDrawer({
     const payload = {
       endpoint_contract: "/api/instagram-dashboard/accounts/create",
       mode: mode === "create" ? "backend_real_write" : "backend_dry_run",
-      username: verification?.canonical_username || form.username.trim().toLowerCase(),
+      username: verification?.normalized_username || form.username.trim().toLowerCase(),
       login_method: form.login_method,
       password: mode === "dry_run" && form.login_method === "credentials" ? form.password : "",
       password_status: form.login_method === "credentials" ? (mode === "dry_run" ? "write_only_dry_run" : "blocked_from_botapp_real_write") : "not_submitted",
@@ -217,7 +261,7 @@ export function AddProfileDrawer({
               <span>Instagram username</span>
               <div className="add-profile-inline">
                 <Input value={form.username} onChange={(value) => updateField("username", value)} placeholder="username" />
-                <Button variant="ghost" onClick={verifyUsername} disabled={!form.username.trim()}>Verify</Button>
+                <Button variant="ghost" onClick={() => void verifyUsername()} disabled={!form.username.trim() || isVerifyingUsername}>{isVerifyingUsername ? "Verifying..." : "Verify"}</Button>
               </div>
             </label>
             <label className="settings-row-block">
@@ -239,7 +283,21 @@ export function AddProfileDrawer({
             <label className="settings-row-block"><span>Display name optional</span><Input value={form.display_name} onChange={(value) => updateField("display_name", value)} /></label>
             <label className="settings-row-block"><span>Internal label optional</span><Input value={form.internal_label} onChange={(value) => updateField("internal_label", value)} /></label>
             <label className="settings-row-block full"><span>Notes optional</span><textarea className="input settings-textarea" value={form.notes} onChange={(event) => updateField("notes", event.target.value)} /></label>
-            {verification ? <div className="settings-card full"><strong>{verification.canonical_username || form.username}</strong><span>{verification.status} · {verification.reason}</span></div> : null}
+            {verification ? (
+              <div className="settings-card full">
+                <strong>{verification.normalized_username || form.username}</strong>
+                <span>{verification.status} · {verification.reason}</span>
+                <small>
+                  {verification.status === "found"
+                    ? `Provider ${verification.provider} confirmed the username${verification.followers_count != null ? ` · ${verification.followers_count} followers` : ""}.`
+                    : verification.status === "provider_not_configured"
+                      ? "Verification provider is not configured server-side."
+                      : verification.status === "not_found"
+                        ? "Username was not found by the configured provider."
+                        : `Verification failed with status ${verification.verification_status}.`}
+                </small>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -291,7 +349,7 @@ export function AddProfileDrawer({
 
         {step === 5 ? (
           <dl className="add-profile-review">
-            <div><dt>Username</dt><dd>{verification?.canonical_username || form.username || "-"} · {verification?.status || "pending_verification"}</dd></div>
+            <div><dt>Username</dt><dd>{verification?.normalized_username || form.username || "-"} · {verification?.status || "pending_verification"}</dd></div>
             <div><dt>Device</dt><dd>{selectedGroup?.deviceLabel || "-"} · {selectedGroup?.deviceSerial || "serial unknown"}</dd></div>
             <div><dt>App instance</dt><dd>{selectedApp?.label || "-"} · index {selectedApp?.instance_index ?? "-"}</dd></div>
             <div><dt>Login method</dt><dd>{form.login_method} · {form.login_method === "credentials" ? "Credential will be submitted securely" : "credentials not submitted"}</dd></div>

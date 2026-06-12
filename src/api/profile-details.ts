@@ -22,6 +22,40 @@ export async function loadProfileDetails(accountId: string) {
   return { ok: false as const, error: "Profile details relay unavailable in this runtime." };
 }
 
+function targetVerification(value: unknown): ProfileTarget["verification"] {
+  const raw = String(value || "pending");
+  return raw === "pending" || raw === "found" || raw === "not_found" || raw === "unavailable" || raw === "rate_limited" || raw === "provider_error"
+    ? raw
+    : "provider_error";
+}
+
+function inferTargetVerification(row: Record<string, unknown>, status: ProfileTarget["status"]): ProfileTarget["verification"] {
+  const explicit = String(row.verification_status || "").trim();
+  if (explicit) return targetVerification(explicit);
+  const quality = String(row.quality_status || "").trim();
+  if (quality === "eligible") return "found";
+  if (quality === "rejected_not_found") return "not_found";
+  if (quality.startsWith("rejected_")) return "found";
+  if (quality.startsWith("review_")) return "unavailable";
+  if (status === "valid" || status === "active") return "found";
+  if (status === "rejected") return "provider_error";
+  return "pending";
+}
+
+function targetEligibility(value: unknown): ProfileTarget["eligibility"] {
+  const raw = String(value || "unknown");
+  return raw === "unknown" || raw === "eligible" || raw === "rejected_low_followers" || raw === "rejected_verified" || raw === "rejected_private" || raw === "rejected_not_found" || raw === "review_provider_unavailable" || raw === "review_username_changed"
+    ? raw
+    : "unknown";
+}
+
+function targetPerformance(value: unknown): ProfileTarget["performance"] {
+  const raw = String(value || "pending");
+  return raw === "good" || raw === "avg" || raw === "bad" || raw === "insufficient_data" || raw === "pending" || raw === "not_applicable"
+    ? raw
+    : "pending";
+}
+
 export function mapApiTargetRow(profileId: string, row: Record<string, unknown>): ProfileTarget {
   const followsSent = typeof row.follows_sent_count === "number" ? row.follows_sent_count : null;
   const followbacks = typeof row.followbacks_count === "number" ? row.followbacks_count : null;
@@ -37,11 +71,19 @@ export function mapApiTargetRow(profileId: string, row: Record<string, unknown>)
     canonicalUsername: String(row.normalized_username || row.target_username || "") || null,
     avatarUrl: String(row.avatar_url || row.profile_picture_url || row.profile_image_url || "") || null,
     status,
-    verification: status === "pending_verification" ? "pending" : "found",
-    verificationReason: String(row.rejection_reason || "") || null,
-    eligibility: "unknown",
+    verification: inferTargetVerification(row, status),
+    verificationReason: String(row.verification_reason || row.rejected_reason || row.rejection_reason || row.job_last_error_code || (row.quality_status === "eligible" ? "found" : "") || "") || null,
+    eligibility: targetEligibility(row.quality_status),
     followersCount,
-    performance: "pending",
+    isVerified: typeof row.is_verified === "boolean" ? row.is_verified : null,
+    isPrivate: typeof row.is_private === "boolean" ? row.is_private : null,
+    providerCheckedAt: String(row.provider_checked_at || "") || null,
+    lastVerifiedAt: String(row.last_verified_at || row.provider_checked_at || "") || null,
+    jobStatus: String(row.job_status || "") || null,
+    jobProviderStatus: String(row.job_provider_status || "") || null,
+    jobNextAttemptAt: String(row.job_next_attempt_at || "") || null,
+    jobLastErrorCode: String(row.job_last_error_code || "") || null,
+    performance: targetPerformance(row.performance_status),
     followbackRatio: followsSent && followbacks ? Number((followbacks / followsSent).toFixed(2)) : null,
     followsSent,
     followbacks,
@@ -51,8 +93,8 @@ export function mapApiTargetRow(profileId: string, row: Record<string, unknown>)
     source: "backend",
     archivedAt: String(row.archived_at || "") || null,
     deletedAt: String(row.deleted_at || "") || null,
-    reason: String(row.rejection_reason || "") || null,
-    syncStatus: "synced",
+    reason: String(row.rejected_reason || row.rejection_reason || row.verification_reason || row.job_last_error_code || "") || null,
+    syncStatus: String(row.job_status || "").includes("pending") || status === "pending_verification" ? "pending" : "synced",
   };
 }
 
