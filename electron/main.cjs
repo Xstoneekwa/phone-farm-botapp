@@ -397,6 +397,7 @@ const runtimeIpcHandlers = [
   "botapp:profiles:details",
   "botapp:profiles:create-dry-run",
   "botapp:profiles:create",
+  "botapp:profiles:schedule-slots",
   "botapp:profiles:verify-username",
   "botapp:profiles:credentials:submit",
   "botapp:profiles:action",
@@ -460,12 +461,45 @@ const botappEndpointRegistry = [
     testStrategy: "none",
   },
   {
+    id: "profiles_stats_history",
+    name: "Profile stats history",
+    method: "GET",
+    path: "/api/instagram-dashboard/profiles/:account_id/stats-history",
+    usedBy: ["Profiles", "Stats"],
+    purpose: "Load 30-day social action stats for the Stats drawer",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
     id: "profiles_create",
     name: "Profiles create dry-run",
     method: "POST",
     path: "/api/instagram-dashboard/accounts/create",
     usedBy: ["Profiles", "Add Profile"],
     purpose: "Validate profile create contract through secure relay without mutation",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_schedule_slots",
+    name: "Profile schedule slots",
+    method: "GET",
+    path: "/api/instagram-dashboard/accounts/schedule-slots",
+    usedBy: ["Add Profile"],
+    purpose: "Load Supabase-backed assignment slot availability for selected device/app instance",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "settings_schedule",
+    name: "Profile schedule settings",
+    method: "GET",
+    path: "/api/instagram-dashboard/settings/schedule",
+    usedBy: ["Profiles", "Settings"],
+    purpose: "Load and update account schedule assignment through shared backend",
     authRequired: true,
     status: "active",
     testStrategy: "none",
@@ -1124,23 +1158,48 @@ async function dashboardGet(pathnameSuffix, routeParams = {}) {
   return readPayload(data);
 }
 
+async function dashboardGetWithQuery(endpointId, queryParams = {}, routeParams = {}) {
+  const cfg = compassConfig();
+  const endpoint = endpointById(endpointId);
+  const url = endpoint ? new URL(endpointUrl(endpoint, routeParams)) : new URL(dashboardApiUrl(endpointId));
+  for (const [key, value] of Object.entries(queryParams)) {
+    const normalized = String(value ?? "").trim();
+    if (normalized) url.searchParams.set(key, normalized);
+  }
+  const response = await fetch(url.toString(), { method: "GET", headers: relayHeaders(cfg) });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.ok === false) throw new Error(readRelayError(data, `${endpointId} unavailable.`));
+  return readPayload(data);
+}
+
 async function dashboardPost(endpointId, body, routeParams = {}) {
   return dashboardRequest("POST", endpointId, body, routeParams);
 }
 
 async function dashboardRequest(method, endpointId, body, routeParams = {}) {
+  const result = await dashboardRequestResult(method, endpointId, body, routeParams);
+  if (!result.ok) throw new Error(result.error || `${endpointId} unavailable.`);
+  return result.data;
+}
+
+async function dashboardRequestResult(method, endpointId, body, routeParams = {}) {
   const cfg = compassConfig();
   const endpoint = endpointById(endpointId);
   const url = endpoint ? endpointUrl(endpoint, routeParams) : dashboardApiUrl(endpointId);
-  if (!url) throw new Error("Relay URL is not configured.");
+  if (!url) return { ok: false, status: 0, data: null, error: "Relay URL is not configured." };
   const response = await fetch(url, {
     method,
     headers: relayHeaders(cfg),
-    body: JSON.stringify(body || {}),
+    body: method === "GET" ? undefined : JSON.stringify(body || {}),
   });
   const data = await response.json().catch(() => null);
-  if (!response.ok || data?.ok === false) throw new Error(readRelayError(data, `${endpointId} unavailable.`));
-  return readPayload(data);
+  const ok = response.ok && data?.ok !== false;
+  return {
+    ok,
+    status: response.status,
+    data: ok ? readPayload(data) : data,
+    error: ok ? null : readRelayError(data, `${endpointId} unavailable.`),
+  };
 }
 
 async function profileDetailsData(accountId) {
@@ -1153,6 +1212,20 @@ async function profileDetailsData(accountId) {
     return { ok: true, data: normalizeProfileDetailsAvatarUrls(data, cfg) };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Profile details unavailable.") };
+  }
+}
+
+async function profileStatsHistoryData(accountId, days = 30) {
+  const normalizedAccountId = String(accountId || "").trim();
+  const normalizedDays = Math.max(1, Math.min(30, Number(days) || 30));
+  if (!normalizedAccountId) return { ok: false, error: "Missing account id." };
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) return { ok: false, error: "Configure the relay URL in API / Webhooks / Keys to load stats history." };
+  try {
+    const data = await dashboardGetWithQuery("profiles_stats_history", { days: normalizedDays }, { account_id: normalizedAccountId });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Stats history unavailable.") };
   }
 }
 
@@ -1173,22 +1246,256 @@ async function profileCreate(input) {
   if (!cfg.relayUrl) return { ok: false, error: "Configure the relay URL in API / Webhooks / Keys to create profiles." };
   try {
     const payload = sanitizeAddProfilePayload(input);
-    if (String(payload.login_method || "manual") !== "manual") {
-      return { ok: false, error: "BotApp real create currently supports manual login only; credentials are not submitted from BotApp." };
-    }
     delete payload.password;
     delete payload.email;
-    const data = await dashboardPost("profiles_create", {
+    console.log("[botapp] profile_create_request", {
+      schedule_mode: payload.schedule_mode || null,
+      has_starts_at: Boolean(payload.starts_at),
+      has_ends_at: Boolean(payload.ends_at),
+      has_device_id: Boolean(payload.device_id),
+      has_app_instance_id: Boolean(payload.app_instance_id),
+    });
+    const result = await dashboardRequestResult("POST", "profiles_create", {
       ...payload,
       dry_run: false,
       login_method: "manual",
+      credential_status: "not_submitted",
+      credentials_submitted: false,
       provisioning_enabled: false,
       login_enabled: false,
       start_run: false,
     });
-    return { ok: true, data };
+    if (!result.ok) {
+      const partial = result.data?.partial || null;
+      console.log("[botapp] profile_create_failed", {
+        reason: result.error,
+        account_id: partial?.account_id || null,
+        assignment_failed: partial?.assignment_failed ?? null,
+      });
+      return { ok: false, error: result.error, partial };
+    }
+    const accountId = result.data?.account?.id || result.data?.account_id || null;
+    console.log("[botapp] create_success", { account_id: accountId });
+    return { ok: true, data: result.data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Profile create failed.") };
+  }
+}
+
+async function profileScheduleSettingsGet(accountId) {
+  const normalizedAccountId = String(accountId || "").trim();
+  if (!normalizedAccountId) return { ok: false, error: "Missing account id." };
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) return { ok: false, error: "Configure the relay URL in API / Webhooks / Keys to load schedule settings." };
+  try {
+    const data = await dashboardGetWithQuery("settings_schedule", { account_id: normalizedAccountId });
+    const profilesPayload = await dashboardGet("profiles_overview").catch(() => null);
+    return { ok: true, data: repairSettingsScheduleEditSlots(data, normalizedAccountId, profilesPayload) };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Schedule settings unavailable.") };
+  }
+}
+
+function normalizeScheduleSlotLabel(value) {
+  return String(value || "").replace(/\s+/g, "").trim();
+}
+
+function profileAccountId(profile) {
+  return String(profile?.accountId || profile?.account_id || profile?.id || "").trim();
+}
+
+function profileDeviceId(profile) {
+  return String(profile?.deviceId || profile?.device_id || "").trim();
+}
+
+function profileScheduleMode(profile) {
+  return readScheduleMode(profile);
+}
+
+function profileScheduleLabel(profile) {
+  const explicit = normalizeScheduleSlotLabel(profile?.scheduleLabel || profile?.schedule_label || "");
+  if (explicit && explicit !== "Unassigned" && explicit !== "Manual") return explicit;
+  if (readScheduleMode(profile) === "manual_only") return "Manual";
+  return normalizeScheduleSlotLabel(formatAssignmentWindowLabel(profile));
+}
+
+function profileUsername(profile) {
+  return String(profile?.username || profile?.instagramCanonicalUsername || profile?.instagram_canonical_username || "").trim();
+}
+
+function profileAssignmentStatus(profile) {
+  return String(profile?.assignmentStatus || profile?.assignment_status || profile?.status || "").trim();
+}
+
+function repairSettingsScheduleEditSlots(scheduleData, accountId, profilesPayload) {
+  if (!scheduleData || !Array.isArray(scheduleData.available_slots)) return scheduleData;
+  const profiles = Array.isArray(profilesPayload?.profiles) ? profilesPayload.profiles : [];
+  const current = profiles.find((profile) => profileAccountId(profile) === accountId);
+  const deviceId = String(scheduleData.device_id || scheduleData.current_assignment?.device_id || profileDeviceId(current) || "").trim();
+  if (!deviceId) return scheduleData;
+
+  const scheduledProfiles = profiles.filter((profile) => {
+    if (profileDeviceId(profile) !== deviceId) return false;
+    if (profileScheduleMode(profile) !== "scheduled") return false;
+    if (!["pending", "reserved", "active"].includes(profileAssignmentStatus(profile))) return false;
+    return Boolean(profileScheduleLabel(profile));
+  });
+  const currentLabel = normalizeScheduleSlotLabel(scheduleData.current_assignment?.local_label || profileScheduleLabel(current));
+  const currentUsername = profileUsername(current);
+  const repairedSlots = scheduleData.available_slots.map((slot) => {
+    const isManual = String(slot?.slot_kind || "") === "manual_only";
+    if (isManual) {
+      const isCurrentManual = String(scheduleData.current_assignment?.schedule_mode || profileScheduleMode(current)) === "manual_only";
+      return {
+        ...slot,
+        slot_id: slot.slot_id || "manual_only",
+        available: true,
+        selectable: true,
+        availability: "manual_only",
+        is_current: isCurrentManual,
+        is_conflict: false,
+        reason: isCurrentManual ? "current" : "manual_only",
+        occupied_by: null,
+      };
+    }
+
+    const slotLabel = normalizeScheduleSlotLabel(slot?.local_label);
+    const occupants = scheduledProfiles.filter((profile) => profileScheduleLabel(profile) === slotLabel);
+    const otherOccupants = occupants.filter((profile) => profileAccountId(profile) !== accountId);
+    const isCurrent = Boolean(currentLabel && slotLabel === currentLabel);
+    const otherUsername = profileUsername(otherOccupants[0]);
+
+    if (isCurrent && otherOccupants.length) {
+      return {
+        ...slot,
+        slot_id: slot.slot_id || `${slot.slot_kind}:${slot.starts_at || ""}:${slot.ends_at || ""}`,
+        available: true,
+        selectable: true,
+        availability: "conflict",
+        is_current: true,
+        is_conflict: true,
+        reason: "current_conflict",
+        occupied_by: otherUsername || "assigned account",
+      };
+    }
+    if (isCurrent) {
+      return {
+        ...slot,
+        slot_id: slot.slot_id || `${slot.slot_kind}:${slot.starts_at || ""}:${slot.ends_at || ""}`,
+        available: true,
+        selectable: true,
+        availability: "current",
+        is_current: true,
+        is_conflict: false,
+        reason: "current",
+        occupied_by: currentUsername || null,
+      };
+    }
+    if (otherOccupants.length) {
+      return {
+        ...slot,
+        slot_id: slot.slot_id || `${slot.slot_kind}:${slot.starts_at || ""}:${slot.ends_at || ""}`,
+        available: false,
+        selectable: false,
+        availability: "occupied",
+        is_current: false,
+        is_conflict: false,
+        reason: "occupied",
+        occupied_by: otherUsername || "assigned account",
+      };
+    }
+    return {
+      ...slot,
+      slot_id: slot.slot_id || `${slot.slot_kind}:${slot.starts_at || ""}:${slot.ends_at || ""}`,
+      available: true,
+      selectable: true,
+      availability: "available",
+      is_current: false,
+      is_conflict: false,
+      reason: "available",
+      occupied_by: null,
+    };
+  });
+
+  return {
+    ...scheduleData,
+    available_slots: repairedSlots,
+    save_ready: true,
+    botapp_schedule_edit_repaired: true,
+  };
+}
+
+async function profileScheduleSettingsSave(input) {
+  const accountId = String(input?.account_id || input?.accountId || "").trim();
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) return { ok: false, error: "Configure the relay URL in API / Webhooks / Keys to save schedule settings." };
+  try {
+    const data = await dashboardRequest("PATCH", "settings_schedule", {
+      account_id: accountId,
+      device_id: input?.device_id || input?.deviceId || "",
+      app_instance_id: input?.app_instance_id || input?.appInstanceId || "",
+      schedule_mode: input?.schedule_mode || input?.scheduleMode || "scheduled",
+      starts_at: input?.starts_at || input?.startsAt || "",
+      ends_at: input?.ends_at || input?.endsAt || "",
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Schedule save failed.") };
+  }
+}
+
+function safeResourceRef(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return null;
+  return normalized.length <= 8 ? normalized : `…${normalized.slice(-8)}`;
+}
+
+async function profileScheduleSlots(input) {
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) return { ok: false, error: "Configure the relay URL in API / Webhooks / Keys to load schedule slots." };
+  const deviceId = String(input?.device_id || input?.deviceId || "").trim();
+  const appInstanceId = String(input?.app_instance_id || input?.appInstanceId || "").trim();
+  const runtimeMode = String(input?.runtime_mode || input?.runtimeMode || "safe_setup").trim();
+  if (!deviceId) return { ok: false, error: "Missing device id." };
+  if (!appInstanceId) return { ok: false, error: "Missing app instance id." };
+  const endpoint = endpointById("profiles_schedule_slots");
+  const requestUrl = endpoint ? endpointUrl(endpoint) : dashboardApiUrl("profiles_schedule_slots");
+  console.log("[botapp] schedule_slots_request", {
+    endpoint: "/api/instagram-dashboard/accounts/schedule-slots",
+    relayOrigin: dashboardOrigin(cfg) || null,
+    relayKeyConfigured: Boolean(cfg.relayKey),
+    hasDeviceId: Boolean(deviceId),
+    hasAppInstanceId: Boolean(appInstanceId),
+    deviceRef: safeResourceRef(deviceId),
+    appInstanceRef: safeResourceRef(appInstanceId),
+    runtimeMode,
+  });
+  try {
+    const data = await dashboardGetWithQuery("profiles_schedule_slots", {
+      device_id: deviceId,
+      app_instance_id: appInstanceId,
+      runtime_mode: runtimeMode,
+    });
+    const slotCount = Array.isArray(data?.slots) ? data.slots.length : 0;
+    const manualOnlyCount = Array.isArray(data?.slots)
+      ? data.slots.filter((slot) => String(slot?.schedule_mode || "") === "manual_only").length
+      : 0;
+    console.log("[botapp] schedule_slots_response", {
+      status: 200,
+      slotCount,
+      manualOnlyCount,
+      timezone: data?.timezone || null,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    const message = safeRuntimeError(error, "Schedule slots unavailable.");
+    console.log("[botapp] schedule_slots_response", {
+      status: "error",
+      error: message,
+      requestUrl: requestUrl ? safeUrl(requestUrl, null) : null,
+    });
+    return { ok: false, error: message };
   }
 }
 
@@ -1391,8 +1698,12 @@ function sanitizeAddProfilePayload(input) {
     "runtime_mode",
     "commercial_package",
     "addons",
+    "schedule_mode",
     "starts_at",
     "ends_at",
+    "credential_status",
+    "credentials_submitted",
+    "credentials_deferred",
   ];
   const payload = {};
   for (const key of allowed) {
@@ -1603,10 +1914,12 @@ function normalizeMatchText(value) {
 
 function profileCounters(account) {
   const packageCaps = packageCounterCaps(account);
+  const counterKey = { follow: "follows", unfollow: "unfollows", like: "likes", comment: "comments", dm: "dms" };
   const cap = (key, fallbackMax) => {
+    const projectionKey = counterKey[key] || key;
     const fallback = packageCaps[key] ?? fallbackMax;
-    const current = Number(account?.quotas?.[key]?.used ?? account?.[`${key}Today`] ?? 0);
-    const max = Number(account?.quotas?.[key]?.max ?? account?.[`${key}Cap`] ?? fallback);
+    const current = Number(account?.countersToday?.[projectionKey] ?? account?.quotas?.[key]?.used ?? account?.[`${key}Today`] ?? 0);
+    const max = Number(account?.capsToday?.[projectionKey] ?? account?.quotas?.[key]?.max ?? account?.[`${key}Cap`] ?? fallback);
     return {
       current: Number.isFinite(current) ? current : 0,
       max: Number.isFinite(max) && max >= 0 ? max : fallback,
@@ -1645,6 +1958,65 @@ function formatTimePart(value) {
   if (hhmm) return `${hhmm[1]}:${hhmm[2]}`;
   const date = new Date(raw);
   if (!Number.isNaN(date.getTime())) return date.toISOString().slice(11, 16);
+  return "";
+}
+
+function readScheduleLabel(account) {
+  const explicit = String(account?.scheduleLabel || account?.schedule_label || account?.assignment?.scheduleLabel || account?.assignment?.schedule_label || "").trim();
+  if (explicit && explicit !== "00:00-00:00" && explicit !== "Unassigned") return explicit;
+  return "";
+}
+
+function readScheduleMode(account) {
+  const mode = String(
+    account?.scheduleMode
+    || account?.schedule_mode
+    || account?.assignment?.scheduleMode
+    || account?.assignment?.schedule_mode
+    || "",
+  ).trim();
+  if (mode) return mode;
+  const slotKind = String(account?.slotKind || account?.slot_kind || account?.assignment?.slotKind || "").trim();
+  if (slotKind === "manual_only") return "manual_only";
+  const hasPlacement = Boolean(
+    account?.appInstanceId
+    || account?.app_instance_id
+    || account?.assignmentStatus
+    || account?.assignment_status
+    || account?.deviceId
+    || account?.device_id,
+  );
+  const hasTimes = Boolean(
+    account?.assignmentStartsAt
+    || account?.assignment_starts_at
+    || account?.assignment?.startsAt
+    || account?.assignment?.starts_at,
+  );
+  if (hasPlacement || hasTimes) return "scheduled";
+  return "";
+}
+
+function formatAssignmentWindowLabel(account) {
+  const timezone = String(account?.timezone || account?.deviceTimezone || account?.device_timezone || "Europe/Paris").trim() || "Europe/Paris";
+  const assignmentStart = account?.assignmentStartsAt || account?.assignment_starts_at || account?.assignment?.startsAt || account?.assignment?.starts_at;
+  const assignmentEnd = account?.assignmentEndsAt || account?.assignment_ends_at || account?.assignment?.endsAt || account?.assignment?.ends_at;
+  if (!assignmentStart || !assignmentEnd) return "";
+  try {
+    const formatPart = (value) => new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: timezone,
+    }).format(new Date(value));
+    const startTime = formatPart(assignmentStart);
+    const endTime = formatPart(assignmentEnd);
+    if (startTime && endTime && startTime !== endTime) return `${startTime}-${endTime}`;
+  } catch {
+    // fall through to UTC slice
+  }
+  const startTime = formatTimePart(assignmentStart);
+  const endTime = formatTimePart(assignmentEnd);
+  if (startTime && endTime && startTime !== endTime) return `${startTime}-${endTime}`;
   return "";
 }
 
@@ -1753,21 +2125,28 @@ function readAssignmentLabel(account) {
 }
 
 function readActiveWindow(account) {
-  const start = account?.timeslotStart || account?.timeslot_start || account?.assignmentStartsAt || account?.assignment?.startsAt;
-  const end = account?.timeslotEnd || account?.timeslot_end || account?.assignmentEndsAt || account?.assignment?.endsAt;
-  const startTime = formatTimePart(start);
-  const endTime = formatTimePart(end);
-  if (startTime && endTime) return `${startTime}-${endTime}`;
-  if (account?.activeWindow || account?.active_window || account?.timeslot) {
-    const raw = String(account.activeWindow || account.active_window || account.timeslot);
-    const parts = raw.match(/([0-2]\d:[0-5]\d).+?([0-2]\d:[0-5]\d)/);
-    return parts ? `${parts[1]}-${parts[2]}` : raw;
-  }
-  if (startTime) return "Scheduled";
-  return "Scheduled";
+  const scheduleMode = readScheduleMode(account);
+  if (scheduleMode === "manual_only") return "Manual";
+  const scheduleLabel = readScheduleLabel(account);
+  if (scheduleLabel) return scheduleLabel;
+  const windowLabel = formatAssignmentWindowLabel(account);
+  if (windowLabel) return windowLabel;
+  const hasAssignmentPlacement = Boolean(
+    account?.appInstanceId
+    || account?.app_instance_id
+    || account?.assignment?.appInstanceId
+    || account?.assignment?.app_instance_id
+    || account?.assignmentStatus
+    || account?.assignment_status,
+  );
+  if (!hasAssignmentPlacement) return "Unassigned";
+  if (scheduleMode === "scheduled") return "No schedule";
+  return "Unassigned";
 }
 
 function readSlotKind(account) {
+  const scheduleMode = readScheduleMode(account);
+  if (scheduleMode === "manual_only") return "manual_only";
   const value = String(account?.slotKind || account?.slot_kind || account?.assignment?.slotKind || account?.runtimeProfile || account?.runtimeProfilesLabel || "");
   if (/40|outreach/i.test(value)) return "outreach_40m";
   if (/3h|growth/i.test(value)) return "growth_3h";
@@ -1775,6 +2154,8 @@ function readSlotKind(account) {
 }
 
 function readRuntimeProfile(account) {
+  const scheduleMode = readScheduleMode(account);
+  if (scheduleMode === "manual_only") return "manual_only";
   const value = String(account?.runtimeProfile || account?.runtime_profile || account?.runtimeProfilesLabel || account?.slotKind || "");
   if (/outreach/i.test(value)) return "outreach_only";
   if (/follow/i.test(value)) return "follow_only";
@@ -1882,8 +2263,32 @@ function readRequirement(blocked, label) {
 }
 
 function readFollowerDelta(account) {
-  const value = Number(account?.last7dGrowth || account?.followerDelta || account?.follower_delta || account?.growthDelta || 0);
-  return Number.isFinite(value) ? value : 0;
+  if (account?.followerDelta3d && typeof account.followerDelta3d === "object") {
+    const value = Number(account.followerDelta3d.value);
+    return Number.isFinite(value) ? value : null;
+  }
+  return null;
+}
+
+function readFollowerDelta3d(account) {
+  const source = account?.followerDelta3d && typeof account.followerDelta3d === "object" ? account.followerDelta3d : {};
+  const value = Number(source.value);
+  const currentFollowers = Number(source.currentFollowers ?? source.current_followers);
+  const previousFollowers = Number(source.previousFollowers ?? source.previous_followers);
+  return {
+    value: Number.isFinite(value) ? value : null,
+    currentFollowers: Number.isFinite(currentFollowers) ? currentFollowers : null,
+    previousFollowers: Number.isFinite(previousFollowers) ? previousFollowers : null,
+    from: source.from || null,
+    to: source.to || null,
+    source: String(source.source || "pending_account_follower_snapshots"),
+    freshness: String(source.freshness || "no_snapshot_table"),
+  };
+}
+
+function readInteractionsToday(account) {
+  const value = Number(account?.countersToday?.interactionsTotal ?? account?.countersToday?.interactions_total ?? 0);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function readLastSessionAt(account) {
@@ -1898,6 +2303,23 @@ function profileFromManageAccount(account, index, devices) {
   const readiness = readReadiness(account, blocked);
   const packageValue = readPackageLabel(account);
   const entitlements = readEntitlements(account, packageValue);
+  const scheduleModeValue = readScheduleMode(account) || null;
+  const scheduleLabelValue = readActiveWindow(account);
+  const hasAssignment = Boolean(
+    account?.assignmentStatus
+    || account?.assignment_status
+    || account?.appInstanceId
+    || account?.app_instance_id
+    || account?.deviceId
+    || account?.device_id,
+  );
+  console.info("[botapp] profile_schedule_mapping", {
+    account: String(account?.username || accountRowId(account, index)),
+    hasAssignment,
+    scheduleMode: scheduleModeValue,
+    scheduleLabel: scheduleLabelValue,
+    source: String(account?.sourceLabel || account?.source_label || "manage_overview"),
+  });
   return {
     id: accountRowId(account, index),
     username: String(account?.username || "unknown"),
@@ -1910,9 +2332,13 @@ function profileFromManageAccount(account, index, devices) {
     status: readProfileStatus(account, blocked),
     deviceId: readDeviceId(account, device),
     deviceName: readDeviceName(account, device),
-    activeWindow: readActiveWindow(account),
-    followers: Number(account?.followersCount || account?.followers_count || account?.followers || 0),
-    followerDelta: readFollowerDelta(account),
+    appInstanceId: String(account?.appInstanceId || account?.app_instance_id || account?.assignment?.appInstanceId || account?.assignment?.app_instance_id || ""),
+    activeWindow: scheduleLabelValue,
+    scheduleLabel: scheduleLabelValue,
+    followers: Number(account?.followerDelta3d?.currentFollowers ?? account?.followersCount ?? account?.followers_count ?? account?.followers ?? 0),
+    followerDelta: readFollowerDelta(account) ?? 0,
+    followerDelta3d: readFollowerDelta3d(account),
+    interactionsToday: readInteractionsToday(account),
     followsToday: Number(account?.followsToday || account?.follows_today || 0),
     dmsToday: Number(account?.dmsToday || account?.dms_today || 0),
     counters: profileCounters(account),
@@ -1923,6 +2349,7 @@ function profileFromManageAccount(account, index, devices) {
     assignmentState: readAssignmentState(account, device),
     entitlements,
     runtimeProfile: readRuntimeProfile(account),
+    scheduleMode: scheduleModeValue,
     slotKind: readSlotKind(account),
     autoLoginRequirement: readRequirement(blocked, "Ready to login"),
     assignNowRequirement: readRequirement(blocked, "Ready to assign"),
@@ -1979,6 +2406,7 @@ function clientAccountFromManage(account, profile, devices) {
       appInstanceLabel: String(account?.appInstanceLabel || ""),
       packageName: String(account?.appPackageName || "com.instagram.android"),
       assignmentStatus: profile.assignmentState,
+      scheduleMode: profile.scheduleMode,
       slotKind: profile.slotKind,
       activeWindow: profile.activeWindow,
     },
@@ -2684,8 +3112,12 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:data:overview", () => botappOverviewData());
   ipcMain.handle("botapp:devices:list", (_event, input) => botappDevicesList(input));
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
+  ipcMain.handle("botapp:profiles:stats-history", (_event, input) => profileStatsHistoryData(input?.accountId || input?.account_id || input, input?.days));
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));
   ipcMain.handle("botapp:profiles:create", (_event, input) => profileCreate(input));
+  ipcMain.handle("botapp:profiles:schedule-slots", (_event, input) => profileScheduleSlots(input));
+  ipcMain.handle("botapp:profiles:schedule:get", (_event, accountId) => profileScheduleSettingsGet(accountId));
+  ipcMain.handle("botapp:profiles:schedule:save", (_event, input) => profileScheduleSettingsSave(input));
   ipcMain.handle("botapp:profiles:verify-username", (_event, input) => profileVerifyUsername(input));
   ipcMain.handle("botapp:profiles:credentials:submit", (_event, input) => profileCredentialsSubmit(input));
   ipcMain.handle("botapp:profiles:action", (_event, input) => performProfileAction(input));

@@ -7,7 +7,6 @@ import type {
   ProfileFollowbackSavePayload,
   ProfileFollowSavePayload,
   ProfileAvailableAssignmentSlot,
-  ProfileScheduleSavePayload,
   ProfileSettings,
   ProfileSourceSavePayload,
 } from "../../../api/types";
@@ -163,17 +162,22 @@ function Section({
   );
 }
 
-function scheduleSlotKey(slot: Pick<ProfileAvailableAssignmentSlot, "startsAt" | "endsAt">) {
+function scheduleSlotKey(slot: Pick<ProfileAvailableAssignmentSlot, "startsAt" | "endsAt" | "scheduleMode" | "slotKind">) {
+  if (slot.scheduleMode === "manual_only" || slot.slotKind === "manual_only") return "manual_only";
   return `${slot.startsAt}|${slot.endsAt}`;
 }
 
 function scheduleSlotReasonLabel(slot: ProfileAvailableAssignmentSlot) {
+  if (slot.scheduleMode === "manual_only" || slot.slotKind === "manual_only") return slot.reason === "current" ? "Manual-only current" : "Run manually";
+  if (slot.isConflict) return slot.occupiedBy ? `Current slot · Conflict with @${slot.occupiedBy}` : "Current slot · Conflict";
+  if (slot.isCurrent) return "Current slot";
+  if (slot.reason === "current_conflict") return slot.occupiedBy ? `Current slot · Conflict with @${slot.occupiedBy}` : "Current slot · Conflict";
   if (slot.reason === "current") return "Current slot";
   if (slot.available) return "Available";
   if (slot.reason === "occupied") return slot.occupiedBy ? `Occupied by @${slot.occupiedBy}` : "Occupied";
   if (slot.reason === "phone_rest") return "Fixed blackout";
   if (slot.reason === "outreach_rest_reserved") return "Outreach rest reserved";
-  if (slot.reason === "no_app_instance_available") return "No app instance available";
+  if (slot.reason === "no_app_instance_available") return "Unavailable in schedule edit";
   if (slot.reason === "no_clone_available") return "No clone available";
   return "Unavailable";
 }
@@ -191,47 +195,65 @@ function scheduleNextEligibleLabel(settings: ProfileSettings["schedule"]) {
   return "None";
 }
 
-function buildScheduleSavePayload(
-  profile: BotProfile,
-  settings: ProfileSettings,
-  selectedSlot: ProfileAvailableAssignmentSlot | null,
-): ProfileScheduleSavePayload | null {
-  if (!selectedSlot) return null;
+function mapScheduleSlot(row: Record<string, unknown>): ProfileAvailableAssignmentSlot {
+  const slotKind = readString(row, ["slot_kind"], "");
+  const scheduleMode = slotKind === "manual_only" ? "manual_only" : "scheduled";
+  const selectable = typeof row.selectable === "boolean" ? row.selectable : row.available === true;
   return {
-    account_id: profile.id,
-    device_id: profile.deviceId,
-    starts_at: selectedSlot.startsAt,
-    ends_at: selectedSlot.endsAt,
-    selected_slot_key: scheduleSlotKey(selectedSlot),
-    source: "botapp",
-    requested_by: null,
-    reason: "manual_schedule_assignment",
-    action: "save_schedule",
-    idempotency_key: `botapp:schedule:${profile.id}:${selectedSlot.slotIndex}:preview`,
-    mock_only: true,
-    metadata_safe: {
-      account_username: profile.username,
-      device_label: settings.schedule.assignedDevice,
-      slot_label: selectedSlot.localLabel,
-      slot_kind: selectedSlot.slotKind,
-      assignment_source: "manual_botapp",
-      sensitive_values_excluded: true,
-    },
+    slotIndex: readNumber(row, ["slot_index"], 0),
+    slotKind,
+    slotKindLabel: readString(row, ["slot_kind_label"], slotKind),
+    localLabel: readString(row, ["local_label"], ""),
+    startsAt: readString(row, ["starts_at"], ""),
+    endsAt: readString(row, ["ends_at"], ""),
+    available: row.available === true,
+    selectable,
+    availability: readString(row, ["availability"], "") as ProfileAvailableAssignmentSlot["availability"],
+    isCurrent: row.is_current === true,
+    isConflict: row.is_conflict === true,
+    reason: readString(row, ["reason"], "occupied") as ProfileAvailableAssignmentSlot["reason"],
+    occupiedBy: readString(row, ["occupied_by"], "") || null,
+    scheduleMode,
   };
 }
 
-function SchedulePayloadPreview({ payload }: { payload: ProfileScheduleSavePayload | null }) {
-  return (
-    <section className="settings-card full settings-payload-card">
-      <header>
-        <h4>Future assignment payload</h4>
-        <Badge tone="warning">Prepared</Badge>
-      </header>
-      <p className="muted">Matches the admin Schedule PATCH shape for a future secure relay. No assignment is sent from BotApp.</p>
-      <pre className="payload-preview">{previewPayload(payload ?? { blocked: "Select an available slot first" })}</pre>
-    </section>
-  );
+function buildScheduleSection(
+  profile: BotProfile,
+  projection: Record<string, unknown> | null,
+  fallback: ProfileSettings["schedule"],
+): ProfileSettings["schedule"] {
+  if (!projection) return fallback;
+  const current = record(projection.current_assignment);
+  const scheduleMode = readString(current, ["schedule_mode"], profile.scheduleMode || fallback.scheduleMode || "scheduled");
+  const currentSlot = scheduleMode === "manual_only"
+    ? "Manual-only · no scheduled window"
+    : readString(current, ["local_label"], fallback.currentSlot);
+  const gates = record(projection.gates);
+  const availableSlots = Array.isArray(projection.available_slots)
+    ? projection.available_slots.filter((row) => row && typeof row === "object").map((row) => mapScheduleSlot(row as Record<string, unknown>))
+    : fallback.availableSlots;
+  return {
+    ...fallback,
+    currentSlot,
+    businessWindow: currentSlot,
+    scheduleMode,
+    assignedDevice: readString(projection, ["device_label"], fallback.assignedDevice),
+    saveReady: projection.save_ready === true,
+    availableSlots: availableSlots.length ? availableSlots : fallback.availableSlots,
+    gates: {
+      ok: gates.ok === true,
+      reason: readString(gates, ["reason"], fallback.gates.reason),
+      windowActive: gates.window_active === true,
+      phoneRestActive: gates.phone_rest_active === true,
+      nextEligibleStartsAt: readString(gates, ["next_eligible_starts_at"], "") || null,
+      runStartGate: readString(gates, ["run_start_gate"], fallback.gates.runStartGate) as ProfileSettings["schedule"]["gates"]["runStartGate"],
+      dispatcherGate: readString(gates, ["dispatcher_gate"], fallback.gates.dispatcherGate) as ProfileSettings["schedule"]["gates"]["dispatcherGate"],
+      autoRestartGate: readString(gates, ["auto_restart_gate"], fallback.gates.autoRestartGate) as ProfileSettings["schedule"]["gates"]["autoRestartGate"],
+    },
+    scheduleSource: projection ? "shared_backend_schedule" : fallback.scheduleSource,
+  };
 }
+
 
 function sameFollowDraft(left: ProfileSettings["follow"], right: ProfileSettings["follow"]) {
   return (
@@ -676,10 +698,14 @@ function slotLabel(start: string, end: string, fallback: string) {
 function detailsSourceLabel(data: ProfileDetailsPayload | null) {
   const source = data?.source?.settings || "ig_account_settings";
   const status = data?.settings?.status || "not_available";
-  return `DB / Manage · ${source} · ${status}`;
+  return `Supabase-backed API · ${source} · ${status}`;
 }
 
-function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetailsPayload | null): ProfileSettings {
+function buildSettingsFromProfileDetails(
+  profile: BotProfile,
+  data: ProfileDetailsPayload | null,
+  scheduleProjection: Record<string, unknown> | null = null,
+): ProfileSettings {
   const account = record(data?.account);
   const settings = record(data?.settings?.data);
   const packageSummary = record(data?.packageSummary?.data);
@@ -714,7 +740,8 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
   const unfollowSessionCap = readNumber(settings, ["session_unfollow_cap", "unfollow_per_session_limit", "unfollow_per_session"], Math.min(unfollowCap, 50));
   const timeslotStart = readString(settings, ["timeslot_start", "start_time", "window_start"], profile.activeWindow.split("-")[0] ?? "");
   const timeslotEnd = readString(settings, ["timeslot_end", "end_time", "window_end"], profile.activeWindow.split("-")[1] ?? "");
-  const currentSlot = slotLabel(timeslotStart, timeslotEnd, profile.activeWindow.replace("-", " - "));
+  const scheduleMode = profile.scheduleMode || (profile.slotKind === "manual_only" || profile.activeWindow === "Manual" ? "manual_only" : "scheduled");
+  const currentSlot = scheduleMode === "manual_only" ? "Manual-only · no scheduled window" : slotLabel(timeslotStart, timeslotEnd, profile.activeWindow.replace("-", " - "));
   const timezone = readString(settings, ["timezone", "business_timezone"], "not_available");
   const followEnabled = readBoolean(settings, ["follow_enabled", "enable_follow"], profile.entitlements.includes("follow"));
   const welcomeEnabled = readBoolean(settings, ["welcome_dm_enabled", "welcome_enabled"], profile.entitlements.includes("welcome"));
@@ -755,14 +782,16 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
       readinessRunRequestStatus: readString(readinessSafe, ["run_request_status"], "not_created"),
       readinessPreflightCreated: readBoolean(readinessSafe, ["preflight_request_created"], false),
       assignmentStatus: profile.assignmentState,
+      scheduleMode,
       currentSlot,
       safeMetadata: `relay details loaded; settings=${settingsStatus}; filters=${filtersStatus}; secrets excluded`,
     },
-    schedule: {
+    schedule: buildScheduleSection(profile, scheduleProjection, {
       currentSlot,
       businessWindow: currentSlot,
       businessTimezone: timezone,
       assignmentStatus: profile.assignmentState,
+      scheduleMode,
       slotKind: profile.slotKind || "schema_only",
       runtimeProfile: profile.runtimeProfile || "schema_only",
       assignedDevice: profile.deviceName || "not_available",
@@ -773,8 +802,8 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
       deviceLock: profile.runtimeLock || "none",
       cloneBufferMinutes: readNumber(settings, ["clone_buffer_minutes"], 0),
       phoneRest: readBoolean(settings, ["phone_rest_active"], false) ? "active" : "not_available",
-      scheduleSource: settingsStatus,
-      assignmentSource: profile.assignmentState === "missing_slot" ? "not_available" : "dashboard_manage",
+      scheduleSource: scheduleProjection ? "shared_backend_schedule" : settingsStatus,
+      assignmentSource: profile.assignmentState === "missing_slot" ? "not_available" : "shared_backend_assignment",
       appInstanceSummary: profile.assignmentState === "missing_slot" ? "not_available" : "assigned app instance",
       saveReady: false,
       availableSlots: [{
@@ -782,11 +811,12 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
         slotKind: profile.slotKind,
         slotKindLabel: profile.runtimeProfile === "outreach_only" ? "Outreach-only · 40 min" : "Full-cycle · 6h",
         localLabel: currentSlot,
-        startsAt: timeslotStart || "not_available",
-        endsAt: timeslotEnd || "not_available",
+        startsAt: timeslotStart || "",
+        endsAt: timeslotEnd || "",
         available: false,
         reason: "current",
         occupiedBy: profile.username,
+        scheduleMode: scheduleMode === "manual_only" ? "manual_only" : "scheduled",
       }],
       restWindows: [],
       gates: {
@@ -799,7 +829,7 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
         dispatcherGate: profile.eligibility === "can_start" ? "ready" : "blocked",
         autoRestartGate: profile.eligibility === "can_start" ? "ready" : "blocked",
       },
-    },
+    }),
     follow: {
       timeslot: currentSlot,
       followEnabled,
@@ -837,7 +867,7 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
       capSource: followCapSource,
       runtimeStatus: settingsStatus === "connected" ? "active" : "read_only",
       effectiveFollowLimit: `${followCap}/day · ${followSessionCap}/session`,
-      source: `DB / Manage · ${data?.source?.settings || "ig_account_settings"}`,
+      source: `Supabase-backed API · ${data?.source?.settings || "ig_account_settings"}`,
     },
     dm: {
       welcomeDmEnabled: welcomeEnabled,
@@ -923,7 +953,7 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
       adminSyncStatus: targetsStatus === "connected" ? "ready" : "schema_pending",
       clientSyncStatus: "schema_pending",
       botAppSyncStatus: targetsStatus === "connected" ? "ready" : "schema_pending",
-      lastRefreshLabel: "Loaded from DB / Manage details",
+      lastRefreshLabel: "Loaded from shared backend details API",
       syncReadiness: sourceHealth === "healthy" ? "ready" : sourceHealth === "review" ? "review" : "blocked",
     },
     filters: {
@@ -969,11 +999,15 @@ function LegacySettingsDrawer({
   onClose,
   onConfirm,
   onOpenTargets,
+  onSaved,
+  onRefreshProfiles,
 }: {
   profile: BotProfile;
   onClose: () => void;
   onConfirm: () => void;
   onOpenTargets?: () => void;
+  onSaved?: (message: string, tone?: "success" | "error" | "info") => void;
+  onRefreshProfiles?: () => Promise<void> | void;
 }) {
   const [settings, setSettings] = useState<ProfileSettings | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("General");
@@ -989,6 +1023,7 @@ function LegacySettingsDrawer({
   const [credentialsPassword, setCredentialsPassword] = useState("");
   const [credentialsLoading, setCredentialsLoading] = useState(false);
   const [credentialsMessage, setCredentialsMessage] = useState("");
+  const [scheduleSaving, setScheduleSaving] = useState(false);
 
   const applySettings = useCallback((nextSettings: ProfileSettings, source: string) => {
     setSettings(nextSettings);
@@ -999,23 +1034,32 @@ function LegacySettingsDrawer({
     setFollowbackDraft(nextSettings.followback);
     setSourcesDraft(nextSettings.sources);
     setFiltersDraft(nextSettings.filters);
-    const currentSlot = nextSettings.schedule.availableSlots.find((slot) => slot.reason === "current" || slot.occupiedBy === profile.username);
+    const currentSlot = nextSettings.schedule.availableSlots.find((slot) => slot.isCurrent || slot.reason === "current" || slot.reason === "current_conflict" || slot.occupiedBy === profile.username);
     setSelectedScheduleSlotKey(currentSlot ? scheduleSlotKey(currentSlot) : "");
   }, [profile.username]);
 
   useEffect(() => {
     let cancelled = false;
     if (window.botappDesktop?.profiles?.details) {
-      void loadProfileDetails(profile.id).then((result) => {
+      void Promise.all([
+        loadProfileDetails(profile.id),
+        window.botappDesktop?.profiles?.schedule?.get?.(profile.id) ?? Promise.resolve({ ok: false as const, error: "schedule_unavailable" }),
+      ]).then(([detailsResult, scheduleResult]) => {
         if (cancelled) return;
-        if (!result.ok) {
+        if (!detailsResult.ok) {
           setSettings(buildSettingsFromProfileDetails(profile, null));
-          setSettingsError(result.error ?? "Profile details unavailable.");
-          setSettingsSource("DB / Manage · profile details unavailable");
+          setSettingsError(detailsResult.error ?? "Profile details unavailable.");
+          setSettingsSource("Shared backend API · profile details unavailable");
           return;
         }
-        const data = (result.data ?? null) as ProfileDetailsPayload | null;
-        applySettings(buildSettingsFromProfileDetails(profile, data), detailsSourceLabel(data));
+        const data = (detailsResult.data ?? null) as ProfileDetailsPayload | null;
+        const scheduleProjection = scheduleResult.ok ? (scheduleResult.data as Record<string, unknown>) : null;
+        applySettings(
+          buildSettingsFromProfileDetails(profile, data, scheduleProjection),
+          scheduleProjection
+            ? "Supabase-backed API · ig_account_settings · schedule connected"
+            : `Supabase-backed API · ig_account_settings · ${scheduleResult.error || "schedule unavailable"}`,
+        );
       });
     } else {
       void mockClient.getProfileSettings(profile.id).then((result) => {
@@ -1078,7 +1122,7 @@ function LegacySettingsDrawer({
   if (!settings) {
     return (
       <Drawer title="Settings" subtitle={profile.username} wide onClose={onClose}>
-        <div className="empty-state">Loading settings from Manage…</div>
+        <div className="empty-state">Loading settings from shared backend…</div>
       </Drawer>
     );
   }
@@ -1098,12 +1142,16 @@ function LegacySettingsDrawer({
   }
 
   const selectedScheduleSlot = settings.schedule.availableSlots.find((slot) => scheduleSlotKey(slot) === selectedScheduleSlotKey) ?? null;
-  const currentScheduleSlotKey = settings.schedule.availableSlots.find((slot) => slot.reason === "current" || slot.occupiedBy === profile.username);
+  const currentScheduleSlotKey = settings.schedule.availableSlots.find((slot) => slot.isCurrent || slot.reason === "current" || slot.reason === "current_conflict" || slot.occupiedBy === profile.username);
+  const currentConflictSlot = settings.schedule.availableSlots.find((slot) => slot.isConflict || slot.reason === "current_conflict");
   const scheduleSelectionChanged = selectedScheduleSlotKey !== (currentScheduleSlotKey ? scheduleSlotKey(currentScheduleSlotKey) : "");
-  const schedulePayload = buildScheduleSavePayload(profile, settings, selectedScheduleSlot);
   const showSaveAction = activeTab !== "General";
   const actionLabel = activeTab === "DM" ? "Save DM settings" : activeTab === "Schedule" ? "Save Schedule" : `Save ${activeTab}`;
-  const scheduleSaveDisabled = !selectedScheduleSlot || !selectedScheduleSlot.available || !scheduleSelectionChanged;
+  const scheduleSaveDisabled = scheduleSaving
+    || !settings.schedule.saveReady
+    || !selectedScheduleSlot
+    || (selectedScheduleSlot.selectable === false && selectedScheduleSlot.reason !== "current")
+    || !scheduleSelectionChanged;
   const follow = followDraft ?? settings.follow;
   const followDirty = !sameFollowDraft(follow, settings.follow);
   const followError = followValidationError(follow);
@@ -1129,6 +1177,63 @@ function LegacySettingsDrawer({
   const filtersError = filtersValidationError(filters);
   const filtersSaveDisabled = !filtersDirty || Boolean(filtersError) || !filters.saveReady;
 
+  async function saveSchedule() {
+    const save = window.botappDesktop?.profiles?.schedule?.save;
+    if (!save || !selectedScheduleSlot) {
+      onSaved?.("Schedule save unavailable in this runtime.", "error");
+      return;
+    }
+    setScheduleSaving(true);
+    try {
+      const manualOnly = selectedScheduleSlot.scheduleMode === "manual_only" || selectedScheduleSlot.slotKind === "manual_only";
+      const result = await save({
+        account_id: profile.id,
+        device_id: profile.deviceId,
+        app_instance_id: profile.appInstanceId || "",
+        schedule_mode: manualOnly ? "manual_only" : "scheduled",
+        starts_at: manualOnly ? "" : selectedScheduleSlot.startsAt,
+        ends_at: manualOnly ? "" : selectedScheduleSlot.endsAt,
+      });
+      if (!result.ok) {
+        onSaved?.(result.error || "Schedule save failed.", "error");
+        return;
+      }
+      const scheduleRefresh = await window.botappDesktop?.profiles?.schedule?.get?.(profile.id);
+      const detailsRefresh = await loadProfileDetails(profile.id);
+      if (detailsRefresh.ok) {
+        const scheduleProjection = scheduleRefresh?.ok ? (scheduleRefresh.data as Record<string, unknown>) : null;
+        applySettings(
+          buildSettingsFromProfileDetails(profile, (detailsRefresh.data ?? null) as ProfileDetailsPayload | null, scheduleProjection),
+          "Supabase-backed API · ig_account_settings · schedule connected",
+        );
+        console.info("[botapp] profile_details_refresh_after_schedule_ok", { account_id: profile.id });
+      }
+      const nextAssignment = record((scheduleRefresh?.data as Record<string, unknown> | undefined)?.current_assignment);
+      const nextScheduleMode = readString(nextAssignment, ["schedule_mode"], manualOnly ? "manual_only" : "scheduled");
+      const nextScheduleLabel = manualOnly
+        ? "Manual"
+        : selectedScheduleSlot.localLabel || `${selectedScheduleSlot.startsAt}-${selectedScheduleSlot.endsAt}`;
+      console.info("[botapp] schedule_save_success", {
+        account_id: profile.id,
+        schedule_mode: nextScheduleMode,
+        schedule_label: nextScheduleLabel,
+      });
+      await Promise.resolve(onRefreshProfiles?.());
+      console.info("[botapp] profiles_refresh_after_schedule_ok", { account_id: profile.id });
+      onSaved?.("Schedule saved.", "success");
+    } finally {
+      setScheduleSaving(false);
+    }
+  }
+
+  async function handleSave() {
+    if (activeTab === "Schedule") {
+      await saveSchedule();
+      return;
+    }
+    onConfirm();
+  }
+
   return (
     <Drawer
       title="Settings"
@@ -1139,10 +1244,10 @@ function LegacySettingsDrawer({
       footer={showSaveAction ? <>
         <div className="drawer-footer-left"><span className="subtle">{settingsSource}</span></div>
         <Button
-          onClick={onConfirm}
+          onClick={() => void handleSave()}
           disabled={(activeTab === "Schedule" && scheduleSaveDisabled) || (activeTab === "Follow" && followSaveDisabled) || (activeTab === "DM" && dmSaveDisabled) || (activeTab === "Followback" && followbackSaveDisabled) || (activeTab === "Sources" && sourcesSaveDisabled) || (activeTab === "Filters" && filtersSaveDisabled)}
         >
-          {actionLabel}
+          {activeTab === "Schedule" && scheduleSaving ? "Saving..." : actionLabel}
         </Button>
       </> : undefined}
     >
@@ -1198,12 +1303,11 @@ function LegacySettingsDrawer({
       </div> : null}
 
       {activeTab === "Schedule" ? <div className="settings-grid">
-        <Section title="Current assignment" badge={settings.schedule.gates.ok ? "In window" : "Outside window"} tone={settings.schedule.gates.ok ? "success" : "warning"}><p className="muted">Full-cycle accounts use 6-hour slots. Outreach-only accounts use 40-minute slots.</p><Field label="Phone / device" value={settings.schedule.assignedDevice} /><Field label="Safe device serial" value={settings.schedule.safeDeviceSerial} mono /><Field label="Runtime profile" value={settings.schedule.runtimeProfile} mono /><Field label="Slot kind" value={settings.schedule.slotKind} mono /><Field label="Current slot" value={settings.schedule.currentSlot} mono /><Field label="Assignment status" value={settings.schedule.assignmentStatus} /><Field label="Assignment source" value={settings.schedule.assignmentSource} /><Field label="Device timezone" value={settings.schedule.businessTimezone} /></Section>
+        <Section title="Current assignment" badge={settings.schedule.gates.ok ? "In window" : "Outside window"} tone={settings.schedule.gates.ok ? "success" : "warning"}><p className="muted">Full-cycle accounts use 6-hour slots. Outreach-only accounts use 40-minute slots. Manual-only accounts reserve placement without an automatic window.</p><Field label="Phone / device" value={settings.schedule.assignedDevice} /><Field label="Safe device serial" value={settings.schedule.safeDeviceSerial} mono /><Field label="Runtime profile" value={settings.schedule.runtimeProfile} mono /><Field label="Schedule mode" value={settings.schedule.scheduleMode || "scheduled"} mono /><Field label="Slot kind" value={settings.schedule.slotKind} mono /><Field label="Current slot" value={settings.schedule.currentSlot} mono /><Field label="Assignment status" value={settings.schedule.assignmentStatus} /><Field label="Assignment source" value={settings.schedule.assignmentSource} /><Field label="Device timezone" value={settings.schedule.businessTimezone} /></Section>
         <Section title="Device reservation" badge={settings.schedule.reservedState} tone={statusTone(settings.schedule.reservedState)}><Field label="Clone slot" value={settings.schedule.cloneSlot} /><Field label="APK cloner slot" value={settings.schedule.apkClonerSlot} /><Field label="App instances" value={settings.schedule.appInstanceSummary} /><Field label="One phone / one session" value={settings.schedule.deviceLock} /><Field label="Clone/session buffer" value={`${settings.schedule.cloneBufferMinutes} min`} /><Field label="Phone rest" value={settings.schedule.phoneRest} /><Field label="Schedule source" value={settings.schedule.scheduleSource} /></Section>
-        <Section title="Select slot" badge={settings.schedule.saveReady ? "Save ready" : "Blocked"} tone={settings.schedule.saveReady ? "success" : "warning"} full><p className="muted">Only available slots can be saved. Disabled rows mirror admin reasons like occupied slot, fixed blackout, or unavailable app instance.</p><label className="settings-select-field"><span>Available slot</span><select className="input" value={selectedScheduleSlotKey} onChange={(event) => setSelectedScheduleSlotKey(event.target.value)} disabled={!settings.schedule.saveReady}><option value="">Select a slot</option>{settings.schedule.availableSlots.map((slot) => <option key={scheduleSlotKey(slot)} value={scheduleSlotKey(slot)} disabled={!slot.available}>{slot.localLabel} - {scheduleSlotReasonLabel(slot)}</option>)}</select></label><div className="schedule-slot-list">{settings.schedule.availableSlots.map((slot) => <div key={`${slot.slotIndex}-${slot.startsAt}`} className={`schedule-slot-row${slot.available ? " available" : " blocked"}`}><strong>{slot.localLabel}</strong><span>{slot.slotKindLabel}</span><em>{scheduleSlotReasonLabel(slot)}</em></div>)}</div></Section>
+        <Section title="Select slot" badge={settings.schedule.saveReady ? "Save ready" : "Blocked"} tone={settings.schedule.saveReady ? "success" : "warning"} full><p className="muted">Settings schedule edit mode: this keeps the existing app instance for this account and only checks device-level slot occupancy.</p>{currentConflictSlot ? <p className="settings-warning">This account currently conflicts with another assignment. Move it to a free slot or Run manually.</p> : null}<label className="settings-select-field"><span>Available slot</span><select className="input" value={selectedScheduleSlotKey} onChange={(event) => setSelectedScheduleSlotKey(event.target.value)} disabled={!settings.schedule.saveReady}><option value="">Select a slot</option>{settings.schedule.availableSlots.map((slot) => <option key={scheduleSlotKey(slot)} value={scheduleSlotKey(slot)} disabled={slot.selectable === false}>{slot.localLabel} - {scheduleSlotReasonLabel(slot)}</option>)}</select></label><div className="schedule-slot-list">{settings.schedule.availableSlots.map((slot) => <div key={`${slot.slotIndex}-${slot.startsAt}`} className={`schedule-slot-row${slot.selectable === false ? " blocked" : " available"}${slot.isConflict || slot.reason === "current_conflict" ? " conflict" : ""}`}><strong>{slot.localLabel}</strong><span>{slot.slotKindLabel}</span><em>{scheduleSlotReasonLabel(slot)}</em></div>)}</div></Section>
         <Section title="Fixed blackout windows" badge={settings.schedule.restWindows.length ? "Active blackout" : "No blackout"} tone={settings.schedule.restWindows.length ? "warning" : "success"}>{settings.schedule.restWindows.length ? <ul className="settings-list">{settings.schedule.restWindows.map((window) => <li key={window.id}>{window.label} ({window.timezone}){window.reason ? ` - ${window.reason}` : ""}</li>)}</ul> : <p className="muted">No active fixed blackout windows configured for this device.</p>}</Section>
         <Section title="Schedule gates" badge="Runtime" tone="info"><Field label="/runs/start" value={scheduleGateStatusLabel(settings.schedule.gates.runStartGate, settings.schedule.gates.reason)} /><Field label="Dispatcher" value={scheduleGateStatusLabel(settings.schedule.gates.dispatcherGate, settings.schedule.gates.reason)} /><Field label="Auto Restart" value={scheduleGateStatusLabel(settings.schedule.gates.autoRestartGate, settings.schedule.gates.reason)} /><Field label="Gate reason" value={settings.schedule.gates.reason || "assignment_missing"} /><Field label="Window active" value={settings.schedule.gates.windowActive} /><Field label="Phone rest active" value={settings.schedule.gates.phoneRestActive} /><Field label="Next eligible slot" value={scheduleNextEligibleLabel(settings.schedule)} /></Section>
-        <SchedulePayloadPreview payload={schedulePayload} />
       </div> : null}
 
       {activeTab === "Follow" ? <div className="settings-grid">
@@ -1353,6 +1457,8 @@ export function SettingsDrawer(props: {
   onClose: () => void;
   onConfirm: () => void;
   onOpenTargets?: () => void;
+  onSaved?: (message: string, tone?: "success" | "error" | "info") => void;
+  onRefreshProfiles?: () => Promise<void> | void;
 }) {
   return <LegacySettingsDrawer {...props} />;
 }
