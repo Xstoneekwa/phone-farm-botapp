@@ -887,6 +887,10 @@ export type ProfileSettingsGeneral = {
   slotKind: string;
   readinessStatus: BotProfile["readiness"];
   eligibilityStatus: ProfileEligibility["status"];
+  readinessReason: string;
+  readinessNextAction: string;
+  readinessRunRequestStatus: string;
+  readinessPreflightCreated: boolean;
   assignmentStatus: string;
   currentSlot: string;
   safeMetadata: string;

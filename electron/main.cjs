@@ -470,6 +470,28 @@ const botappEndpointRegistry = [
     testStrategy: "none",
   },
   {
+    id: "profiles_assign_now",
+    name: "Profile assign now",
+    method: "POST",
+    path: "/api/instagram-dashboard/assignments/now",
+    usedBy: ["Profiles"],
+    purpose: "Create or repair the current phone/app assignment through secure relay without login/provisioning/run",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_readiness_now",
+    name: "Profile readiness now",
+    method: "POST",
+    path: "/api/instagram-dashboard/readiness/now",
+    usedBy: ["Profiles", "Settings"],
+    purpose: "Preview login/provisioning readiness through secure relay without creating run requests",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
     id: "targets_collection",
     name: "Targets collection",
     method: "POST",
@@ -1184,6 +1206,37 @@ async function performProfileAction(input) {
     return { ok: true, data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Profile account action failed.") };
+  }
+}
+
+async function assignProfileNow(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  try {
+    const data = await dashboardPost("profiles_assign_now", {
+      account_id: accountId,
+      start_run: false,
+      provisioning_enabled: false,
+      login_enabled: false,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Assign Now failed.") };
+  }
+}
+
+async function profileReadinessNow(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  try {
+    const data = await dashboardPost("profiles_readiness_now", {
+      account_id: accountId,
+      audience: "admin",
+      dry_run: true,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Readiness check failed.") };
   }
 }
 
@@ -2466,6 +2519,8 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:create", (_event, input) => profileCreate(input));
   ipcMain.handle("botapp:profiles:credentials:submit", (_event, input) => profileCredentialsSubmit(input));
   ipcMain.handle("botapp:profiles:action", (_event, input) => performProfileAction(input));
+  ipcMain.handle("botapp:profiles:assign-now", (_event, input) => assignProfileNow(input));
+  ipcMain.handle("botapp:profiles:readiness-now", (_event, input) => profileReadinessNow(input));
   ipcMain.handle("botapp:profiles:targets:add", (_event, input) => addProfileTarget(input));
   ipcMain.handle("botapp:profiles:targets:bulk-add", (_event, input) => bulkAddProfileTargets(input));
   ipcMain.handle("botapp:profiles:targets:delete", (_event, input) => deleteProfileTargets(input));

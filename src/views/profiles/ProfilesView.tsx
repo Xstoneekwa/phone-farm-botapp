@@ -394,6 +394,38 @@ export function ProfilesView({
     onRefresh();
   }
 
+  async function assignProfileNow(profile: BotProfile) {
+    const assignNow = window.botappDesktop?.profiles?.assignNow;
+    if (!assignNow) {
+      onMockSubmit("Assign Now backend relay unavailable in this runtime.");
+      return;
+    }
+    const result = await assignNow({ accountId: profile.id });
+    if (!result.ok) {
+      onMockSubmit(result.error || "Assign Now failed.");
+      return;
+    }
+    const data = (result.data ?? {}) as Record<string, unknown>;
+    onMockSubmit(`Assign Now: ${String(data.status || "unknown")} · ${String(data.reason || "no_reason")} · run=${String(data.run_started ?? false)}.`);
+    onRefresh();
+  }
+
+  async function checkReadinessNow(profile: BotProfile) {
+    const readinessNow = window.botappDesktop?.profiles?.readinessNow;
+    if (!readinessNow) {
+      onMockSubmit("Readiness backend relay unavailable in this runtime.");
+      return;
+    }
+    const result = await readinessNow({ accountId: profile.id });
+    if (!result.ok) {
+      onMockSubmit(result.error || "Readiness check failed.");
+      return;
+    }
+    const data = (result.data ?? {}) as Record<string, unknown>;
+    onMockSubmit(`Readiness: ${String(data.readiness_status || "unknown")} · ${String(data.reason || "no_reason")} · preflight=${String(data.preflight_request_created ?? false)}.`);
+    onRefresh();
+  }
+
   function executeConfirm(action: { kind: ConfirmKind; profile: BotProfile }) {
     if (action.kind === "play") {
       setConfirmAction(null);
@@ -411,17 +443,13 @@ export function ProfilesView({
       return;
     }
     if (action.kind === "check_readiness") {
-      const state = createReadinessNowState(action.profile);
-      void state;
-      onMockSubmit("Check Login request prepared for future secure BotApp relay.");
       setConfirmAction(null);
+      void checkReadinessNow(action.profile);
       return;
     }
     if (action.kind === "assign_now") {
-      const state = createAssignNowState(action.profile);
-      void state;
-      onMockSubmit("Assign Now request prepared for future secure BotApp relay.");
       setConfirmAction(null);
+      void assignProfileNow(action.profile);
       return;
     }
     if (action.kind === "archive") {
@@ -783,8 +811,9 @@ function AssignNowConfirmation({ profile }: { profile: BotProfile }) {
         <span>Candidate slot</span><code>{candidate.candidate_slot ? `${candidate.candidate_slot.starts_at}-${candidate.candidate_slot.ends_at}` : "none"}</code>
         <span>Timeslot</span><code>{profile.activeWindow}</code>
         <span>Schedule gate</span><code>{candidate.schedule_gate.reason}</code>
-        <span>Expected result</span><span>{candidate.schedule_gate.ok ? "Prepare assignment creation or repair through the future secure relay." : "Keep the action blocked until the assignment gate is ready."}</span>
-        <span>Future endpoint</span><code>/api/botapp/instagram-dashboard/assignments/now</code>
+        <span>Expected result</span><span>{candidate.schedule_gate.ok ? "Create or repair assignment through the secure relay." : "Backend will re-check and return a safe blocker if no slot is available now."}</span>
+        <span>Endpoint</span><code>/api/instagram-dashboard/assignments/now</code>
+        <span>Runtime</span><code>run_started=false</code>
       </div>
       {candidate.warnings.length ? (
         <div className="assign-now-warnings">

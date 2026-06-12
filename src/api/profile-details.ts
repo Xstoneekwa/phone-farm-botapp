@@ -11,6 +11,7 @@ export type ProfileDetailsPayload = {
   packageSummary?: { data?: Record<string, unknown>; status?: ProfileDetailsSourceStatus; error?: string | null };
   filters?: { data?: Record<string, unknown>; status?: ProfileDetailsSourceStatus; error?: string | null };
   credentialsSafe?: Record<string, unknown>;
+  readinessSafe?: Record<string, unknown>;
   source?: Record<string, string>;
 };
 

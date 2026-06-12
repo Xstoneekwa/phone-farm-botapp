@@ -683,6 +683,7 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
   const account = record(data?.account);
   const settings = record(data?.settings?.data);
   const packageSummary = record(data?.packageSummary?.data);
+  const readinessSafe = record(data?.readinessSafe);
   const packageCaps = record(packageSummary.package_caps);
   const effectiveCapsPreview = record(packageSummary.effective_caps_preview);
   const filters = record(data?.filters?.data);
@@ -747,8 +748,12 @@ function buildSettingsFromProfileDetails(profile: BotProfile, data: ProfileDetai
       entitlements: profile.entitlements.length ? profile.entitlements : [packageLabel],
       runtimeProfile: profile.runtimeProfile || "schema_only",
       slotKind: profile.slotKind || "schema_only",
-      readinessStatus: profile.readiness,
+      readinessStatus: (readString(readinessSafe, ["readiness_status"], profile.readiness) as ProfileSettings["general"]["readinessStatus"]),
       eligibilityStatus: profile.eligibilityDetail.status,
+      readinessReason: readString(readinessSafe, ["reason"], profile.eligibilityReason || "unknown"),
+      readinessNextAction: readString(readinessSafe, ["next_action"], "unknown"),
+      readinessRunRequestStatus: readString(readinessSafe, ["run_request_status"], "not_created"),
+      readinessPreflightCreated: readBoolean(readinessSafe, ["preflight_request_created"], false),
       assignmentStatus: profile.assignmentState,
       currentSlot,
       safeMetadata: `relay details loaded; settings=${settingsStatus}; filters=${filtersStatus}; secrets excluded`,
@@ -1179,7 +1184,16 @@ function LegacySettingsDrawer({
           )}
         </Section>
         <Section title="Package and runtime" badge="Runtime summary" tone="info"><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Add-ons / entitlements" value={settings.general.entitlements} /><Field label="Runtime profile" value={settings.general.runtimeProfile} mono /><Field label="Slot kind" value={settings.general.slotKind} mono /></Section>
-        <Section title="Status" badge="Read-only"><Field label="Readiness status" value={settings.general.readinessStatus} /><Field label="Eligibility status" value={settings.general.eligibilityStatus} /><Field label="Assignment status" value={settings.general.assignmentStatus} /><Field label="Current slot" value={settings.general.currentSlot} mono /></Section>
+        <Section title="Status" badge="Read-only">
+          <Field label="Readiness status" value={settings.general.readinessStatus} />
+          <Field label="Readiness reason" value={settings.general.readinessReason} mono />
+          <Field label="Next action" value={settings.general.readinessNextAction} mono />
+          <Field label="Preflight created" value={settings.general.readinessPreflightCreated ? "yes" : "no"} />
+          <Field label="Run request status" value={settings.general.readinessRunRequestStatus} mono />
+          <Field label="Eligibility status" value={settings.general.eligibilityStatus} />
+          <Field label="Assignment status" value={settings.general.assignmentStatus} />
+          <Field label="Current slot" value={settings.general.currentSlot} mono />
+        </Section>
         <Section title="Safe account metadata" badge="No secrets" tone="warning" full><Field label="Device assignment" value={`${settings.general.deviceLabel} · ${settings.general.deviceId}`} mono /><Field label="Safety rule" value={settings.general.safeMetadata} /></Section>
       </div> : null}
 
