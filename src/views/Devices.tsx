@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { BotAppAddPhonePayload, BotAppDeviceHistoryEntry, BotAppRestartPhonePayload, Device } from "../api/types";
-import type { DeviceViewState } from "../desktop/device-views";
+import type { DeviceViewResult, DeviceViewState, LocalToolDiagnostics } from "../desktop/device-views";
 import { closeAllDeviceViews, closeDeviceView, focusDeviceView, listOpenDeviceViews, openDeviceView, subscribeDeviceViewState } from "../desktop/device-views";
 import "./devices.css";
 
@@ -16,8 +16,12 @@ function deviceIdempotencyKey(action: string, ids: string[]) {
   return `botapp:devices:${action}:${ids.join("-")}:preview`;
 }
 
+function isConnectedDevice(device: Device) {
+  return device.localAdbStatus === "device" || device.status === "connected" || device.status === "online" || device.status === "reserved";
+}
+
 function connectedDevices(devices: Device[]) {
-  return devices.filter((device) => device.status === "connected" || device.status === "online" || device.status === "reserved");
+  return devices.filter(isConnectedDevice);
 }
 
 function restartPayload(devices: Device[], action: "restart_phone" | "restart_all_phones"): BotAppRestartPhonePayload {
@@ -61,11 +65,16 @@ function addPhonePayload(form: AddPhoneFormState): BotAppAddPhonePayload {
 }
 
 function statusLabel(device: Device) {
-  return device.status === "offline" ? "Offline" : "Connected";
+  if (device.localAdbStatus === "device") return "Connected";
+  if (device.localAdbStatus === "adb_unavailable") return "ADB unavailable";
+  if (device.localAdbStatus === "not_seen") return "Not seen locally";
+  if (device.status === "offline") return "Offline";
+  if (device.status === "maintenance") return "Inactive";
+  return "Backend ready";
 }
 
 function statusClass(device: Device) {
-  return device.status === "offline" ? "offline" : "connected";
+  return isConnectedDevice(device) ? "connected" : "offline";
 }
 
 function latencyLabel(device: Device) {
@@ -73,7 +82,50 @@ function latencyLabel(device: Device) {
 }
 
 function isViewOpen(openViews: DeviceViewState[], device: Device) {
-  return openViews.some((view) => view.deviceSerial === device.id);
+  return openViews.some((view) => view.deviceSerial === deviceViewSerial(device));
+}
+
+function deviceViewSerial(device: Device) {
+  return device.adbSerial || device.id;
+}
+
+function formatViewFailure(deviceName: string, result: DeviceViewResult) {
+  const reason = result.reason ? ` (${result.reason})` : "";
+  const detail = result.error ? `: ${result.error}` : "";
+  return `Failed to open ${deviceName} phone view${reason}${detail}`;
+}
+
+function formatViewOpened(deviceName: string, result: DeviceViewResult) {
+  if (result.userMessage) return result.userMessage;
+  if (result.botAppFullscreen) {
+    return `${deviceName} phone view opened in another Space because BotApp is fullscreen. Use windowed mode to keep it above BotApp.`;
+  }
+  if (result.visibleFrontmost === false || result.focused === false) {
+    return `${deviceName} phone view opened, but macOS placed it outside BotApp. Check the Phone View window or exit fullscreen.`;
+  }
+  return `${deviceName} phone view opened.`;
+}
+
+function formatViewFocused(deviceName: string, result: DeviceViewResult) {
+  if (result.userMessage) return result.userMessage;
+  if (result.botAppFullscreen) {
+    return `${deviceName} phone view opened in another Space because BotApp is fullscreen. Use windowed mode to keep it above BotApp.`;
+  }
+  if (result.visibleFrontmost === false || result.focused === false) {
+    return `${deviceName} phone view is open, but macOS placed it outside BotApp. Check the Phone View window or exit fullscreen.`;
+  }
+  return `${deviceName} phone view focused.`;
+}
+
+function formatToolPath(path: string | null) {
+  return path || "missing";
+}
+
+function localToolsMessage(tools: LocalToolDiagnostics | null) {
+  if (!tools) return null;
+  if (!tools.adb.found) return "ADB not found by BotApp. Set ADB env or install Android platform-tools.";
+  if (!tools.scrcpy.found) return "scrcpy not found by BotApp. Install scrcpy or set SCRCPY env.";
+  return `Local tools: ADB ${formatToolPath(tools.adb.path)} · scrcpy ${formatToolPath(tools.scrcpy.path)}`;
 }
 
 function historyFor(devices: Device[]): BotAppDeviceHistoryEntry[] {
@@ -113,17 +165,21 @@ const initialAddPhoneForm: AddPhoneFormState = {
   hostLabel: "",
 };
 
-export function Devices({ devices, onAction }: { devices: Device[]; onAction: (action: string, target: string, danger?: boolean) => void }) {
+export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; onAction: (action: string, target: string, danger?: boolean) => void; onRefresh?: () => Promise<void> | void }) {
   const [openViews, setOpenViews] = useState<DeviceViewState[]>([]);
   const [panel, setPanel] = useState<DevicePanel>(null);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [message, setMessage] = useState("");
+  const [localTools, setLocalTools] = useState<LocalToolDiagnostics | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void listOpenDeviceViews().then((result) => {
-      if (!cancelled && result.ok) setOpenViews(result.data);
+      if (!cancelled && result.ok) {
+        setOpenViews(result.data);
+        if (result.tools) setLocalTools(result.tools);
+      }
     });
     const unsubscribe = subscribeDeviceViewState((state) => {
       if (!cancelled) setOpenViews(state);
@@ -139,6 +195,7 @@ export function Devices({ devices, onAction }: { devices: Device[]; onAction: (a
   const offlineCount = devices.filter((device) => device.status === "offline").length;
   const viewReadyDevices = devices.filter((device) => device.viewAvailable && device.status !== "offline");
   const history = useMemo(() => historyFor(devices), [devices]);
+  const toolsMessage = localToolsMessage(localTools);
   void onAction;
 
   async function openPhoneView(device: Device) {
@@ -147,33 +204,84 @@ export function Devices({ devices, onAction }: { devices: Device[]; onAction: (a
       setMessage(device.viewUnavailableReason || "Phone view is unavailable.");
       return;
     }
-    const result = isViewOpen(openViews, device)
-      ? await focusDeviceView(device.id)
-      : await openDeviceView({ deviceSerial: device.id, deviceLabel: device.name });
-    if (result.ok) {
-      setOpenViews(result.data);
-      setMessage(isViewOpen(openViews, device) ? `${device.name} phone view focused.` : `${device.name} phone view opened.`);
+    const serial = deviceViewSerial(device);
+    if (isViewOpen(openViews, device)) {
+      setMessage(`Focusing ${device.name} phone view...`);
+      const result = await focusDeviceView(serial);
+      if (result.ok) {
+        setOpenViews(result.data);
+        if (result.tools) setLocalTools(result.tools);
+        setMessage(formatViewFocused(device.name, result));
+        return;
+      }
+      if (result.tools) setLocalTools(result.tools);
+      setMessage(formatViewFailure(device.name, result));
       return;
     }
-    setMessage(result.error || `Could not open ${device.name}.`);
+
+    setMessage(`Opening ${device.name} phone view...`);
+    const result = await openDeviceView({ deviceSerial: serial, deviceLabel: device.name });
+    if (result.ok) {
+      setOpenViews(result.data);
+      if (result.tools) setLocalTools(result.tools);
+      setMessage(formatViewOpened(device.name, result));
+      return;
+    }
+    if (result.tools) setLocalTools(result.tools);
+    setMessage(formatViewFailure(device.name, result));
   }
 
   async function openAll() {
-    setMessage("");
+    setMessage("Opening all local ADB phone views...");
     let opened = 0;
+    let frontmost = 0;
     let failed = 0;
-    for (const device of viewReadyDevices) {
-      if (isViewOpen(openViews, device)) continue;
-      const result = await openDeviceView({ deviceSerial: device.id, deviceLabel: device.name });
+    let fullscreenDetected = false;
+    const openable = viewReadyDevices.filter((device) => device.localAdbStatus === "device");
+    const skipped = devices.length - openable.length;
+    for (const device of openable) {
+      if (isViewOpen(openViews, device)) {
+        opened += 1;
+        continue;
+      }
+      const result = await openDeviceView({
+        deviceSerial: deviceViewSerial(device),
+        deviceLabel: device.name,
+        windowIndex: opened,
+      });
       if (result.ok) {
         opened += 1;
+        if (result.botAppFullscreen) fullscreenDetected = true;
         setOpenViews(result.data);
+        if (result.tools) setLocalTools(result.tools);
       } else {
+        if (result.tools) setLocalTools(result.tools);
         failed += 1;
       }
     }
-    const skipped = devices.length - viewReadyDevices.length;
-    setMessage(`Open All prepared ${viewReadyDevices.length} mapped phone view(s). Opened ${opened}; skipped ${skipped}; failed ${failed}.`);
+    if (openable.length > 0) {
+      const refocus = await focusDeviceView(deviceViewSerial(openable[openable.length - 1]));
+      if (refocus.ok) {
+        if (refocus.visibleFrontmost || refocus.focused) frontmost = 1;
+        if (refocus.botAppFullscreen) fullscreenDetected = true;
+        if (refocus.tools) setLocalTools(refocus.tools);
+      }
+    }
+    const sameSpace = fullscreenDetected ? "failed_fullscreen" : "unknown";
+    const summary = `Open All summary: opened ${opened}, frontmost ${frontmost}/${opened}, same_space ${sameSpace}, skipped ${skipped}, failed ${failed}.`;
+    if (failed > 0) {
+      setMessage(`Some phone views failed. ${summary}`);
+      return;
+    }
+    if (fullscreenDetected) {
+      setMessage(`Phone views opened in another Space because BotApp is fullscreen. Use windowed mode to keep them above BotApp. ${summary}`);
+      return;
+    }
+    if (frontmost < 1 && opened > 0) {
+      setMessage(`Phone views opened, but macOS placed them outside BotApp. Check the Phone View windows or exit fullscreen. ${summary}`);
+      return;
+    }
+    setMessage(summary);
   }
 
   async function closeAll() {
@@ -181,6 +289,7 @@ export function Devices({ devices, onAction }: { devices: Device[]; onAction: (a
     const result = await closeAllDeviceViews(openViews.map((view) => view.deviceSerial));
     if (result.ok) {
       setOpenViews(result.data);
+      if (result.tools) setLocalTools(result.tools);
       setMessage("All open phone views closed.");
       return;
     }
@@ -188,7 +297,7 @@ export function Devices({ devices, onAction }: { devices: Device[]; onAction: (a
   }
 
   async function closeOne(device: Device) {
-    const result = await closeDeviceView(device.id);
+    const result = await closeDeviceView(deviceViewSerial(device));
     if (result.ok) {
       setOpenViews(result.data);
       setMessage(`${device.name} phone view closed.`);
@@ -205,8 +314,18 @@ export function Devices({ devices, onAction }: { devices: Device[]; onAction: (a
     const targetDevices = confirmState.kind === "restart_all" ? confirmState.devices : [confirmState.device];
     const payload = restartPayload(targetDevices, confirmState.kind === "restart_all" ? "restart_all_phones" : "restart_phone");
     void payload;
-    setMessage(`${confirmState.kind === "restart_all" ? "Restart All" : "Restart phone"} payload prepared for secure relay.`);
+    setMessage(`${confirmState.kind === "restart_all" ? "Restart All" : "Restart phone"} is not available from BotApp yet. No phone was restarted.`);
     setConfirmState(null);
+  }
+
+  async function refreshDevices() {
+    setMessage("");
+    if (!onRefresh) {
+      setMessage("Refresh is unavailable in this runtime.");
+      return;
+    }
+    await onRefresh();
+    setMessage("Devices refreshed from shared backend and local ADB check.");
   }
 
   return (
@@ -240,6 +359,7 @@ export function Devices({ devices, onAction }: { devices: Device[]; onAction: (a
 
         <aside className="devices-actions-panel" aria-label="Device actions">
           <button type="button" className="device-action add" onClick={() => openPanel("add")}>+ Add</button>
+          <button type="button" className="device-action" onClick={() => void refreshDevices()}>Refresh</button>
           <button type="button" className="device-action" onClick={() => void openAll()}>Open All</button>
           <button type="button" className="device-action" onClick={() => void closeAll()}>Close All</button>
           <button type="button" className="device-action" onClick={() => setConfirmState({ kind: "restart_all", devices })}>Restart All</button>
@@ -251,8 +371,9 @@ export function Devices({ devices, onAction }: { devices: Device[]; onAction: (a
       </div>
 
       {message ? <div className="devices-message">{message}</div> : null}
+      {toolsMessage ? <div className="devices-message">{toolsMessage}</div> : null}
 
-      {panel === "add" ? <AddPhoneDrawer onClose={() => setPanel(null)} onPrepared={() => setMessage("Add phone payload prepared for secure relay.")} /> : null}
+      {panel === "add" ? <AddPhoneDrawer onClose={() => setPanel(null)} onPrepared={() => setMessage("Add phone is backend_pending from BotApp. No fake phone was created.")} /> : null}
       {panel === "history" ? <HistoryDrawer history={history} onClose={() => setPanel(null)} /> : null}
       {panel === "edit" && selectedDevice ? <EditDeviceDrawer device={selectedDevice} onClose={() => setPanel(null)} onPrepared={() => setMessage("Edit device payload prepared for secure relay.")} /> : null}
       {panel === "delete" && selectedDevice ? <DeleteDeviceModal device={selectedDevice} onClose={() => setPanel(null)} onPrepared={() => setMessage("Delete device payload prepared for secure relay.")} /> : null}
@@ -296,30 +417,63 @@ function DeviceRow({
   onClose: () => void;
   onRestart: () => void;
 }) {
+  const appInstances = device.appInstances ?? [];
+  const occupied = appInstances.filter((app) => app.occupant);
+  const available = appInstances.filter((app) => app.selectable);
   return (
     <article className={`device-row status-${statusClass(device)}`}>
-      <button
-        type="button"
-        className={`device-eye${isOpen ? " is-open" : ""}`}
-        aria-label={isOpen ? `Close ${device.name} view` : `Open ${device.name} view`}
-        title={device.viewAvailable ? isOpen ? "Close phone view" : "Open phone view" : device.viewUnavailableReason || "Phone view unavailable"}
-        disabled={!device.viewAvailable}
-        onClick={isOpen ? onClose : onOpen}
-      >
-        <EyeIcon />
-      </button>
-      <div className="device-name-block">
-        <strong>{device.name}</strong>
-        <span>{device.shortSerial}</span>
+      <div className="device-row-main">
+        <button
+          type="button"
+          className={`device-eye${isOpen ? " is-open" : ""}`}
+          aria-label={isOpen ? `Close ${device.name} view` : `Open ${device.name} view`}
+          title={device.viewAvailable ? isOpen ? "Close phone view" : "Open phone view" : device.viewUnavailableReason || "Phone view unavailable"}
+          disabled={!device.viewAvailable}
+          onClick={isOpen ? onClose : onOpen}
+        >
+          <EyeIcon />
+        </button>
+        <div className="device-name-block">
+          <strong>{device.name}</strong>
+          <span>{device.shortSerial}</span>
+        </div>
+        <span className="device-profile-count" title="App instances"><AndroidIcon />{device.appInstancesCount}</span>
+        <span className="device-latency">{latencyLabel(device)}</span>
+        <span className={`device-status-pill ${statusClass(device)}`}>
+          <span />{statusLabel(device)}
+        </span>
+        <button type="button" className="device-row-restart" aria-label={`Restart ${device.name}`} onClick={onRestart}>
+          <RefreshIcon />
+        </button>
       </div>
-      <span className="device-profile-count"><AndroidIcon />{device.profileCount}</span>
-      <span className="device-latency">{latencyLabel(device)}</span>
-      <span className={`device-status-pill ${statusClass(device)}`}>
-        <span />{statusLabel(device)}
-      </span>
-      <button type="button" className="device-row-restart" aria-label={`Restart ${device.name}`} onClick={onRestart}>
-        <RefreshIcon />
-      </button>
+
+      <div className="device-meta-grid">
+        <span>Backend <strong>{device.backendStatus || device.status}</strong></span>
+        <span>Local ADB <strong>{device.localAdbStatus || "unknown"}</strong></span>
+        <span>Last seen <strong>{device.backendLastSeenAt ? new Date(device.backendLastSeenAt).toLocaleString() : "unknown"}</strong></span>
+        <span>Source <strong>{device.inventorySource || "shared backend API"}</strong></span>
+        <span>Free <strong>{device.appInstancesAvailableCount}</strong></span>
+        <span>Occupied <strong>{device.appInstancesOccupiedCount}</strong></span>
+      </div>
+      {device.viewUnavailableReason ? <p className="device-warning">{device.viewUnavailableReason}</p> : null}
+      {appInstances.length ? (
+        <div className="device-app-instances">
+          {appInstances.map((app) => (
+            <div key={app.appInstanceId || `${app.instanceType}:${app.instanceIndex}`} className={`device-app-instance ${app.selectable ? "available" : app.occupant ? "occupied" : "disabled"}`}>
+              <strong>{app.label}</strong>
+              <span>{app.instanceType === "primary_app" ? "primary" : `clone ${app.instanceIndex}`} · {app.packageName || "package unknown"}</span>
+              <span>{app.availability}{app.occupant?.username ? ` · @${app.occupant.username}` : app.occupant?.accountId ? ` · ${app.occupant.accountId.slice(0, 8)}` : ""}</span>
+              {app.occupant ? <em>{app.occupant.status} · {app.occupant.accountId.slice(0, 8)}</em> : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="device-warning">No app instances returned by shared backend.</p>
+      )}
+      <div className="device-clone-summary">
+        <span>{available.length} selectable</span>
+        <span>{occupied.length} occupied</span>
+      </div>
     </article>
   );
 }

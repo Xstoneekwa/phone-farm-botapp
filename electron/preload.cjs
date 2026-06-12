@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   data: {
     overview: () => ipcRenderer.invoke("botapp:data:overview"),
   },
+  devices: {
+    list: (input) => ipcRenderer.invoke("botapp:devices:list", input),
+  },
   profiles: {
     details: (accountId) => ipcRenderer.invoke("botapp:profiles:details", accountId),
     createDryRun: (input) => ipcRenderer.invoke("botapp:profiles:create-dry-run", input),

@@ -4,7 +4,9 @@ const { app, BrowserWindow, ipcMain, session, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { URL } = require("node:url");
+const { spawnSync } = require("node:child_process");
 const { closeAllDeviceViews, registerDeviceViewIpc, runDeviceViewSelfTest } = require("./device-view-manager.cjs");
+const { localToolDiagnostics, resolveAdbPath } = require("./local-tools.cjs");
 
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.BOTAPP_DEV_SERVER_URL || "http://127.0.0.1:5173";
@@ -391,6 +393,7 @@ const runtimeIpcHandlers = [
   "botapp:auto-restart:dry-run",
   "botapp:auto-restart:action-preview",
   "botapp:data:overview",
+  "botapp:devices:list",
   "botapp:profiles:details",
   "botapp:profiles:create-dry-run",
   "botapp:profiles:create",
@@ -418,7 +421,7 @@ const botappEndpointRegistry = [
     method: "GET",
     path: "/api/instagram-dashboard/botapp/overview",
     usedBy: ["Overview", "Profiles", "Client Accounts", "Credentials", "Activity Log", "Compass", "Auto Restart"],
-    purpose: "Load production-safe dashboard aggregate for BotApp tabs",
+    purpose: "Load production-safe shared backend aggregate for BotApp tabs",
     authRequired: true,
     status: "active",
     testStrategy: "fetch",
@@ -440,7 +443,7 @@ const botappEndpointRegistry = [
     method: "GET",
     path: "/api/instagram-dashboard/profiles",
     usedBy: ["Profiles"],
-    purpose: "Load real dashboard Manage/Profile account rows",
+    purpose: "Load Supabase-backed profile account rows",
     authRequired: true,
     status: "active",
     testStrategy: "fetch",
@@ -561,7 +564,7 @@ const botappEndpointRegistry = [
     method: "GET",
     path: "/api/instagram-dashboard/client-accounts",
     usedBy: ["Client Accounts"],
-    purpose: "Load real client account operations rows from Manage/Credentials projections",
+    purpose: "Load Supabase-backed client account operations rows from shared backend projections",
     authRequired: true,
     status: "active",
     testStrategy: "fetch",
@@ -572,7 +575,7 @@ const botappEndpointRegistry = [
     method: "GET",
     path: "/api/instagram-dashboard/credentials-actions",
     usedBy: ["Credentials"],
-    purpose: "Load real dashboard credential blockers/actions",
+    purpose: "Load Supabase-backed credential blockers/actions",
     authRequired: true,
     status: "active",
     testStrategy: "fetch",
@@ -948,7 +951,7 @@ function normalizeAutoRestartOverview(data) {
     activeAccountsAffected: Number(status.activeRestartCandidates || 0),
     safetyStatus: Number(status.blockedCandidates || 0) > 0 ? "watch" : "safe",
     backendSyncStatus: "relay_ready",
-    sourceSummary: status.statusLabel || "Dashboard Auto Restart overview loaded.",
+    sourceSummary: status.statusLabel || "Shared backend Auto Restart overview loaded.",
     sessionResume: {
       pausedDueToQuota: candidates.filter((candidate) => /quota/i.test(String(candidate.blockReason || ""))).length,
       eligibleToResume: Number(status.activeRestartCandidates || 0),
@@ -968,13 +971,13 @@ function normalizeAutoRestartOverview(data) {
       timeRemaining: null,
       preventOverrun: true,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "local",
-      packageRelation: "Dashboard applies package/session caps before restart planning.",
+      packageRelation: "Shared backend applies package/session caps before restart planning.",
     },
     phoneRest: {
       phonesResting: resting,
       phonesActive: active,
       nextRestWindow: null,
-      reason: "Derived from dashboard phone_rest_windows and schedule gates.",
+      reason: "Derived from shared backend phone_rest_windows and schedule gates.",
       devices: candidates.slice(0, 20).map((candidate) => ({
         deviceId: candidate.phoneName || candidate.accountId || "",
         deviceLabel: candidate.phoneName || "Unknown phone",
@@ -1429,6 +1432,28 @@ function maskSerial(serial) {
   return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
+function localAdbDeviceMap() {
+  const adb = resolveAdbPath();
+  if (!adb.ok) {
+    return {
+      adbAvailable: false,
+      adbPath: null,
+      checkedAt: new Date().toISOString(),
+      devices: new Map(),
+    };
+  }
+  spawnSync(adb.path, ["start-server"], { encoding: "utf8", stdio: "pipe", timeout: 3500 });
+  const result = spawnSync(adb.path, ["devices", "-l"], { encoding: "utf8", stdio: "pipe", timeout: 2500 });
+  const devices = new Map();
+  if (!result.error && result.status === 0) {
+    for (const line of String(result.stdout || "").split(/\r?\n/).slice(1)) {
+      const [serial, state] = line.trim().split(/\s+/);
+      if (serial && state) devices.set(serial, state);
+    }
+  }
+  return { adbAvailable: true, adbPath: adb.path, checkedAt: new Date().toISOString(), devices };
+}
+
 function localKnownDevices() {
   return knownPhoneSerials.map((phone) => ({
     id: phone.serial,
@@ -1457,17 +1482,57 @@ function localKnownDevices() {
     activeSession: null,
     nextBufferEndsAt: null,
     lockReason: "Backend heartbeat unavailable",
+    backendStatus: "unknown",
+    backendLastSeenAt: "",
+    localAdbStatus: "unknown",
+    localAdbCheckedAt: "",
+    localAdbAvailable: false,
+    inventorySource: "local fallback",
+    appInstances: [],
   }));
 }
 
-function asDashboardDevice(row, index) {
+function safeAppOccupant(app) {
+  const occupant = app?.occupant && typeof app.occupant === "object" ? app.occupant : {};
+  const accountId = String(occupant.account_id || app?.current_account_id || "");
+  if (!accountId) return null;
+  return {
+    assignmentId: String(occupant.assignment_id || ""),
+    accountId,
+    username: occupant.username ? String(occupant.username) : "",
+    status: String(occupant.status || "occupied"),
+  };
+}
+
+function safeAppInstance(app) {
+  const instanceType = String(app?.instance_type || "clone");
+  const instanceIndex = Number(app?.instance_index || 0);
+  const occupant = safeAppOccupant(app);
+  const availability = String(app?.availability || (occupant ? "occupied" : app?.status || "unknown"));
+  return {
+    appInstanceId: String(app?.app_instance_id || app?.id || ""),
+    deviceId: String(app?.device_id || ""),
+    instanceType,
+    instanceIndex,
+    label: String(app?.label || app?.visible_label || (instanceType === "primary_app" ? "Primary Instagram" : `Clone ${instanceIndex}`)),
+    packageName: String(app?.package_name || ""),
+    status: String(app?.status || "unknown"),
+    availability,
+    occupant,
+    selectable: Boolean(app?.selectable) && availability === "available" && !occupant,
+  };
+}
+
+function asDashboardDevice(row, index, localAdb) {
   const id = row?.id || row?.device_id || row?.adb_serial || knownPhoneSerials[index]?.serial || `phone_${index + 1}`;
   const label = row?.device_name || row?.phone_name || row?.display_name || row?.name || knownPhoneSerials[index]?.label || `PHONE ${index + 1}`;
   const rawStatus = String(row?.heartbeat_status || row?.status || "").toLowerCase();
   const connected = ["online", "connected", "available", "reserved"].includes(rawStatus);
   const offline = ["offline", "stale", "unavailable"].includes(rawStatus);
   const serial = row?.adb_serial || id;
-  const instanceCount = Number(row?.app_instances_count || row?.total_app_instances || 0);
+  const appInstances = Array.isArray(row?.app_instances) ? row.app_instances.map(safeAppInstance) : [];
+  const instanceCount = Number(row?.app_instances_count || row?.total_app_instances || appInstances.length || 0);
+  const localState = localAdb?.devices?.get(String(serial || "")) || "not_seen";
   return {
     id: String(id),
     name: String(label),
@@ -1482,27 +1547,35 @@ function asDashboardDevice(row, index) {
     profileCount: instanceCount,
     latencyMs: null,
     appInstancesCount: instanceCount,
-    appInstancesAvailableCount: Number(row?.app_instances_available_count || 0),
-    appInstancesOccupiedCount: Number(row?.app_instances_occupied_count || 0),
+    appInstancesAvailableCount: Number(row?.app_instances_available_count || appInstances.filter((app) => app.selectable).length || 0),
+    appInstancesOccupiedCount: Number(row?.app_instances_occupied_count || appInstances.filter((app) => app.occupant).length || 0),
     heartbeatStatus: rawStatus === "stale" ? "stale" : connected ? "connected" : offline ? "offline" : "unknown",
     hostLabel: row?.host_name || row?.host_label || null,
     hubLabel: row?.hub_label || null,
     hubPort: row?.hub_port || null,
     viewAvailable: Boolean(serial),
-    viewUnavailableReason: serial ? null : "ADB serial unavailable.",
+    viewUnavailableReason: serial ? localState === "not_seen" ? "Local ADB does not currently see this phone." : null : "ADB serial unavailable.",
     battery: 0,
     cloneCount: instanceCount,
     activeSession: null,
     nextBufferEndsAt: null,
     lockReason: row?.heartbeat_warning || null,
+    backendStatus: String(row?.status || "unknown"),
+    backendLastSeenAt: String(row?.heartbeat_last_seen_at || row?.last_seen_at || ""),
+    localAdbStatus: localAdb?.adbAvailable ? localState : "adb_unavailable",
+    localAdbCheckedAt: localAdb?.checkedAt || "",
+    localAdbAvailable: Boolean(localAdb?.adbAvailable),
+    inventorySource: "shared backend API",
+    appInstances,
   };
 }
 
 function normalizeDashboardDevices(rows) {
   const items = Array.isArray(rows?.items) ? rows.items : Array.isArray(rows?.phone_devices) ? rows.phone_devices : Array.isArray(rows) ? rows : [];
+  const localAdb = localAdbDeviceMap();
   const normalized = items
     .filter((row) => row && typeof row === "object")
-    .map(asDashboardDevice);
+    .map((row, index) => asDashboardDevice(row, index, localAdb));
   if (normalized.length) return normalized;
   return localKnownDevices();
 }
@@ -1913,7 +1986,7 @@ function clientAccountFromManage(account, profile, devices) {
     targetsCount: 0,
     actionsNeeded,
     safeEmailDisplay: String(account?.emailDisplay || "hidden"),
-    sourceLabel: "admin-dashboard manage_overview",
+    sourceLabel: "supabase_projection:manage_overview",
     profileImageUrl: account?.profileImageUrl || null,
     instagramVerificationStatus: account?.instagramVerificationStatus === "verified" ? "verified" : account?.instagramVerificationStatus === "pending" ? "pending" : "unknown",
     passwordStatus: /missing/i.test(String(account?.passwordDisplay || account?.credentialsStatus || "")) ? "missing" : /update|reauth/i.test(String(account?.passwordDisplay || account?.credentialsStatus || "")) ? "update_needed" : "configured",
@@ -1957,7 +2030,7 @@ function credentialsFromDashboard(credentials, accountsById) {
       credentialStatus: String(group.credentialsStatus || account?.credentialStatus || "unknown"),
       loginStatus: String(group.loginStatus || account?.loginStatus || "unknown"),
       provisioningStatus: String(group.provisioningStatus || account?.readiness || "unknown"),
-      sourceLabel: group.sourceLabel === "account_dashboard_actions" ? "account_dashboard_actions" : "derived from dashboard overview",
+      sourceLabel: group.sourceLabel === "account_dashboard_actions" ? "account_dashboard_actions" : "derived from shared backend overview",
       assignedPhone: account?.assignment?.deviceName || "",
       createdAtLabel: "",
       updatedAtLabel: "",
@@ -2003,12 +2076,12 @@ function logsFromRadar(radar) {
     id: String(row.id || `warning_${index + 1}`),
     timestamp: String(row.timestamp || ""),
     level: ["critical", "error", "warning", "info"].includes(row.severity) ? row.severity : "info",
-    actor: "dashboard",
+    actor: "backend",
     event: String(row.warningType || "warning"),
     target: String(row.username || ""),
     detail: String(row.message || row.recommendedAction || ""),
     domain: "runtime",
-    source: String(row.sourceLabel || "dashboard"),
+    source: String(row.sourceLabel || "shared_backend"),
     account: row.username || null,
     device: row.phoneName || null,
     status: "review",
@@ -2021,7 +2094,7 @@ function logsFromRadar(radar) {
     target: String(row.username || ""),
     detail: `Run ${row.status || "unknown"}`,
     domain: "runs",
-    source: String(row.sourceLabel || "dashboard"),
+    source: String(row.sourceLabel || "shared_backend"),
     account: row.username || null,
     device: row.phoneName || null,
     status: String(row.status || "unknown"),
@@ -2035,12 +2108,12 @@ function logsFromActivity(activityLog) {
     id: String(item.id || item.sourceRecordId || `activity_${index + 1}`),
     timestamp: String(item.occurredAt || item.timestamp || ""),
     level: item.result === "failed" ? "error" : item.result === "pending" ? "warning" : "info",
-    actor: String(item.actor || item.actorType || "dashboard"),
+    actor: String(item.actor || item.actorType || "backend"),
     event: String(item.actionType || item.action || "activity"),
     target: String(item.interactedUsername || item.ctUsername || item.targetLabel || ""),
     detail: String(item.safeSummary || item.reason || item.evidenceSummary || ""),
     domain: String(item.domain || item.evidenceSource || "activity"),
-    source: String(item.sourceLabel || item.evidenceSource || "dashboard"),
+    source: String(item.sourceLabel || item.evidenceSource || "shared_backend"),
     account: item.clientAccountUsername || item.username || null,
     device: item.safeDeviceLabel || null,
     status: String(item.actionStatus || item.result || "unknown"),
@@ -2076,14 +2149,14 @@ function buildDeviceProfileGroup(device, groupProfiles) {
 function buildUnassignedProfileGroup(ungroupedProfiles) {
   return {
     deviceId: "unassigned-live-profiles",
-    deviceLabel: "Unassigned / dashboard profiles",
+    deviceLabel: "Unassigned / backend profiles",
     deviceSerial: "",
     deviceSerialLabel: "No device",
     deviceStatus: "maintenance",
     phoneStatus: "idle",
     deviceView: {
       available: false,
-      unavailableReason: "No ADB serial is attached to this dashboard account.",
+      unavailableReason: "No ADB serial is attached to this backend account row.",
     },
     summary: summarizeProfileGroup(ungroupedProfiles),
     profiles: ungroupedProfiles,
@@ -2118,6 +2191,32 @@ function profileGroupsFromData(profiles, devices) {
   return groups;
 }
 
+function enrichDeviceAppOccupants(devices, profiles) {
+  const profileById = new Map();
+  for (const profile of profiles) {
+    if (profile?.id) profileById.set(String(profile.id), profile);
+    if (profile?.accountId) profileById.set(String(profile.accountId), profile);
+  }
+  return devices.map((device) => ({
+    ...device,
+    appInstances: Array.isArray(device.appInstances)
+      ? device.appInstances.map((app) => {
+        const accountId = String(app?.occupant?.accountId || "");
+        const profile = accountId ? profileById.get(accountId) : null;
+        if (!profile || app.occupant?.username) return app;
+        return {
+          ...app,
+          occupant: {
+            ...app.occupant,
+            username: String(profile.username || ""),
+            status: app.occupant?.status || String(profile.assignmentState || "occupied"),
+          },
+        };
+      })
+      : [],
+  }));
+}
+
 function compassFromData(profiles, devices, credentials) {
   const blockedAccounts = profiles.filter((profile) => profile.eligibility === "blocked_now").length;
   const openCredentialActions = credentials.summary.openActions;
@@ -2142,7 +2241,7 @@ function compassFromData(profiles, devices, credentials) {
     summary: `${openCredentialActions} credential action(s) need review.`,
     sinceLabel: "current",
     impact: "Blocked accounts may not restart safely.",
-    cause: "Dashboard credential actions are open.",
+    cause: "Shared backend credential actions are open.",
     clientVisible: true,
     clientRawVisible: false,
     clientRecommendationInput: true,
@@ -2201,7 +2300,7 @@ function compassFromData(profiles, devices, credentials) {
         id: "credential_blocker",
         signal: "credential_blocker",
         title: "Credential blockers",
-        summary: "Open credential actions from dashboard.",
+        summary: "Open credential actions from shared backend.",
         count: openCredentialActions,
         severity: "critical",
         adminVisible: true,
@@ -2233,7 +2332,7 @@ function compassFromData(profiles, devices, credentials) {
       model: "server-side relay",
       lastAnalyzedAt: null,
       period: "7d",
-      summary: "Compass facts loaded from dashboard. Run AI analysis through the secure relay.",
+      summary: "Compass facts loaded from shared backend APIs. Run AI analysis through the secure relay.",
       healthAssessment: blockedAccounts || problemDevices ? "watch" : "good",
       relayTarget: "/api/instagram-dashboard/compass/analyze",
       serverSideOnly: true,
@@ -2269,7 +2368,7 @@ function emptySettings() {
     admin: { appMode: "relay", apiBase: "Configured in API / Webhooks / Keys", updatesChannel: "manual" },
     opsSafetyCaps: { effectiveFollowCap: "server", deviceLevelLock: true, cloneBufferMinutes: 10 },
     killSwitches: { startAllAccounts: false, realDeviceActions: false, realDmSend: false },
-    runtimeState: { source: "dashboard-relay", polling: "manual", websocket: "disabled" },
+    runtimeState: { source: "backend_relay", polling: "manual", websocket: "disabled" },
   };
 }
 
@@ -2292,7 +2391,8 @@ async function botappOverviewData() {
   const extracted = extractManageAccounts(profilesPayload, clientAccountsPayload, overviewPayload);
   const accounts = extracted.accounts;
   const profiles = accounts.map((account, index) => profileFromManageAccount(account, index, devices));
-  const profileGroups = profileGroupsFromData(profiles, devices);
+  const enrichedDevices = enrichDeviceAppOccupants(devices, profiles);
+  const profileGroups = profileGroupsFromData(profiles, enrichedDevices);
   const groupedProfilesCount = profileGroups.reduce((total, group) => total + group.profiles.length, 0);
   const overviewError = overview?.error || null;
   const profilesSourceCounts = {
@@ -2310,7 +2410,7 @@ async function botappOverviewData() {
   };
   console.info("[botapp] profiles_patch_active manage-sync-v1");
   console.info("[botapp] profiles_source_counts", profilesSourceCounts);
-  const clientItems = accounts.map((account, index) => clientAccountFromManage(account, profiles[index], devices));
+  const clientItems = accounts.map((account, index) => clientAccountFromManage(account, profiles[index], enrichedDevices));
   const clientAccounts = {
     items: clientItems,
     summary: summarizeClientAccounts(clientItems),
@@ -2325,8 +2425,8 @@ async function botappOverviewData() {
   const syncError = accounts.length
     ? null
     : overviewError
-      || (!relayConfigured ? "Configure the relay URL in API / Webhooks / Keys to load dashboard data." : null)
-      || "No accounts returned from Manage. Check relay URL, relay credential, and deployed endpoints.";
+      || (!relayConfigured ? "Configure the relay URL in API / Webhooks / Keys to load shared backend data." : null)
+      || "No accounts returned from the shared backend API. Check relay URL, relay credential, and deployed endpoints.";
   return {
     ok: !syncError,
     error: syncError,
@@ -2340,9 +2440,9 @@ async function botappOverviewData() {
       profileGroups,
       clientAccounts,
       credentials: credentialsOverview,
-      compass: compassFromData(profiles, devices, credentialsOverview),
+      compass: compassFromData(profiles, enrichedDevices, credentialsOverview),
       autoRestart: overviewPayload?.auto_restart?.ok ? normalizeAutoRestartOverview(overviewPayload.auto_restart.data) : autoRestartFallback(overviewPayload?.auto_restart?.error || "Auto Restart overview unavailable."),
-      devices,
+      devices: enrichedDevices,
       notifications: notificationsFromRadar(radar),
       logs,
       apiKeys: [],
@@ -2350,6 +2450,16 @@ async function botappOverviewData() {
       settings: emptySettings(),
     },
   };
+}
+
+async function botappDevicesList(input = {}) {
+  try {
+    const data = await dashboardGet("devices_overview");
+    const devices = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    return { ok: true, data: input?.format === "raw" ? devices : normalizeDashboardDevices(devices), tools: localToolDiagnostics() };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Device inventory unavailable.") };
+  }
 }
 
 function readRelayError(data, fallback) {
@@ -2572,6 +2682,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:auto-restart:dry-run", () => autoRestartDryRun());
   ipcMain.handle("botapp:auto-restart:action-preview", (_event, input) => autoRestartActionPreview(input));
   ipcMain.handle("botapp:data:overview", () => botappOverviewData());
+  ipcMain.handle("botapp:devices:list", (_event, input) => botappDevicesList(input));
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));
   ipcMain.handle("botapp:profiles:create", (_event, input) => profileCreate(input));

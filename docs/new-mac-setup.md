@@ -445,7 +445,8 @@ Status: DONE for current machine, REQUIRED for every new Mac
 - Open phone Samsung A16-02.
 - Open All opens both phone views.
 - Window titles are distinct.
-- Windows are visible above BotApp, movable, minimizable, and closable.
+- Windows are stable, movable, minimizable, and closable beside BotApp in windowed mode.
+- BotApp does not blink or disappear while opening phone views.
 - No run/login/provisioning automation starts.
 
 ### D. Add Profile Backend-Only
@@ -538,16 +539,34 @@ Possible causes:
 - scrcpy process was not verified;
 - window opened behind BotApp;
 - scrcpy path missing;
-- scrcpy launched without absolute ADB path.
+- scrcpy launched without absolute ADB path;
+- BotApp is in macOS fullscreen or a separate Space.
 
 Fix:
 
 - verify process stays alive after launch;
-- use `--always-on-top`;
 - use clear `--window-title`;
-- use `--window-x`, `--window-y`, `--window-width`, `--window-height`;
+- use `--window-x`, `--window-y`, `--window-width`, `--window-height` relative to BotApp bounds;
 - inject `ADB=<absolute adb path>` into scrcpy environment;
-- capture stderr and show safe failure reason.
+- capture stderr and show safe failure reason;
+- use BotApp in normal windowed mode for Open phone / Open All.
+
+### macOS fullscreen / separate Space limit for scrcpy
+
+Status: DONE
+
+scrcpy is a separate native SDL application. It cannot be guaranteed as an overlay above BotApp when BotApp is in macOS fullscreen or running in a separate Space.
+
+Accepted behavior:
+
+- BotApp in normal windowed mode: scrcpy opens beside BotApp with stable placement.
+- BotApp in fullscreen: scrcpy may open on the desktop or another Space.
+- BotApp must not blink or disappear while opening phone views.
+
+Recommendation:
+
+- Use BotApp in windowed mode for Devices Open phone / Open All.
+- Do not rely on aggressive focus retries that make BotApp flicker.
 
 ### CT pending / reason unavailable
 

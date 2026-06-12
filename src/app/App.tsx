@@ -222,12 +222,12 @@ export function App() {
   }
 
   let view: React.ReactNode;
-  if (loading) view = <div className="empty-state"><strong>Loading dashboard data</strong><span>BotApp is syncing through the secure relay.</span></div>;
+  if (loading) view = <div className="empty-state"><strong>Loading backend data</strong><span>BotApp is syncing through the shared backend relay.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
   else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} syncError={syncError} profilesMeta={profilesMeta} loading={loading} onRefresh={() => void loadOverviewData()} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message) => pushToast(message, "success")} />;
   else if (active === "account") view = data.clientAccounts ? <ClientAccounts overview={data.clientAccounts} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} onOpenCredentials={(account) => { setSelectedCredentialsAccountId(account.accountId); setActive("credentials"); }} /> : null;
   else if (active === "credentials") view = data.credentials ? <Credentials overview={data.credentials} selectedAccountId={selectedCredentialsAccountId} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
-  else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} />;
+  else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} onRefresh={() => loadOverviewData()} />;
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
   else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
   else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onPreviewControl={previewAutoRestartControl} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;
@@ -238,7 +238,7 @@ export function App() {
     <Sidebar active={active} onNavigate={navigate} counts={counts} />
     <main className="main"><TopBar active={active} onCommand={() => setCommandOpen(true)} /><div className="content">{view}</div></main>
     {commandOpen ? <div className="command-overlay" onClick={() => setCommandOpen(false)}><div className="command-box" onClick={(event) => event.stopPropagation()}><input className="input" placeholder="Jump to screen..." autoFocus />{routes.map((route) => <button key={route.id} onClick={() => navigate(route.id)}><span>{route.label}</span><span className="mono">{route.shortcut}</span></button>)}</div></div> : null}
-    {pendingAction ? <Modal title={`${pendingAction.action}?`} danger={pendingAction.danger} confirmLabel="Confirm" onClose={() => setPendingAction(null)} onConfirm={confirmAction}><p><strong>Prepared for secure relay execution.</strong></p><p>This preview will not call Supabase, Instagram, ADB, a worker, a dispatcher, or a real device. Target: <span className="mono">{pendingAction.target}</span>.</p></Modal> : null}
+    {pendingAction ? <Modal title={`${pendingAction.action}?`} danger={pendingAction.danger} confirmLabel="Confirm" onClose={() => setPendingAction(null)} onConfirm={confirmAction}><p><strong>Action preview.</strong></p><p>No live runtime or device action will run from this confirmation. Target: <span className="mono">{pendingAction.target}</span>.</p></Modal> : null}
     <Toasts items={toasts} />
   </div>;
 }

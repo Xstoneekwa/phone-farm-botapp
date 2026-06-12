@@ -553,7 +553,7 @@ export type BotAppClientAccount = {
   targetsCount: number;
   actionsNeeded: string[];
   safeEmailDisplay: string;
-  sourceLabel: "admin-dashboard manage_overview" | "local projection";
+  sourceLabel: "supabase_projection:manage_overview" | "local projection";
   profileImageUrl: string | null;
   instagramVerificationStatus: "verified" | "pending" | "unknown";
   passwordStatus: "configured" | "missing" | "reauth_required" | "update_needed" | "unknown";
@@ -612,7 +612,7 @@ export type ClientAccountNotificationPayload = {
 export type ClientAccountEmailNotificationPayload = {
   email_template: "instagram_password_update_required";
   delivery_status: "pending_relay";
-  include: Array<"client_name" | "username" | "dashboard_link">;
+  include: Array<"client_name" | "username" | "client_action_link">;
 };
 
 export type ClientAccountPasswordUpdatePayload = {
@@ -672,7 +672,7 @@ export type BotAppCredentialsAction = {
   credentialStatus: string;
   loginStatus: string;
   provisioningStatus: string;
-  sourceLabel: "account_dashboard_actions" | "derived from dashboard overview";
+  sourceLabel: "account_dashboard_actions" | "derived from shared backend overview";
   assignedPhone: string;
   createdAtLabel: string;
   updatedAtLabel: string;
@@ -1462,6 +1462,29 @@ export type Device = {
   activeSession: PhoneSession | null;
   nextBufferEndsAt: string | null;
   lockReason: string | null;
+  backendStatus?: string;
+  backendLastSeenAt?: string;
+  localAdbStatus?: "device" | "offline" | "unauthorized" | "not_seen" | "adb_unavailable" | "unknown" | string;
+  localAdbCheckedAt?: string;
+  localAdbAvailable?: boolean;
+  inventorySource?: string;
+  appInstances?: Array<{
+    appInstanceId: string;
+    deviceId: string;
+    instanceType: string;
+    instanceIndex: number;
+    label: string;
+    packageName: string;
+    status: string;
+    availability: "available" | "occupied" | "reserved" | "disabled" | string;
+    selectable: boolean;
+    occupant: {
+      assignmentId: string;
+      accountId: string;
+      username: string;
+      status: string;
+    } | null;
+  }>;
 };
 
 export type BotAppDeviceStatus = DeviceStatus;

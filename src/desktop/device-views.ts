@@ -1,5 +1,16 @@
 export type DeviceViewStatus = "open" | "failed";
 
+export type DeviceViewPlacement = {
+  botAppBounds?: { x: number; y: number; width: number; height: number };
+  workArea?: { x: number; y: number; width: number; height: number };
+  botAppFullscreen: boolean;
+  sameSpace: "unknown" | "same" | "different";
+  windowX: number;
+  windowY: number;
+  windowWidth: number;
+  windowHeight: number;
+};
+
 export type DeviceViewState = {
   deviceSerial: string;
   deviceLabel: string;
@@ -8,17 +19,43 @@ export type DeviceViewState = {
   windowTitle: string;
   startedAt: string;
   lastError: string | null;
+  placement?: DeviceViewPlacement | null;
+};
+
+export type LocalToolState = {
+  found: boolean;
+  path: string | null;
+  basename: string | null;
+  reason: string;
+};
+
+export type LocalToolDiagnostics = {
+  adb: LocalToolState;
+  scrcpy: LocalToolState;
+  checkedAt: string;
 };
 
 export type DeviceViewResult = {
   ok: boolean;
   data: DeviceViewState[];
   error?: string;
+  reason?: string;
+  focusAttempted?: boolean;
+  focused?: boolean;
+  visibleFrontmost?: boolean;
+  processAlive?: boolean;
+  focusMethod?: string;
+  windowTitle?: string;
+  userMessage?: string;
+  sameSpace?: "unknown" | "same" | "different";
+  botAppFullscreen?: boolean;
+  placement?: DeviceViewPlacement | null;
+  tools?: LocalToolDiagnostics;
 };
 
 type DeviceViewBridge = {
   list: () => Promise<DeviceViewResult>;
-  open: (input: { deviceSerial: string; deviceLabel: string }) => Promise<DeviceViewResult>;
+  open: (input: { deviceSerial: string; deviceLabel: string; windowIndex?: number }) => Promise<DeviceViewResult>;
   focus: (deviceSerial: string) => Promise<DeviceViewResult>;
   close: (deviceSerial: string) => Promise<DeviceViewResult>;
   subscribe: (callback: (state: DeviceViewState[]) => void) => () => void;
@@ -38,7 +75,7 @@ export async function listOpenDeviceViews() {
   return api.list();
 }
 
-export async function openDeviceView(input: { deviceSerial: string; deviceLabel: string }) {
+export async function openDeviceView(input: { deviceSerial: string; deviceLabel: string; windowIndex?: number }) {
   const api = bridge();
   if (!api) {
     return {

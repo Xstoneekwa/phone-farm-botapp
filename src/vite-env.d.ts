@@ -2,6 +2,17 @@
 
 declare module "*.css";
 
+type BotAppDeviceViewPlacement = {
+  botAppBounds?: { x: number; y: number; width: number; height: number };
+  workArea?: { x: number; y: number; width: number; height: number };
+  botAppFullscreen: boolean;
+  sameSpace: "unknown" | "same" | "different";
+  windowX: number;
+  windowY: number;
+  windowWidth: number;
+  windowHeight: number;
+};
+
 type BotAppDeviceViewState = {
   deviceSerial: string;
   deviceLabel: string;
@@ -10,12 +21,38 @@ type BotAppDeviceViewState = {
   windowTitle: string;
   startedAt: string;
   lastError: string | null;
+  placement?: BotAppDeviceViewPlacement | null;
+};
+
+type BotAppLocalToolState = {
+  found: boolean;
+  path: string | null;
+  basename: string | null;
+  reason: string;
+};
+
+type BotAppLocalToolDiagnostics = {
+  adb: BotAppLocalToolState;
+  scrcpy: BotAppLocalToolState;
+  checkedAt: string;
 };
 
 type BotAppDeviceViewResult = {
   ok: boolean;
   data: BotAppDeviceViewState[];
   error?: string;
+  reason?: string;
+  focusAttempted?: boolean;
+  focused?: boolean;
+  visibleFrontmost?: boolean;
+  processAlive?: boolean;
+  focusMethod?: string;
+  windowTitle?: string;
+  userMessage?: string;
+  sameSpace?: "unknown" | "same" | "different";
+  botAppFullscreen?: boolean;
+  placement?: BotAppDeviceViewPlacement | null;
+  tools?: BotAppLocalToolDiagnostics;
 };
 
 type BotAppRuntimeIntegrationStatus = import("./api/types").BotAppRuntimeIntegrationStatus;
@@ -52,6 +89,9 @@ interface Window {
     data?: {
       overview: () => Promise<{ ok: boolean; data: BotAppOverviewData; error?: string | null; profilesMeta?: { source: string; accountsCount: number; counts: Record<string, number> } | null }>;
     };
+    devices?: {
+      list: (input?: { format?: "raw" | "normalized" }) => Promise<{ ok: boolean; data?: Record<string, unknown>[]; error?: string | null }>;
+    };
     profiles?: {
       details: (accountId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       createDryRun: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
@@ -83,7 +123,7 @@ interface Window {
     };
     deviceViews?: {
       list: () => Promise<BotAppDeviceViewResult>;
-      open: (input: { deviceSerial: string; deviceLabel: string }) => Promise<BotAppDeviceViewResult>;
+      open: (input: { deviceSerial: string; deviceLabel: string; windowIndex?: number }) => Promise<BotAppDeviceViewResult>;
       focus: (deviceSerial: string) => Promise<BotAppDeviceViewResult>;
       close: (deviceSerial: string) => Promise<BotAppDeviceViewResult>;
       subscribe: (callback: (state: BotAppDeviceViewState[]) => void) => () => void;
