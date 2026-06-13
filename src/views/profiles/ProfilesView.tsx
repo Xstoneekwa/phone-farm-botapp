@@ -226,7 +226,7 @@ function followerDeltaTone(value: number | null) {
 
 function connectBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
   if (profile.loginStatus === "connected") return { label: "connected", tone: "success" };
-  if (profile.credentialStatus === "saved_pending_verification") return { label: "credentials saved", tone: "info" };
+  if (profile.credentialStatus === "saved_pending_verification") return { label: "ready to connect", tone: "info" };
   if (profile.credentialStatus === "active" && profile.autoLoginRequirement.enabled) return { label: "ready to connect", tone: "info" };
   if (profile.credentialStatus === "missing" || profile.loginStatus === "missing_credentials") return { label: "missing credentials", tone: "warning" };
   if (profile.credentialStatus === "needs_update" || profile.loginStatus === "password_invalid") return { label: "update password", tone: "error" };

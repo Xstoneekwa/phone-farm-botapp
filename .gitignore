@@ -35,6 +35,7 @@ runs/
 *.blockmap
 release/
 dist-electron/
+public/emoji/twemoji/
 
 # Phone Farm source repos must not be embedded
 instagram-worker-python/

@@ -400,7 +400,7 @@ function attachRelayHeadersForDashboardAvatars() {
 }
 
 const endpointTestState = new Map();
-const botappBuildCommit = "9cf02ad";
+const botappBuildCommit = "dm-drawer-emoji-assets-v10";
 const runtimeIpcHandlers = [
   "botapp:runtime:status",
   "botapp:dispatcher:status",
@@ -421,6 +421,7 @@ const runtimeIpcHandlers = [
   "botapp:profiles:schedule-slots",
   "botapp:profiles:verify-username",
   "botapp:profiles:credentials:submit",
+  "botapp:profiles:settings:save",
   "botapp:profiles:action",
   "botapp:profiles:assign-now",
   "botapp:profiles:readiness-now",
@@ -548,6 +549,61 @@ const botappEndpointRegistry = [
     path: "/api/instagram-dashboard/settings/schedule",
     usedBy: ["Profiles", "Settings"],
     purpose: "Load and update account schedule assignment through shared backend",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "settings_account",
+    name: "Profile account settings",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/settings",
+    usedBy: ["Profiles", "Settings", "Follow"],
+    purpose: "Update account-scoped runtime settings through secure relay without creating runs",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "settings_follow_filters",
+    name: "Profile Follow filters",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/settings/follow-filters",
+    usedBy: ["Profiles", "Settings", "Filters"],
+    purpose: "Update runtime-ready Follow filter settings through secure relay without creating runs",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "settings_dm",
+    name: "Profile DM settings",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/settings/dm",
+    usedBy: ["Profiles", "Settings", "DM"],
+    purpose: "Update account DM settings and templates through secure relay without sending messages",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "settings_unfollow",
+    name: "Profile Unfollow settings",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/settings/unfollow",
+    usedBy: ["Profiles", "Settings", "Followback"],
+    purpose: "Update account Unfollow settings through secure relay without creating runs",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "settings_follow_sources",
+    name: "Profile Follow source settings",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/settings/follow-sources",
+    usedBy: ["Profiles", "Settings", "Sources"],
+    purpose: "Update per-account Follow source rotation settings through secure relay without target discovery",
     authRequired: true,
     status: "active",
     testStrategy: "none",
@@ -1612,6 +1668,42 @@ async function profileCredentialsSubmit(input) {
   }
 }
 
+async function profileSettingsSave(input) {
+  const mode = String(input?.mode || "").trim().toLowerCase();
+  const patch = input?.patch && typeof input.patch === "object" ? input.patch : input;
+  const accountId = String(patch?.account_id || patch?.accountId || input?.account_id || input?.accountId || "").trim();
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  if (!["follow", "filters", "dm", "followback", "sources"].includes(mode)) {
+    return { ok: false, error: "backend_pending" };
+  }
+
+  const endpointId = mode === "filters"
+    ? "settings_follow_filters"
+    : mode === "dm"
+      ? "settings_dm"
+      : mode === "followback"
+        ? "settings_unfollow"
+        : mode === "sources"
+          ? "settings_follow_sources"
+          : "settings_account";
+  try {
+    const data = await dashboardRequest("PATCH", endpointId, {
+      ...patch,
+      account_id: accountId,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    const message = safeRuntimeError(error, `${mode} settings save failed.`);
+    if (/authentication required/i.test(message)) {
+      return { ok: false, error: `Backend auth failed for ${mode} settings save.` };
+    }
+    if (/relay authentication failed/i.test(message)) {
+      return { ok: false, error: `Backend auth failed for ${mode} settings save.` };
+    }
+    return { ok: false, error: message };
+  }
+}
+
 async function profileVerifyUsername(input) {
   const username = String(input?.username || "").trim().replace(/^@+/, "").toLowerCase();
   if (!username) return { ok: false, error: "Missing username." };
@@ -2386,14 +2478,16 @@ function readReadiness(account, blocked) {
   return "ready";
 }
 
-function readEligibility(account, blocked) {
+function readEligibility(account, blocked, loginStatus = "") {
   const raw = normalizeMatchText(account?.eligibility || account?.eligibilityStatus || account?.eligibility_status);
   if (raw.includes("can_start") || raw === "ready") return "can_start";
   if (raw.includes("blocked")) return "blocked_now";
+  if (loginStatus && loginStatus !== "connected") return "blocked_now";
   return blocked ? "blocked_now" : "can_start";
 }
 
-function readEligibilityReason(account, blocked) {
+function readEligibilityReason(account, blocked, loginStatus = "") {
+  if (loginStatus && loginStatus !== "connected") return "login_not_connected";
   return String(account?.eligibilityReason || account?.eligibility_reason || account?.primaryBlockReason || account?.primary_block_reason || (blocked ? "blocked" : "ready"));
 }
 
@@ -2552,15 +2646,15 @@ function profileFromManageAccount(account, index, devices) {
     || hardLoginBlock,
   );
   const device = resolveProfileDevice(account, devices);
-  const eligibilityReason = readEligibilityReason(account, blocked);
-  const eligibility = readEligibility(account, blocked);
-  const readiness = readReadiness(account, blocked);
   const packageValue = readPackageLabel(account);
   const entitlements = readEntitlements(account, packageValue);
   const scheduleModeValue = readScheduleMode(account) || null;
   const scheduleLabelValue = readActiveWindow(account);
   const credentialStatus = readCredentialStatus(account);
   const loginStatus = readLoginStatus(account);
+  const eligibilityReason = readEligibilityReason(account, blocked, loginStatus);
+  const eligibility = readEligibility(account, blocked, loginStatus);
+  const readiness = readReadiness(account, blocked);
   const deviceAvailability = readDeviceAvailability(account, device);
   const assignmentState = readAssignmentState(account, device);
   const appInstanceId = String(account?.appInstanceId || account?.app_instance_id || account?.assignment?.appInstanceId || account?.assignment?.app_instance_id || "");
@@ -3696,6 +3790,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:schedule:save", (_event, input) => profileScheduleSettingsSave(input));
   ipcMain.handle("botapp:profiles:verify-username", (_event, input) => profileVerifyUsername(input));
   ipcMain.handle("botapp:profiles:credentials:submit", (_event, input) => profileCredentialsSubmit(input));
+  ipcMain.handle("botapp:profiles:settings:save", (_event, input) => profileSettingsSave(input));
   ipcMain.handle("botapp:profiles:action", (_event, input) => performProfileAction(input));
   ipcMain.handle("botapp:profiles:assign-now", (_event, input) => assignProfileNow(input));
   ipcMain.handle("botapp:profiles:readiness-now", (_event, input) => profileReadinessNow(input));

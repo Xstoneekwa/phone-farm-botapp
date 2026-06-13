@@ -191,12 +191,12 @@ export function mergeAutoLoginProgressSnapshot(
     });
   }
 
-  const seenLogs = new Set(state.processLog.map((entry) => `${entry.timestamp}:${entry.phase}:${entry.message}`));
+  const seenLogs = new Set(state.processLog.map((entry) => entry.id || `${entry.timestamp}:${entry.phase}:${entry.message}`));
   const nextLogs = [...state.processLog];
-  for (const item of [...snapshot.process_log].reverse()) {
+  for (const item of snapshot.process_log) {
     const phase = phaseFromLog(item.phase);
     const message = item.message || "runtime event";
-    const key = `${item.timestamp}:${phase}:${message}`;
+    const key = item.id || `${item.timestamp}:${phase}:${message}`;
     if (seenLogs.has(key)) continue;
     seenLogs.add(key);
     nextLogs.push({

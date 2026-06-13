@@ -1115,7 +1115,7 @@ export type ProfileDmSavePayload = {
   source: "botapp";
   requested_by: string | null;
   idempotency_key: string;
-  mock_only: true;
+  mock_only?: false;
   endpoint: "/api/instagram-dashboard/settings/dm";
   patch: {
     account_id: string;
@@ -1208,7 +1208,7 @@ export type ProfileFollowbackSavePayload = {
   source: "botapp";
   requested_by: string | null;
   idempotency_key: string;
-  mock_only: true;
+  mock_only?: false;
   endpoint: "/api/instagram-dashboard/settings/unfollow";
   patch: {
     account_id: string;
@@ -1296,7 +1296,7 @@ export type ProfileSourceSavePayload = {
   source: "botapp";
   requested_by: string | null;
   idempotency_key: string;
-  mock_only: true;
+  mock_only?: false;
   endpoint: "/api/instagram-dashboard/settings/follow-sources";
   patch: {
     account_id: string;
@@ -1371,7 +1371,7 @@ export type ProfileFiltersSavePayload = {
   source: "botapp";
   requested_by: string | null;
   idempotency_key: string;
-  mock_only: true;
+  mock_only?: false;
   endpoint: "/api/instagram-dashboard/settings/follow-filters";
   patch: {
     account_id: string;
@@ -1486,7 +1486,7 @@ export type ProfileFollowSavePayload = {
   source: "botapp";
   requested_by: string | null;
   idempotency_key: string;
-  mock_only: true;
+  mock_only?: false;
   endpoint: "/api/instagram-dashboard/settings";
   patch: {
     account_id: string;

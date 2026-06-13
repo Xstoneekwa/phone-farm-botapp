@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import emojiRegex from "emoji-regex";
+import {
+  DM_EMOJI_MISSING_ASSET_SRC,
+  emojiAssetSrc,
+} from "../../../emoji/dm-emoji-asset-resolver";
 import { mockClient } from "../../../api/mock-client";
 import { loadProfileDetails, type ProfileDetailsPayload } from "../../../api/profile-details";
 import type {
@@ -11,13 +16,14 @@ import type {
   ProfileSourceSavePayload,
 } from "../../../api/types";
 import { Badge, Button, Drawer } from "../../../design/components";
-import { FilterSettingsPanel, filtersValidationError, sameFiltersDraft } from "./FilterSettingsPanel";
+import { FilterSettingsPanel, buildFiltersSavePayload, filtersValidationError, sameFiltersDraft } from "./FilterSettingsPanel";
 
 const tabs = ["General", "Schedule", "Follow", "DM", "Followback", "Sources", "Filters"] as const;
 type SettingsTab = (typeof tabs)[number];
 const DM_MAX_CHARS = 900;
 const WELCOME_DAY_CAP_MAX = 10;
 const OUTREACH_DAY_CAP_MAX = 30;
+const DM_DRAWER_PATCH_ID = "dm-drawer-emoji-assets-v10";
 const DM_TEMPLATE_VARIABLES = ["{username}", "{{username}}", "{name}", "{{name}}", "{account_username}", "{{account_username}}"];
 const DM_TEMPLATE_TOKEN_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}|\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}/g;
 const DM_SUPPORTED_VARIABLES = new Set(["username", "name", "account_username"]);
@@ -90,25 +96,6 @@ function NumberField({
         disabled={disabled}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
-    </label>
-  );
-}
-
-function TextAreaField({
-  label,
-  value,
-  disabled = false,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="settings-edit-field settings-edit-field-full">
-      <span>{label}</span>
-      <textarea className="input settings-textarea" value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} />
     </label>
   );
 }
@@ -300,8 +287,7 @@ function buildFollowSavePayload(
     account_id: profile.id,
     source: "botapp",
     requested_by: null,
-    idempotency_key: `botapp:follow:${profile.id}:preview`,
-    mock_only: true,
+    idempotency_key: `botapp:follow:${profile.id}:save`,
     endpoint: "/api/instagram-dashboard/settings",
     patch: {
       account_id: profile.id,
@@ -328,10 +314,10 @@ function FollowPayloadPreview({ payload }: { payload: ProfileFollowSavePayload }
   return (
     <section className="settings-card full settings-payload-card">
       <header>
-        <h4>Future Follow payload</h4>
-        <Badge tone="warning">Prepared</Badge>
+        <h4>Follow payload</h4>
+        <Badge tone="success">Backend ready</Badge>
       </header>
-      <p className="muted">Matches the admin draft/warmup save path for a future secure relay. BotApp does not patch the admin API directly.</p>
+      <p className="muted">Saved through the secure BotApp relay. This updates settings only and does not start a run.</p>
       <pre className="payload-preview">{previewPayload(payload)}</pre>
     </section>
   );
@@ -341,8 +327,62 @@ function normalizeDmMessage(value: string) {
   return value.replace(/\r\n/g, "\n").trim();
 }
 
+function countDmCharacters(value: string) {
+  const normalized = normalizeDmMessage(value);
+  const segmenterCtor = (Intl as typeof Intl & {
+    Segmenter?: new (locale?: string, options?: { granularity: "grapheme" }) => {
+      segment: (input: string) => Iterable<unknown>;
+    };
+  }).Segmenter;
+  if (segmenterCtor) {
+    return Array.from(new segmenterCtor(undefined, { granularity: "grapheme" }).segment(normalized)).length;
+  }
+  return Array.from(normalized).length;
+}
+
 function dmLineCount(value: string) {
   return normalizeDmMessage(value) ? normalizeDmMessage(value).split("\n").length : 0;
+}
+
+function dmCodePointPreview(value: string) {
+  return Array.from(normalizeDmMessage(value))
+    .slice(0, 80)
+    .map((char) => `U+${char.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}`)
+    .join(" ");
+}
+
+function emojiCodePoints(value: string) {
+  return Array.from(value).map((char) => `U+${char.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}`).join(" ");
+}
+
+function dmGraphemes(value: string) {
+  const normalized = normalizeDmMessage(value);
+  const segmenterCtor = (Intl as typeof Intl & {
+    Segmenter?: new (locale?: string, options?: { granularity: "grapheme" }) => {
+      segment: (input: string) => Iterable<{ segment: string }>;
+    };
+  }).Segmenter;
+  if (segmenterCtor) {
+    return Array.from(new segmenterCtor(undefined, { granularity: "grapheme" }).segment(normalized), (part) => part.segment);
+  }
+  return Array.from(normalized);
+}
+
+function dmEmojiList(value: string) {
+  return Array.from(normalizeDmMessage(value).matchAll(emojiRegex()), (match) => match[0]);
+}
+
+function dmEmojiDetected(value: string) {
+  return dmEmojiList(value).length > 0;
+}
+
+function dmEmojiCodePointList(value: string) {
+  const emojis = dmEmojiList(value);
+  return emojis.length ? emojis.map((emoji) => `${emoji}: ${emojiCodePoints(emoji)}`).join(" | ") : "none";
+}
+
+function rawDmJson(value: string) {
+  return JSON.stringify(normalizeDmMessage(value));
 }
 
 function appendDmVariable(value: string, token: string) {
@@ -374,6 +414,84 @@ function renderDmPreview(value: string) {
   });
 }
 
+function DmEmojiImg({ emoji }: { emoji: string }) {
+  const [src, setSrc] = useState(() => emojiAssetSrc(emoji));
+
+  return (
+    <img
+      className="dm-emoji-img"
+      src={src}
+      alt={emoji}
+      title={emoji}
+      draggable={false}
+      data-emoji={emoji}
+      onError={() => {
+        if (src !== DM_EMOJI_MISSING_ASSET_SRC) setSrc(DM_EMOJI_MISSING_ASSET_SRC);
+      }}
+    />
+  );
+}
+
+function RichEmojiText({ value }: { value: string }) {
+  const parts: ReactNode[] = [];
+  const regex = emojiRegex();
+  let lastIndex = 0;
+
+  for (const match of value.matchAll(regex)) {
+    const emoji = match[0];
+    const index = match.index ?? 0;
+    if (index > lastIndex) parts.push(value.slice(lastIndex, index));
+    parts.push(<DmEmojiImg key={`${index}-${emoji}`} emoji={emoji} />);
+    lastIndex = index + emoji.length;
+  }
+
+  if (lastIndex < value.length) parts.push(value.slice(lastIndex));
+  return <>{parts.length ? parts : value}</>;
+}
+
+function DmMessageTextarea({
+  label,
+  value,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="settings-edit-field settings-edit-field-full">
+      <span>{label}</span>
+      <textarea
+        className="input settings-textarea dm-message-textarea"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+    </label>
+  );
+}
+
+function resolveDmSaveDisabledReason(input: {
+  settingsSaving: boolean;
+  relayAvailable: boolean;
+  dmBackendSaveReady: boolean;
+  dmError: string;
+  dmDirty: boolean;
+}) {
+  if (input.settingsSaving) return "saving";
+  if (!input.relayAvailable) return "route_missing";
+  if (!input.dmBackendSaveReady) return "backend_not_ready";
+  if (input.dmError) return "validation_error";
+  if (!input.dmDirty) return "not_dirty";
+  return "none";
+}
+
+function cloneDmState(dm: ProfileSettings["dm"]): ProfileSettings["dm"] {
+  return { ...dm };
+}
+
 function sameDmDraft(left: ProfileSettings["dm"], right: ProfileSettings["dm"]) {
   return (
     left.welcomeDmEnabled === right.welcomeDmEnabled &&
@@ -387,6 +505,14 @@ function sameDmDraft(left: ProfileSettings["dm"], right: ProfileSettings["dm"]) 
   );
 }
 
+function patchDmDraft(
+  current: ProfileSettings["dm"] | null,
+  baseline: ProfileSettings["dm"],
+  patch: Partial<ProfileSettings["dm"]>,
+): ProfileSettings["dm"] {
+  return { ...(current ?? baseline), ...patch };
+}
+
 function dmValidationError(dm: ProfileSettings["dm"]) {
   const welcomeMessage = normalizeDmMessage(dm.welcomeDmBody);
   const outreachMessage = normalizeDmMessage(dm.coldDmBody);
@@ -394,16 +520,16 @@ function dmValidationError(dm: ProfileSettings["dm"]) {
   if (dm.coldDmEnabled && !dm.outreachServiceActive) return "Outreach service is not active for this account.";
   if (dm.welcomeDmEnabled && !welcomeMessage) return "Welcome message is required";
   if (dm.coldDmEnabled && !outreachMessage) return "Outreach message is required";
-  if (welcomeMessage.length > DM_MAX_CHARS) return `Welcome message cannot exceed ${DM_MAX_CHARS} characters.`;
-  if (outreachMessage.length > DM_MAX_CHARS) return `Outreach message cannot exceed ${DM_MAX_CHARS} characters.`;
-  if (unsupportedDmVariables(welcomeMessage).length) return `Unsupported Welcome variable: ${unsupportedDmVariables(welcomeMessage).join(", ")}`;
-  if (unsupportedDmVariables(outreachMessage).length) return `Unsupported Outreach variable: ${unsupportedDmVariables(outreachMessage).join(", ")}`;
+  if (dm.welcomeDmEnabled && countDmCharacters(welcomeMessage) > DM_MAX_CHARS) return `Welcome message cannot exceed ${DM_MAX_CHARS} characters.`;
+  if (dm.coldDmEnabled && countDmCharacters(outreachMessage) > DM_MAX_CHARS) return `Outreach message cannot exceed ${DM_MAX_CHARS} characters.`;
+  if (dm.welcomeDmEnabled && unsupportedDmVariables(welcomeMessage).length) return `Unsupported Welcome variable: ${unsupportedDmVariables(welcomeMessage).join(", ")}`;
+  if (dm.coldDmEnabled && unsupportedDmVariables(outreachMessage).length) return `Unsupported Outreach variable: ${unsupportedDmVariables(outreachMessage).join(", ")}`;
   if (dm.welcomeDmEnabled && dm.welcomeSessionCap < 1) return "Welcome cap must be at least 1";
   if (dm.welcomeDmEnabled && dm.welcomeDayCap < 1) return "Welcome day cap must be at least 1";
-  if (dm.welcomeDayCap > WELCOME_DAY_CAP_MAX) return `welcome_daily_cap_exceeded: Welcome day cap cannot exceed ${WELCOME_DAY_CAP_MAX}`;
+  if (dm.welcomeDmEnabled && dm.welcomeDayCap > WELCOME_DAY_CAP_MAX) return `welcome_daily_cap_exceeded: Welcome day cap cannot exceed ${WELCOME_DAY_CAP_MAX}`;
   if (dm.welcomeDmEnabled && dm.welcomeSessionCap > dm.welcomeDayCap) return "session_cap_exceeds_day_cap: Welcome session cap cannot exceed Welcome day cap";
   if (dm.coldDmEnabled && (dm.outreachSessionCap < 1 || dm.outreachDayCap < 1)) return "Outreach caps must be at least 1";
-  if (dm.outreachDayCap > OUTREACH_DAY_CAP_MAX) return `outreach_daily_cap_exceeded: Outreach day cap cannot exceed ${OUTREACH_DAY_CAP_MAX}`;
+  if (dm.coldDmEnabled && dm.outreachDayCap > OUTREACH_DAY_CAP_MAX) return `outreach_daily_cap_exceeded: Outreach day cap cannot exceed ${OUTREACH_DAY_CAP_MAX}`;
   if (dm.coldDmEnabled && dm.outreachSessionCap > dm.outreachDayCap) return "session_cap_exceeds_day_cap: Outreach session cap cannot exceed Outreach day cap";
   return "";
 }
@@ -413,8 +539,7 @@ function buildDmSavePayload(profile: BotProfile, dm: ProfileSettings["dm"]): Pro
     account_id: profile.id,
     source: "botapp",
     requested_by: null,
-    idempotency_key: `botapp:dm:${profile.id}:preview`,
-    mock_only: true,
+    idempotency_key: `botapp:dm:${profile.id}:save`,
     endpoint: "/api/instagram-dashboard/settings/dm",
     patch: {
       account_id: profile.id,
@@ -453,10 +578,13 @@ function DmVariableChips({ disabled, onInsert }: { disabled: boolean; onInsert: 
 function DmPreview({ label, value }: { label: "Welcome" | "Outreach"; value: string }) {
   const normalized = normalizeDmMessage(value);
   const unsupported = unsupportedDmVariables(normalized);
+  const rendered = renderDmPreview(normalized);
   return (
     <div className="dm-preview">
-      <div className="dm-preview-head"><span>{label} Instagram preview</span><span>{normalized.length}/{DM_MAX_CHARS} chars · {dmLineCount(normalized)} lines</span></div>
-      <div className={normalized ? "dm-preview-body" : "dm-preview-body empty"}>{renderDmPreview(normalized) || "Message preview will appear here."}</div>
+      <div className="dm-preview-head"><span>{label} Instagram preview</span><span>{countDmCharacters(normalized)}/{DM_MAX_CHARS} chars · {dmLineCount(normalized)} lines</span></div>
+      <div className={normalized ? "dm-preview-body dm-rich-emoji-preview" : "dm-preview-body dm-rich-emoji-preview empty"}>
+        {rendered ? <RichEmojiText value={rendered} /> : "Message preview will appear here."}
+      </div>
       {unsupported.length ? <div className="dm-preview-warning">Unsupported variable: {unsupported.join(", ")}</div> : null}
     </div>
   );
@@ -466,10 +594,10 @@ function DmPayloadPreview({ payload }: { payload: ProfileDmSavePayload }) {
   return (
     <section className="settings-card full settings-payload-card">
       <header>
-        <h4>Future DM payload</h4>
-        <Badge tone="warning">Prepared</Badge>
+        <h4>DM payload</h4>
+        <Badge tone="success">Backend ready</Badge>
       </header>
-      <p className="muted">Matches the admin DM domain save path for a future secure relay. BotApp does not send messages or patch the admin API directly.</p>
+      <p className="muted">Saved through the secure BotApp relay. This updates settings/templates only and does not send DMs.</p>
       <pre className="payload-preview">{previewPayload(payload)}</pre>
     </section>
   );
@@ -516,8 +644,7 @@ function buildFollowbackSavePayload(
     account_id: profile.id,
     source: "botapp",
     requested_by: null,
-    idempotency_key: `botapp:unfollow:${profile.id}:preview`,
-    mock_only: true,
+    idempotency_key: `botapp:unfollow:${profile.id}:save`,
     endpoint: "/api/instagram-dashboard/settings/unfollow",
     patch: {
       account_id: profile.id,
@@ -543,10 +670,10 @@ function FollowbackPayloadPreview({ payload }: { payload: ProfileFollowbackSaveP
   return (
     <section className="settings-card full settings-payload-card">
       <header>
-        <h4>Future Unfollow payload</h4>
-        <Badge tone="warning">Prepared</Badge>
+        <h4>Unfollow payload</h4>
+        <Badge tone="success">Backend ready</Badge>
       </header>
-      <p className="muted">Matches the admin Followback / Unfollow PATCH path for a future secure relay. BotApp does not start runs or perform Unfollow actions.</p>
+      <p className="muted">Saved through the secure BotApp relay. This updates settings only and does not start or perform Unfollow actions.</p>
       <pre className="payload-preview">{previewPayload(payload)}</pre>
     </section>
   );
@@ -581,8 +708,7 @@ function buildSourcesSavePayload(
     account_id: profile.id,
     source: "botapp",
     requested_by: null,
-    idempotency_key: `botapp:sources:${profile.id}:preview`,
-    mock_only: true,
+    idempotency_key: `botapp:sources:${profile.id}:save`,
     endpoint: "/api/instagram-dashboard/settings/follow-sources",
     patch: {
       account_id: profile.id,
@@ -608,10 +734,10 @@ function SourcesPayloadPreview({ payload }: { payload: ProfileSourceSavePayload 
   return (
     <section className="settings-card full settings-payload-card">
       <header>
-        <h4>Future Sources payload</h4>
-        <Badge tone="warning">Prepared</Badge>
+        <h4>Sources payload</h4>
+        <Badge tone="success">Backend ready</Badge>
       </header>
-      <p className="muted">Matches the admin Follow source rotation PATCH path. BotApp does not validate CTs or mutate source rows directly.</p>
+      <p className="muted">Saved through the secure BotApp relay. This updates rotation settings only and does not discover targets.</p>
       <pre className="payload-preview">{previewPayload(payload)}</pre>
     </section>
   );
@@ -728,8 +854,8 @@ function buildSettingsFromProfileDetails(
   const packageLabel = readString(account, ["packageLabel", "package_label", "commercialPackage", "commercial_package"], profile.package);
   const packageDefaultFollowCap = readNestedNumber(packageCaps, "follow_day", readNestedNumber(effectiveCapsPreview, "follow_day", packageFollowCap(packageLabel)));
   const packageDefaultFollowSessionCap = readNestedNumber(packageCaps, "follow_session", packageDefaultFollowCap);
-  const manualFollowDayOverride = readOptionalNumber(settings, ["manual_follow_day_cap"]);
-  const manualFollowSessionOverride = readOptionalNumber(settings, ["manual_follow_session_cap"]);
+  const manualFollowDayOverride = readOptionalNumber(settings, ["manual_follow_day_cap", "max_actions_per_day"]);
+  const manualFollowSessionOverride = readOptionalNumber(settings, ["manual_follow_session_cap", "follow_limit"]);
   const legacyFollowLimit = readOptionalNumber(settings, ["follow_limit"]);
   const legacyMaxFollowPerRun = readOptionalNumber(settings, ["max_follow_per_run"]);
   const warmupApplied = readBoolean(effectiveCapsPreview, ["warmup_applied"], false);
@@ -811,7 +937,7 @@ function buildSettingsFromProfileDetails(
       scheduleSource: scheduleProjection ? "shared_backend_schedule" : settingsStatus,
       assignmentSource: profile.assignmentState === "missing_slot" ? "not_available" : "shared_backend_assignment",
       appInstanceSummary: profile.assignmentState === "missing_slot" ? "not_available" : "assigned app instance",
-      saveReady: false,
+      saveReady: readString(settings, ["dm_settings_status"], settingsStatus) !== "backend_pending",
       availableSlots: [{
         slotIndex: profile.appInstanceIndex ?? profile.cloneIndex ?? profile.profileNumber,
         slotKind: profile.slotKind,
@@ -892,11 +1018,11 @@ function buildSettingsFromProfileDetails(
       welcomeRealSendStatus: readString(settings, ["welcome_real_send_status"], "backend_pending"),
       outreachRealSendStatus: readString(settings, ["outreach_real_send_status"], "backend_pending"),
       legacyDmGateStatus: settingsStatus,
-      saveReady: false,
+      saveReady: readString(settings, ["dm_settings_status"], settingsStatus) !== "backend_pending",
       welcomeDisabledReason: welcomeEnabled ? null : "welcome setting disabled or missing",
       outreachDisabledReason: outreachEnabled ? null : "outreach setting disabled or missing",
-      welcomeSessionCap: readNumber(settings, ["welcome_session_cap"], 0),
-      welcomeDayCap: readNumber(settings, ["welcome_day_cap"], 0),
+      welcomeSessionCap: Math.max(1, readNumber(settings, ["welcome_session_cap"], readNumber(settings, ["welcome_day_cap"], 1))),
+      welcomeDayCap: Math.max(1, readNumber(settings, ["welcome_day_cap"], 10)),
       outreachSessionCap: readNumber(settings, ["outreach_session_cap"], 0),
       outreachDayCap: readNumber(settings, ["outreach_day_cap"], 0),
       outreachEntitlementStatus: outreachEnabled ? "active" : "not_available",
@@ -904,28 +1030,28 @@ function buildSettingsFromProfileDetails(
     },
     followback: {
       unfollowEnabled,
-      unfollowMode: "unfollow",
+      unfollowMode: readString(settings, ["unfollow_mode"], "unfollow") as ProfileSettings["followback"]["unfollowMode"],
       unfollowPerSession: unfollowSessionCap,
       unfollowPerDay: unfollowCap,
       unfollowAfterDays: readNumber(settings, ["unfollow_after_days"], 3),
       stopAfterUnfollowSkipped: readNumber(settings, ["stop_after_unfollow_skipped"], 3000),
-      unfollowSort: "unfollow",
+      unfollowSort: readString(settings, ["unfollow_mode"], "unfollow") as ProfileSettings["followback"]["unfollowMode"],
       followbackRatioSummary: `${readNumber(statsSummary, ["follows_today"], profile.counters.follow.current)} follows · ${readNumber(statsSummary, ["unfollows_today"], profile.counters.unfollow.current)} unfollows`,
       packageUnfollowDayCap: packageUnfollowCap(packageLabel),
-      runtimeCapMode: "prod_normal",
-      runtimeSafetyCap: null,
+      runtimeCapMode: readString(settings, ["runtime_cap_mode"], "prod_normal") as ProfileSettings["followback"]["runtimeCapMode"],
+      runtimeSafetyCap: readOptionalNumber(settings, ["runtime_safety_cap"]),
       runtimeHardCap: 0,
-      runtimeCapSource: settingsStatus,
+      runtimeCapSource: readString(settings, ["unfollow_settings_status"], settingsStatus),
       followEntitlementStatus: followEnabled ? "active" : "not_available",
       unfollowEntitlementStatus: unfollowEnabled ? "active" : "not_available",
       handoffStatus: unfollowEnabled ? "enabled" : "not_available",
       blockReason: unfollowEnabled ? "" : "unfollow setting disabled or missing",
       safeCandidateStrategyStatus: "backend_pending",
       doUnfollowFirstStatus: "backend_pending",
-      currentRuntimeMode: "unfollow",
+      currentRuntimeMode: readString(settings, ["unfollow_mode"], "unfollow"),
       unfollowedToday: profile.counters.unfollow.current,
       unfollowDayRemaining: Math.max(0, unfollowCap - profile.counters.unfollow.current),
-      limitingReason: settingsStatus,
+      limitingReason: readString(settings, ["unfollow_settings_status"], settingsStatus),
       effectiveUnfollowLimit: `${unfollowCap}/day · ${unfollowSessionCap}/session`,
     },
     sources: {
@@ -944,10 +1070,10 @@ function buildSettingsFromProfileDetails(
         maxFollowsPerTargetPerRun: { min: 1, max: 50 },
         maxTargetsPerRun: { min: 1, max: 10 },
       },
-      sourceStatus: targetsStatus === "connected" ? "account_setting" : "schema_pending",
-      runtimeStatus: targetsStatus === "connected" ? "active" : "schema_pending",
-      saveReady: false,
-      note: `Targets source: ${targetsStatus}`,
+      sourceStatus: readString(settings, ["follow_source_settings_status"], targetsStatus) === "connected" ? "account_setting" : readString(settings, ["follow_source_settings_status"], targetsStatus === "connected" ? "account_setting" : "schema_pending") as ProfileSettings["sources"]["sourceStatus"],
+      runtimeStatus: readString(settings, ["follow_source_settings_status"], targetsStatus) === "backend_pending" ? "schema_pending" : "active",
+      saveReady: readString(settings, ["follow_source_settings_status"], targetsStatus) !== "backend_pending",
+      note: `Targets source: ${targetsStatus} · source settings=${readString(settings, ["follow_source_settings_status"], "default")}`,
       ctQualitySummary: `${eligibleTargets.length} eligible · ${pendingTargets.length} review · ${rejectedTargets.length} rejected`,
       followbackRatioByTarget: "backend_pending",
       followsSentByTarget: targetRows.length ? "available in target rows when populated" : "not_available",
@@ -963,7 +1089,7 @@ function buildSettingsFromProfileDetails(
       syncReadiness: sourceHealth === "healthy" ? "ready" : sourceHealth === "review" ? "review" : "blocked",
     },
     filters: {
-      skipPrivateProfiles: readBoolean(filters, ["skip_private_profiles"], false),
+      skipPrivateProfiles: readBoolean(filters, ["skip_private_profiles", "dont_follow_private_accounts"], true),
       skipFollower: readBoolean(filters, ["skip_followers", "skip_follower"], true),
       skipFollowing: readBoolean(filters, ["skip_following"], true),
       skipNonBusiness: readBoolean(filters, ["skip_non_business"], false),
@@ -981,7 +1107,7 @@ function buildSettingsFromProfileDetails(
       runtimeReadyFields: ["skip_private_profiles", "min_followers", "max_followers", "min_posts"],
       plannedFields: filtersStatus === "connected" ? [] : ["backend schema fields not returned"],
       runtimeStatus: "active",
-      saveReady: false,
+      saveReady: filtersStatus !== "backend_pending",
       sourceStatus: filtersStatus === "connected" ? "account_setting" : "default",
       templateName: readString(filters, ["template_name"], "") || null,
     },
@@ -1020,6 +1146,7 @@ function LegacySettingsDrawer({
   const [selectedScheduleSlotKey, setSelectedScheduleSlotKey] = useState("");
   const [followDraft, setFollowDraft] = useState<ProfileSettings["follow"] | null>(null);
   const [dmDraft, setDmDraft] = useState<ProfileSettings["dm"] | null>(null);
+  const [dmBaseline, setDmBaseline] = useState<ProfileSettings["dm"] | null>(null);
   const [followbackDraft, setFollowbackDraft] = useState<ProfileSettings["followback"] | null>(null);
   const [sourcesDraft, setSourcesDraft] = useState<ProfileSettings["sources"] | null>(null);
   const [filtersDraft, setFiltersDraft] = useState<ProfileSettings["filters"] | null>(null);
@@ -1030,13 +1157,15 @@ function LegacySettingsDrawer({
   const [credentialsLoading, setCredentialsLoading] = useState(false);
   const [credentialsMessage, setCredentialsMessage] = useState("");
   const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
   const applySettings = useCallback((nextSettings: ProfileSettings, source: string) => {
     setSettings(nextSettings);
     setSettingsError("");
     setSettingsSource(source);
     setFollowDraft(nextSettings.follow);
-    setDmDraft(nextSettings.dm);
+    setDmBaseline(cloneDmState(nextSettings.dm));
+    setDmDraft(cloneDmState(nextSettings.dm));
     setFollowbackDraft(nextSettings.followback);
     setSourcesDraft(nextSettings.sources);
     setFiltersDraft(nextSettings.filters);
@@ -1076,6 +1205,20 @@ function LegacySettingsDrawer({
     }
     return () => { cancelled = true; };
   }, [applySettings, profile]);
+
+  async function refreshSettingsFromBackend(sourceLabel = "Supabase-backed API · settings refreshed") {
+    const [detailsResult, scheduleResult] = await Promise.all([
+      loadProfileDetails(profile.id),
+      window.botappDesktop?.profiles?.schedule?.get?.(profile.id) ?? Promise.resolve({ ok: false as const, error: "schedule_unavailable" }),
+    ]);
+    if (!detailsResult.ok) return { ok: false as const, error: detailsResult.error ?? "Profile details refresh failed." };
+    const scheduleProjection = scheduleResult.ok ? (scheduleResult.data as Record<string, unknown>) : null;
+    applySettings(
+      buildSettingsFromProfileDetails(profile, (detailsResult.data ?? null) as ProfileDetailsPayload | null, scheduleProjection),
+      sourceLabel,
+    );
+    return { ok: true as const };
+  }
 
   async function refreshSettingsAfterCredentials() {
     const result = await loadProfileDetails(profile.id);
@@ -1152,7 +1295,7 @@ function LegacySettingsDrawer({
   const currentConflictSlot = settings.schedule.availableSlots.find((slot) => slot.isConflict || slot.reason === "current_conflict");
   const scheduleSelectionChanged = selectedScheduleSlotKey !== (currentScheduleSlotKey ? scheduleSlotKey(currentScheduleSlotKey) : "");
   const showSaveAction = activeTab !== "General";
-  const actionLabel = activeTab === "DM" ? "Save DM settings" : activeTab === "Schedule" ? "Save Schedule" : `Save ${activeTab}`;
+  const actionLabel = activeTab === "Schedule" ? "Save Schedule" : `Save ${activeTab}`;
   const scheduleSaveDisabled = scheduleSaving
     || !settings.schedule.saveReady
     || !selectedScheduleSlot
@@ -1163,11 +1306,24 @@ function LegacySettingsDrawer({
   const followError = followValidationError(follow);
   const followPayload = buildFollowSavePayload(profile, follow);
   const followSaveDisabled = !followDirty || Boolean(followError);
-  const dm = dmDraft ?? settings.dm;
-  const dmDirty = !sameDmDraft(dm, settings.dm);
+  const dmBaselineState = dmBaseline ?? settings.dm;
+  const dm = dmDraft ?? dmBaselineState;
+  const dmDirty = !sameDmDraft(dm, dmBaselineState);
   const dmError = dmValidationError(dm);
   const dmPayload = buildDmSavePayload(profile, dm);
-  const dmSaveDisabled = !dmDirty || Boolean(dmError) || !dm.saveReady;
+  const dmBackendSaveReady = dmBaselineState.saveReady;
+  const dmRelayAvailable = Boolean(window.botappDesktop?.profiles?.settings?.save);
+  const dmSaveDisabledReason = resolveDmSaveDisabledReason({
+    settingsSaving,
+    relayAvailable: dmRelayAvailable,
+    dmBackendSaveReady,
+    dmError,
+    dmDirty,
+  });
+  const dmSaveDisabled = dmSaveDisabledReason !== "none";
+  const editDm = (patch: Partial<ProfileSettings["dm"]>) => {
+    setDmDraft((current) => patchDmDraft(current, dmBaselineState, patch));
+  };
   const followback = followbackDraft ?? settings.followback;
   const followbackDirty = !sameFollowbackDraft(followback, settings.followback);
   const followbackError = followbackValidationError(followback);
@@ -1232,12 +1388,162 @@ function LegacySettingsDrawer({
     }
   }
 
+  async function saveFollowSettings() {
+    const save = window.botappDesktop?.profiles?.settings?.save;
+    if (!save) {
+      onSaved?.("Follow settings backend relay unavailable.", "error");
+      return;
+    }
+    setSettingsSaving(true);
+    try {
+      const payload = buildFollowSavePayload(profile, follow);
+      const result = await save({ mode: "follow", patch: payload.patch });
+      if (!result.ok) {
+        onSaved?.(result.error || "Follow settings save failed.", "error");
+        return;
+      }
+      const refresh = await refreshSettingsFromBackend("Supabase-backed API · Follow settings saved");
+      if (!refresh.ok) {
+        onSaved?.(refresh.error || "Follow saved, but refresh failed.", "error");
+        return;
+      }
+      await Promise.resolve(onRefreshProfiles?.());
+      onSaved?.("Follow settings saved.", "success");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  async function saveFilterSettings() {
+    const save = window.botappDesktop?.profiles?.settings?.save;
+    if (!save) {
+      onSaved?.("Filter settings backend relay unavailable.", "error");
+      return;
+    }
+    setSettingsSaving(true);
+    try {
+      const payload = buildFiltersSavePayload(profile, filters);
+      const result = await save({ mode: "filters", patch: payload.patch });
+      if (!result.ok) {
+        onSaved?.(result.error || "Filter settings save failed.", "error");
+        return;
+      }
+      const refresh = await refreshSettingsFromBackend("Supabase-backed API · Follow filters saved");
+      if (!refresh.ok) {
+        onSaved?.(refresh.error || "Filters saved, but refresh failed.", "error");
+        return;
+      }
+      await Promise.resolve(onRefreshProfiles?.());
+      onSaved?.("Filter settings saved.", "success");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  async function saveDmSettings() {
+    const save = window.botappDesktop?.profiles?.settings?.save;
+    if (!save) {
+      onSaved?.("DM settings backend relay unavailable.", "error");
+      return;
+    }
+    setSettingsSaving(true);
+    try {
+      const payload = buildDmSavePayload(profile, dm);
+      const result = await save({ mode: "dm", patch: payload.patch });
+      if (!result.ok) {
+        onSaved?.(result.error || "DM settings save failed.", "error");
+        return;
+      }
+      const refresh = await refreshSettingsFromBackend("Supabase-backed API · DM settings saved");
+      if (!refresh.ok) {
+        onSaved?.(refresh.error || "DM saved, but refresh failed.", "error");
+        return;
+      }
+      await Promise.resolve(onRefreshProfiles?.());
+      onSaved?.("DM settings saved.", "success");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  async function saveFollowbackSettings() {
+    const save = window.botappDesktop?.profiles?.settings?.save;
+    if (!save) {
+      onSaved?.("Followback settings backend relay unavailable.", "error");
+      return;
+    }
+    setSettingsSaving(true);
+    try {
+      const payload = buildFollowbackSavePayload(profile, followback);
+      const result = await save({ mode: "followback", patch: payload.patch });
+      if (!result.ok) {
+        onSaved?.(result.error || "Followback settings save failed.", "error");
+        return;
+      }
+      const refresh = await refreshSettingsFromBackend("Supabase-backed API · Followback settings saved");
+      if (!refresh.ok) {
+        onSaved?.(refresh.error || "Followback saved, but refresh failed.", "error");
+        return;
+      }
+      await Promise.resolve(onRefreshProfiles?.());
+      onSaved?.("Followback settings saved.", "success");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  async function saveSourcesSettings() {
+    const save = window.botappDesktop?.profiles?.settings?.save;
+    if (!save) {
+      onSaved?.("Source settings backend relay unavailable.", "error");
+      return;
+    }
+    setSettingsSaving(true);
+    try {
+      const payload = buildSourcesSavePayload(profile, sources);
+      const result = await save({ mode: "sources", patch: payload.patch });
+      if (!result.ok) {
+        onSaved?.(result.error || "Source settings save failed.", "error");
+        return;
+      }
+      const refresh = await refreshSettingsFromBackend("Supabase-backed API · Source settings saved");
+      if (!refresh.ok) {
+        onSaved?.(refresh.error || "Sources saved, but refresh failed.", "error");
+        return;
+      }
+      await Promise.resolve(onRefreshProfiles?.());
+      onSaved?.("Source settings saved.", "success");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
   async function handleSave() {
     if (activeTab === "Schedule") {
       await saveSchedule();
       return;
     }
-    onConfirm();
+    if (activeTab === "Follow") {
+      await saveFollowSettings();
+      return;
+    }
+    if (activeTab === "Filters") {
+      await saveFilterSettings();
+      return;
+    }
+    if (activeTab === "DM") {
+      await saveDmSettings();
+      return;
+    }
+    if (activeTab === "Followback") {
+      await saveFollowbackSettings();
+      return;
+    }
+    if (activeTab === "Sources") {
+      await saveSourcesSettings();
+      return;
+    }
+    onSaved?.(`${activeTab} settings backend pending. No changes were saved.`, "info");
   }
 
   return (
@@ -1248,12 +1554,18 @@ function LegacySettingsDrawer({
       panelClassName="drawer-panel-settings"
       onClose={onClose}
       footer={showSaveAction ? <>
-        <div className="drawer-footer-left"><span className="subtle">{settingsSource}</span></div>
+        <div className="drawer-footer-left">
+          {activeTab === "DM" ? (
+            <span className="subtle">{dmError || (dmDirty ? "DM changes ready to save." : "No DM changes.")}</span>
+          ) : (
+            <span className="subtle">{settingsSource}</span>
+          )}
+        </div>
         <Button
           onClick={() => void handleSave()}
-          disabled={(activeTab === "Schedule" && scheduleSaveDisabled) || (activeTab === "Follow" && followSaveDisabled) || (activeTab === "DM" && dmSaveDisabled) || (activeTab === "Followback" && followbackSaveDisabled) || (activeTab === "Sources" && sourcesSaveDisabled) || (activeTab === "Filters" && filtersSaveDisabled)}
+          disabled={settingsSaving || (activeTab === "Schedule" && scheduleSaveDisabled) || (activeTab === "Follow" && followSaveDisabled) || (activeTab === "DM" && dmSaveDisabled) || (activeTab === "Followback" && followbackSaveDisabled) || (activeTab === "Sources" && sourcesSaveDisabled) || (activeTab === "Filters" && filtersSaveDisabled)}
         >
-          {activeTab === "Schedule" && scheduleSaving ? "Saving..." : actionLabel}
+          {(activeTab === "Schedule" && scheduleSaving) || settingsSaving ? "Saving..." : actionLabel}
         </Button>
       </> : undefined}
     >
@@ -1327,39 +1639,31 @@ function LegacySettingsDrawer({
       </div> : null}
 
       {activeTab === "DM" ? <div className="settings-grid">
-        <Section title="DM summary" badge={dmError ? "Blocked" : dmDirty ? "Ready" : "No changes"} tone={dmError ? "warning" : dmDirty ? "success" : "neutral"} full>
-          <Field label="Welcome service" value={dm.welcomeServiceActive ? "Service active" : dm.welcomeDisabledReason || "Service inactive"} />
-          <Field label="Outreach service" value={dm.outreachServiceActive ? "Service active" : dm.outreachDisabledReason || "Service inactive"} />
-          <Field label="Welcome entitlement" value={dm.welcomeEntitlementStatus} />
-          <Field label="Outreach entitlement" value={dm.outreachEntitlementStatus} />
-          <Field label="Legacy DM gate" value={dm.legacyDmGateStatus} />
-          <Field label="Validation" value={dmError || "DM draft is valid."} />
-        </Section>
         <Section title="Welcome DM" badge={dm.welcomeServiceActive ? "Service active" : "Service inactive"} tone={dm.welcomeServiceActive ? "success" : "warning"}>
           {!dm.welcomeServiceActive && dm.welcomeDisabledReason ? <p className="muted">{dm.welcomeDisabledReason}</p> : null}
-          <EditableToggleLine label="Welcome DM enabled" checked={dm.welcomeDmEnabled} disabled={!dm.welcomeServiceActive} onChange={(checked) => setDmDraft({ ...dm, welcomeDmEnabled: checked })} />
-          <NumberField label="Welcome cap/session" value={dm.welcomeSessionCap} disabled={!dm.welcomeServiceActive} onChange={(value) => setDmDraft({ ...dm, welcomeSessionCap: value })} />
-          <NumberField label="Welcome day cap" value={dm.welcomeDayCap} max={WELCOME_DAY_CAP_MAX} disabled={!dm.welcomeServiceActive} onChange={(value) => setDmDraft({ ...dm, welcomeDayCap: value })} />
+          <EditableToggleLine label="Welcome DM enabled" checked={dm.welcomeDmEnabled} disabled={!dm.welcomeServiceActive} onChange={(checked) => editDm({ welcomeDmEnabled: checked })} />
+          <NumberField label="Welcome cap/session" value={dm.welcomeSessionCap} disabled={!dm.welcomeServiceActive} onChange={(value) => editDm({ welcomeSessionCap: value })} />
+          <NumberField label="Welcome day cap" value={dm.welcomeDayCap} max={WELCOME_DAY_CAP_MAX} disabled={!dm.welcomeServiceActive} onChange={(value) => editDm({ welcomeDayCap: value })} />
           <Field label="Template status" value={dm.welcomeTemplateStatus} />
           <Field label="Real-send status" value={dm.welcomeRealSendStatus} />
         </Section>
-        <Section title="Welcome message" badge={`${normalizeDmMessage(dm.welcomeDmBody).length}/${DM_MAX_CHARS}`} tone="info" full>
-          <TextAreaField label="Welcome DM message" value={dm.welcomeDmBody} disabled={!dm.welcomeServiceActive} onChange={(value) => setDmDraft({ ...dm, welcomeDmBody: value })} />
-          <DmVariableChips disabled={!dm.welcomeServiceActive} onInsert={(token) => setDmDraft({ ...dm, welcomeDmBody: appendDmVariable(dm.welcomeDmBody, token) })} />
+        <Section title="Welcome message" badge={`${countDmCharacters(dm.welcomeDmBody)}/${DM_MAX_CHARS}`} tone="info" full>
+          <DmMessageTextarea label="Welcome DM message" value={dm.welcomeDmBody} disabled={!dm.welcomeServiceActive} onChange={(value) => editDm({ welcomeDmBody: value })} />
+          <DmVariableChips disabled={!dm.welcomeServiceActive} onInsert={(token) => editDm({ welcomeDmBody: appendDmVariable(dm.welcomeDmBody, token) })} />
           <DmPreview label="Welcome" value={dm.welcomeDmBody} />
         </Section>
         <Section title="Cold DM Outreach" badge={dm.outreachServiceActive ? "Service active" : "Service inactive"} tone={dm.outreachServiceActive ? "success" : "warning"}>
           {!dm.outreachServiceActive && dm.outreachDisabledReason ? <p className="muted">{dm.outreachDisabledReason}</p> : null}
-          <EditableToggleLine label="Outreach enabled" checked={dm.coldDmEnabled} disabled={!dm.outreachServiceActive} onChange={(checked) => setDmDraft({ ...dm, coldDmEnabled: checked })} />
-          <NumberField label="Outreach session cap" value={dm.outreachSessionCap} disabled={!dm.outreachServiceActive} onChange={(value) => setDmDraft({ ...dm, outreachSessionCap: value })} />
-          <NumberField label="Outreach day cap" value={dm.outreachDayCap} max={OUTREACH_DAY_CAP_MAX} disabled={!dm.outreachServiceActive} onChange={(value) => setDmDraft({ ...dm, outreachDayCap: value })} />
+          <EditableToggleLine label="Outreach enabled" checked={dm.coldDmEnabled} disabled={!dm.outreachServiceActive} onChange={(checked) => editDm({ coldDmEnabled: checked })} />
+          <NumberField label="Outreach session cap" value={dm.outreachSessionCap} disabled={!dm.outreachServiceActive} onChange={(value) => editDm({ outreachSessionCap: value })} />
+          <NumberField label="Outreach day cap" value={dm.outreachDayCap} max={OUTREACH_DAY_CAP_MAX} disabled={!dm.outreachServiceActive} onChange={(value) => editDm({ outreachDayCap: value })} />
           <Field label="Entitlement" value={dm.outreachEntitlementStatus} />
           <Field label="Template status" value={dm.outreachTemplateStatus} />
           <Field label="Real-send status" value={dm.outreachRealSendStatus} />
         </Section>
-        <Section title="Outreach message" badge={`${normalizeDmMessage(dm.coldDmBody).length}/${DM_MAX_CHARS}`} tone="info" full>
-          <TextAreaField label="Outreach DM message" value={dm.coldDmBody} disabled={!dm.outreachServiceActive} onChange={(value) => setDmDraft({ ...dm, coldDmBody: value })} />
-          <DmVariableChips disabled={!dm.outreachServiceActive} onInsert={(token) => setDmDraft({ ...dm, coldDmBody: appendDmVariable(dm.coldDmBody, token) })} />
+        <Section title="Outreach message" badge={`${countDmCharacters(dm.coldDmBody)}/${DM_MAX_CHARS}`} tone="info" full>
+          <DmMessageTextarea label="Outreach DM message" value={dm.coldDmBody} disabled={!dm.outreachServiceActive} onChange={(value) => editDm({ coldDmBody: value })} />
+          <DmVariableChips disabled={!dm.outreachServiceActive} onInsert={(token) => editDm({ coldDmBody: appendDmVariable(dm.coldDmBody, token) })} />
           <DmPreview label="Outreach" value={dm.coldDmBody} />
         </Section>
         <Section title="AI / prompt" badge="Read-only" tone="warning" full><p className="muted">The audited admin DM panel does not expose a separate AI comment save flow in this tab. BotApp keeps the legacy prompt visible as read-only context only.</p><textarea className="input settings-textarea" readOnly value={dm.aiCommentPrompt} /></Section>

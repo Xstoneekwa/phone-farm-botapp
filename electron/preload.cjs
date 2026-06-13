@@ -46,6 +46,9 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     credentials: {
       submit: (input) => ipcRenderer.invoke("botapp:profiles:credentials:submit", input),
     },
+    settings: {
+      save: (input) => ipcRenderer.invoke("botapp:profiles:settings:save", input),
+    },
     actions: {
       perform: (input) => ipcRenderer.invoke("botapp:profiles:action", input),
     },

@@ -87,7 +87,7 @@ export function resolveAddProfileCredentialsState(
       credentialsConfigured: false,
       loginVerificationPending: false,
       globalStatus: "partial",
-      credentialsLogMessage: "Credentials not saved - update required.",
+      credentialsLogMessage: "Credentials not saved — update required.",
       footerMessage: `Profile created, but credentials were not saved. Update credentials before Auto Login.`,
     };
   }

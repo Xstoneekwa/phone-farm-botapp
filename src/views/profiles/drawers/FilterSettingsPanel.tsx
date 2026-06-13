@@ -97,8 +97,7 @@ export function buildFiltersSavePayload(
     account_id: profile.id,
     source: "botapp",
     requested_by: null,
-    idempotency_key: `botapp:filters:${profile.id}:preview`,
-    mock_only: true,
+    idempotency_key: `botapp:filters:${profile.id}:save`,
     endpoint: "/api/instagram-dashboard/settings/follow-filters",
     patch: {
       account_id: profile.id,
@@ -173,10 +172,10 @@ export function FilterSettingsPanel({
       {showPayload ? (
         <section className="settings-card full settings-payload-card">
           <header>
-            <h4>Future Filters payload</h4>
-            <Badge tone="warning">Prepared</Badge>
+            <h4>Filters payload</h4>
+            <Badge tone="success">Backend ready</Badge>
           </header>
-          <p className="muted">Matches the admin Follow filters PATCH path. Planned legacy filters stay read-only until worker/domain wiring exists.</p>
+          <p className="muted">Saved through the secure BotApp relay to the Follow runtime settings table. Planned legacy filters stay read-only until worker/domain wiring exists.</p>
           <pre className="payload-preview">{previewPayload(payload)}</pre>
         </section>
       ) : null}

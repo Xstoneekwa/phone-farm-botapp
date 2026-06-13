@@ -23,7 +23,8 @@
     "!**/instagram-worker-python/**",
     "!**/phone-farm-worker/**",
     "!**/supabase/**",
-    "!**/migrations/**"
+    "!**/migrations/**",
+    "!node_modules/@twemoji/**"
   ],
   "mac": {
     "category": "public.app-category.productivity",

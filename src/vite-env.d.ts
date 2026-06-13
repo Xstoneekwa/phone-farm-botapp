@@ -116,6 +116,9 @@ interface Window {
       credentials?: {
         submit: (input: { accountId: string; username: string; password: string; dryRun?: boolean }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       };
+      settings?: {
+        save: (input: { mode: "follow" | "filters" | "dm" | "followback" | "sources"; patch: Record<string, unknown> }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      };
       actions?: {
         perform: (input: { accountId: string; action: "start" | "stop" | "archive" | "trash" | "restore"; reason?: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       };

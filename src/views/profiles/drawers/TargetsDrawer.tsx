@@ -297,15 +297,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
   }
 
   function restoreTarget(id: string) {
-    setTargets((current) => current.map((target) => target.id === id ? {
-      ...target,
-      status: target.eligibility === "eligible" ? "valid" : "pending_verification",
-      archivedAt: null,
-      deletedAt: null,
-      reason: target.eligibility === "eligible" ? "restored_eligible" : "restored_pending_verification",
-      syncStatus: "pending",
-    } : target));
-    notifyAction("Target restored locally; shared backend will queue verification when quality is stale.");
+    setMessage(`Restore target ${id.slice(0, 8)} backend pending. No changes were saved.`);
   }
 
   function exportTargets(format: ProfileTargetExportFormat) {
