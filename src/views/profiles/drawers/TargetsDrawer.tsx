@@ -13,6 +13,13 @@ import type {
 import { Badge, Button, Drawer, Input } from "../../../design/components";
 import { redactText } from "../../../security/redaction";
 
+type TargetFeedbackTone = "info" | "success" | "warning" | "error";
+
+type TargetFeedback = {
+  tone: TargetFeedbackTone;
+  message: string;
+};
+
 export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProfile; onClose: () => void; onAction: (label: string) => void }) {
   const [targets, setTargets] = useState<ProfileTarget[]>([]);
   const [query, setQuery] = useState("");
@@ -21,6 +28,9 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
   const [singleUsername, setSingleUsername] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [message, setMessage] = useState("");
+  const [targetFeedback, setTargetFeedback] = useState<TargetFeedback | null>(null);
+  const [singleAddLoading, setSingleAddLoading] = useState(false);
+  const [bulkAddLoading, setBulkAddLoading] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
   async function loadTargetsFromBackend() {
@@ -140,24 +150,27 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
   function addTarget() {
     const username = normalizeUsername(singleUsername);
     if (!isValidUsername(username)) {
-      setMessage("Invalid Instagram username.");
+      setTargetFeedback({ tone: "error", message: "Error adding target · invalid username" });
       return;
     }
     if (targets.some((target) => !isArchivedOrDeletedTarget(target) && target.username === username)) {
-      setMessage("Duplicate target already visible in this list.");
+      setTargetFeedback({ tone: "warning", message: `Duplicate @${username} · already exists` });
       return;
     }
     if (window.botappDesktop?.profiles?.addTarget) {
-      setMessage(`Adding @${username} through secure relay...`);
+      setSingleAddLoading(true);
+      setTargetFeedback({ tone: "info", message: `Adding @${username}...` });
       void window.botappDesktop.profiles.addTarget({ accountId: profile.id, username }).then(async (result) => {
         if (!result.ok) {
-          setMessage(result.error ?? "Target add failed.");
+          setTargetFeedback(formatTargetAddError(username, result.error));
           return;
         }
         setSingleUsername("");
         await loadTargetsFromBackend();
         const row = (result.data?.row ?? {}) as Record<string, unknown>;
-        notifyAction(`Target @${String(row.target_username || username)} saved to Supabase.`);
+        setTargetFeedback(formatTargetAddSuccess(username, row, result.data as Record<string, unknown> | undefined));
+      }).finally(() => {
+        setSingleAddLoading(false);
       });
       return;
     }
@@ -180,30 +193,28 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
       syncStatus: "pending",
     }, ...current]);
     setSingleUsername("");
-    notifyAction(`Target @${username} queued locally for verification.`);
+    setTargetFeedback({ tone: "success", message: `Added @${username} · pending verification` });
   }
 
   function importBulk() {
     if (bulkResult.acceptedForVerification === 0) {
-      setMessage("Add one valid, non-duplicate Instagram username per line before importing.");
+      setTargetFeedback({ tone: bulkResult.duplicates + bulkResult.alreadyExisting > 0 ? "warning" : "error", message: bulkEmptyMessage(bulkResult) });
       return;
     }
     if (window.botappDesktop?.profiles?.bulkAddTargets) {
       const usernames = bulkResult.normalizedUsernames;
-      setMessage(`Importing ${usernames.length} target(s) through secure relay...`);
+      setBulkAddLoading(true);
+      setTargetFeedback({ tone: "info", message: `Importing ${usernames.length} target${usernames.length === 1 ? "" : "s"}...` });
       void window.botappDesktop.profiles.bulkAddTargets({ accountId: profile.id, usernames }).then(async (result) => {
         if (!result.ok) {
-          setMessage(result.error ?? "Bulk target import failed.");
+          setTargetFeedback({ tone: "error", message: `Error importing targets · ${result.error ?? "backend unavailable"}` });
           return;
         }
         setBulkText("");
         await loadTargetsFromBackend();
-        const inserted = Number(result.data?.inserted ?? 0);
-        const duplicates = Number(result.data?.skipped_duplicates ?? 0);
-        const invalid = Number(result.data?.skipped_invalid ?? 0);
-        const jobsQueued = Number(result.data?.jobs_queued ?? 0);
-        const jobStatus = String(result.data?.job_status || "unknown");
-        notifyAction(`Bulk import saved ${inserted}; duplicates ${duplicates}; invalid ${invalid}; jobs ${jobsQueued} ${jobStatus}.`);
+        setTargetFeedback(formatBulkImportSuccess(result.data as Record<string, unknown> | undefined));
+      }).finally(() => {
+        setBulkAddLoading(false);
       });
       return;
     }
@@ -229,14 +240,17 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
     }));
     setTargets((current) => [...imported, ...current]);
     setBulkText("");
-    notifyAction(`Bulk import parsed ${bulkResult.totalSubmitted}; accepted ${bulkResult.acceptedForVerification}, invalid ${bulkResult.invalid}, duplicates ${bulkResult.duplicates + bulkResult.alreadyExisting}.`);
+    setTargetFeedback({
+      tone: "success",
+      message: `Bulk import complete · accepted ${bulkResult.acceptedForVerification} · rejected ${bulkResult.invalid} · duplicates ${bulkResult.duplicates + bulkResult.alreadyExisting} · queued ${bulkResult.acceptedForVerification}`,
+    });
   }
 
   function archiveTargets(ids: string[]) {
     if (!ids.length) return;
     if (!window.confirm(`${ids.length} target(s) will be archived. Continue?`)) return;
     if (window.botappDesktop?.profiles?.deleteTargets) {
-      setMessage(`Archiving ${ids.length} target(s) through secure relay...`);
+      setMessage(`Archiving ${ids.length} target(s) through shared backend...`);
       void window.botappDesktop.profiles.deleteTargets({ accountId: profile.id, ids }).then(async (result) => {
         if (!result.ok) {
           setMessage(result.error ?? "Target archive failed.");
@@ -245,19 +259,19 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
         setSelected(new Set());
         await loadTargetsFromBackend();
         const archived = Number(result.data?.archived ?? ids.length);
-        notifyAction(archived === 1 ? "Target archived in Supabase." : `${archived} targets archived in Supabase.`);
+        notifyAction(archived === 1 ? "Target archived in shared backend." : `${archived} targets archived in shared backend.`);
       });
       return;
     }
     const now = new Date().toISOString();
-    setTargets((current) => current.map((target) => ids.includes(target.id) ? { ...target, status: "archived", archivedAt: now, reason: "dashboard_archive" } : target));
+    setTargets((current) => current.map((target) => ids.includes(target.id) ? { ...target, status: "archived", archivedAt: now, reason: "backend_archive" } : target));
     setSelected(new Set());
     notifyAction(ids.length === 1 ? "Target archived locally." : `${ids.length} targets archived locally.`);
   }
 
   function resetTarget(id: string) {
     if (window.botappDesktop?.profiles?.resetTargets) {
-      setMessage("Resetting target and requeueing verification through secure relay...");
+      setMessage("Resetting target and requeueing verification through shared backend...");
       void window.botappDesktop.profiles.resetTargets({ accountId: profile.id, ids: [id], mode: "reset_and_requeue_verification" }).then(async (result) => {
         if (!result.ok) {
           setMessage(result.error ?? "Target reset failed.");
@@ -291,7 +305,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
       reason: target.eligibility === "eligible" ? "restored_eligible" : "restored_pending_verification",
       syncStatus: "pending",
     } : target));
-    notifyAction("Target restored locally; secure relay will queue verification when quality is stale.");
+    notifyAction("Target restored locally; shared backend will queue verification when quality is stale.");
   }
 
   function exportTargets(format: ProfileTargetExportFormat) {
@@ -356,21 +370,22 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
             <h3>Add target</h3>
             <div className="target-add-row">
               <Input value={singleUsername} onChange={setSingleUsername} placeholder="Instagram username" />
-              <Button variant="primary" onClick={addTarget} disabled={!singleUsername.trim()}>+ Add</Button>
+              <Button variant="primary" onClick={addTarget} disabled={!singleUsername.trim() || singleAddLoading}>{singleAddLoading ? "Adding..." : "+ Add"}</Button>
             </div>
+            {targetFeedback ? <InlineTargetFeedback feedback={targetFeedback} /> : null}
           </section>
           <section className="target-form-card">
             <h3>Bulk add (one per line)</h3>
             <textarea className="target-bulk-input" value={bulkText} onChange={(event) => setBulkText(event.target.value)} placeholder={"user_one\n@user_two\nuser_three"} rows={4} />
             <div className="target-bulk-footer">
               <span className="subtle">Parsed {bulkResult.totalSubmitted} · accepted {bulkResult.acceptedForVerification} · invalid {bulkResult.invalid} · duplicates {bulkResult.duplicates + bulkResult.alreadyExisting}</span>
-              <Button variant="primary" onClick={importBulk} disabled={bulkResult.acceptedForVerification === 0}>Import</Button>
+              <Button variant="primary" onClick={importBulk} disabled={bulkAddLoading || bulkResult.totalSubmitted === 0}>{bulkAddLoading ? "Importing..." : "Import"}</Button>
             </div>
           </section>
         </div>
 
         <p className="targets-sync-note">
-          CT validation will reuse the admin-backed target contract through a secure BotApp API relay. BotApp does not access the DB, Supabase secrets, local scraping, local logs, or raw avatar URLs from the renderer.
+          Targets are added through the shared backend. BotApp never exposes provider credentials, local logs, or raw avatar URLs in the renderer.
         </p>
 
         <div className="targets-table-wrap">
@@ -405,7 +420,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
                     </td>
                     <td>
                       <span className="mono" title={target.verificationReason ?? undefined}>{target.verification}</span>
-                      <small>{target.verificationReason || target.jobStatus || "reason unavailable"}</small>
+                      <small>{target.verificationReason || target.jobStatus || "verification pending"}</small>
                     </td>
                     <td><EligibilityBadge status={target.eligibility} /><small>{target.providerCheckedAt ? `checked ${formatShortDate(target.providerCheckedAt)}` : pendingReasonLabel(target)}</small></td>
                     <td className="mono">{metricText(target.followersCount)}</td>
@@ -437,6 +452,10 @@ const targetFilters: Array<{ key: ProfileTargetListFilter; label: string }> = [
   { key: "rejected", label: "Rejected" },
   { key: "archived", label: "Archived / deleted" },
 ];
+
+function InlineTargetFeedback({ feedback }: { feedback: TargetFeedback }) {
+  return <div className={`target-inline-feedback tone-${feedback.tone}`} role="status">{feedback.message}</div>;
+}
 
 function StatCard({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "neutral" | "success" | "warning" | "danger" | "info" }) {
   return <div className={`targets-stat-card tone-${tone}`}><span>{label}</span><strong>{value}</strong></div>;
@@ -473,6 +492,7 @@ function safeTargetAvatarSrc(value: string | null | undefined) {
 
   // Match admin behavior: raw external avatar URLs must be proxied/sanitized server-side.
   if (
+    /^\/api\/instagram-dashboard\/avatar\?kind=target&[A-Za-z0-9=&_%.-]+$/.test(trimmed) ||
     /^\/api\/botapp\/instagram-dashboard\/avatar\?kind=target&[A-Za-z0-9=&_%.-]+$/.test(trimmed) ||
     /^https?:\/\/[^/]+\/api\/instagram-dashboard\/avatar\?kind=target&[A-Za-z0-9=&_%.-]+$/.test(trimmed) ||
     /^\/avatars\/[A-Za-z0-9._-]+\.svg$/.test(trimmed)
@@ -526,7 +546,7 @@ function eligibilityLabel(status: ProfileTargetEligibility) {
 
 function pendingReasonLabel(target: ProfileTarget) {
   if (target.jobStatus === "pending" || target.jobStatus === "retry_scheduled") return target.jobStatus;
-  if (target.verification === "pending") return target.verificationReason || "verification_not_run";
+  if (target.verification === "pending") return target.verificationReason || "verification pending";
   if (target.verification === "provider_error" || target.verification === "unavailable" || target.verification === "rate_limited") return target.verificationReason || "provider_error";
   if (target.eligibility === "unknown") return target.followersCount === null ? "missing_followers_count" : "backend_pending";
   return target.reason || "ready";
@@ -630,4 +650,65 @@ function parseBulkTargets(text: string, existingTargets: ProfileTarget[]): Profi
     alreadyExisting,
     normalizedUsernames: accepted,
   };
+}
+
+function readPayloadString(payload: Record<string, unknown> | undefined, keys: string[], fallback = "") {
+  if (!payload) return fallback;
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return fallback;
+}
+
+function formatTargetAddSuccess(username: string, row: Record<string, unknown>, payload: Record<string, unknown> | undefined): TargetFeedback {
+  const targetUsername = readPayloadString(row, ["target_username", "normalized_username", "username"], username);
+  const verification = readPayloadString(payload, ["verification_status"], readPayloadString(row, ["verification_status"], "pending"));
+  const quality = readPayloadString(payload, ["quality_status"], readPayloadString(row, ["quality_status"], "unknown"));
+  const reason = readPayloadString(row, ["verification_reason", "rejected_reason", "reason"], verification);
+
+  if (verification === "not_found" || quality === "rejected_not_found") {
+    return { tone: "warning", message: `Rejected @${targetUsername} · not_found` };
+  }
+  if (quality.startsWith("rejected_")) {
+    return { tone: "warning", message: `Rejected @${targetUsername} · ${quality.replace(/^rejected_/, "")}` };
+  }
+  if (verification === "pending" || quality === "unknown") {
+    return { tone: "success", message: `Added @${targetUsername} · pending verification` };
+  }
+  return { tone: "success", message: `Added @${targetUsername} · ${reason || verification} · ${quality}` };
+}
+
+function formatTargetAddError(username: string, error: string | null | undefined): TargetFeedback {
+  const detail = error || "backend unavailable";
+  if (/already|duplicate|database/i.test(detail)) return { tone: "warning", message: `Duplicate @${username} · already exists` };
+  if (/not[_ -]?found/i.test(detail)) return { tone: "warning", message: `Rejected @${username} · not_found` };
+  return { tone: "error", message: `Error adding @${username} · ${detail}` };
+}
+
+function bulkEmptyMessage(result: ProfileTargetBulkImportResult) {
+  const duplicateCount = result.duplicates + result.alreadyExisting;
+  if (duplicateCount > 0 && result.invalid === 0) return `Duplicate targets · ${duplicateCount} already exist`;
+  if (duplicateCount > 0) return `Nothing imported · duplicates ${duplicateCount} · rejected ${result.invalid}`;
+  return "Add one valid Instagram username per line before importing.";
+}
+
+function formatBulkImportSuccess(payload: Record<string, unknown> | undefined): TargetFeedback {
+  const rows = Array.isArray(payload?.rows) ? payload.rows as Record<string, unknown>[] : [];
+  const inserted = numberFromPayload(payload, "inserted");
+  const duplicates = numberFromPayload(payload, "skipped_duplicates");
+  const invalid = numberFromPayload(payload, "skipped_invalid");
+  const queued = numberFromPayload(payload, "jobs_queued");
+  const rejected = rows.filter((row) => readPayloadString(row, ["quality_status"], "").startsWith("rejected_") || readPayloadString(row, ["verification_status"], "") === "not_found").length + invalid;
+  const accepted = Math.max(0, inserted - rejected);
+
+  return {
+    tone: inserted > 0 ? "success" : duplicates > 0 ? "warning" : "error",
+    message: `Bulk import complete · accepted ${accepted} · rejected ${rejected} · duplicates ${duplicates} · queued ${queued}`,
+  };
+}
+
+function numberFromPayload(payload: Record<string, unknown> | undefined, key: string) {
+  const value = payload?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }

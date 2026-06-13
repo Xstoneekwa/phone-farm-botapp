@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Card, Input, Modal, type BadgeTone } from "../design/components";
-import type { ApiKeySummary, BotAppRuntimeIntegrationStatus, CompassAiRuntimeStatus, IntegrationStatus, WebhookEvent, WebhookSummary } from "../api/types";
+import type { ApiKeySummary, BotAppBackendEndpoint, BotAppRuntimeIntegrationStatus, CompassAiRuntimeStatus, IntegrationStatus, WebhookEvent, WebhookSummary } from "../api/types";
 import { redactText } from "../security/redaction";
 import "./api-keys.css";
 
@@ -114,6 +114,7 @@ export function APIKeys({
   const [relayCredentialDraft, setRelayCredentialDraft] = useState("");
   const [webhookDraft, setWebhookDraft] = useState({ label: "Web app", url: "", secret: "" });
   const [savedWebhooks, setSavedWebhooks] = useState<WebhookSummary[]>([]);
+  const [backendEndpoints, setBackendEndpoints] = useState<BotAppBackendEndpoint[]>([]);
   const [pendingDestructive, setPendingDestructive] = useState<{
     title: string;
     message: string;
@@ -138,6 +139,8 @@ export function APIKeys({
         setRelayUrlDraft(compassStatus.relayOrigin ?? "");
       }
       if (!cancelled && integrations?.webhooks) setSavedWebhooks(integrations.webhooks);
+      const endpoints = await window.botappDesktop?.endpoints?.list?.();
+      if (!cancelled && endpoints) setBackendEndpoints(endpoints);
     }
     void loadRuntime();
     return () => { cancelled = true; };
@@ -149,7 +152,7 @@ export function APIKeys({
   const checklist = [
     { label: "Relay URL configured", ok: relayConfigured },
     { label: "Relay reachable", ok: compassRuntime.status === "ready" },
-    { label: "Auth token configured", ok: compassRuntime.relayKeyConfigured },
+    { label: "Relay credential configured", ok: compassRuntime.relayKeyConfigured },
     { label: "Compass health ready", ok: compassReady },
     { label: "Server OpenAI key configured", ok: compassRuntime.serverKeyStatus === "configured" },
     { label: "Latest successful analysis", ok: Boolean(compassRuntime.lastAnalysisAt) },
@@ -182,6 +185,40 @@ export function APIKeys({
     if (status) setRuntime(status);
     if (compassStatus) setCompassRuntime(compassStatus);
     setMessage(compassStatus?.message ?? noRelayMessage);
+  }
+
+  async function refreshEndpoints() {
+    const endpoints = await window.botappDesktop?.endpoints?.list?.();
+    if (endpoints) setBackendEndpoints(endpoints);
+  }
+
+  async function testEndpoint(id: string) {
+    const result = await window.botappDesktop?.endpoints?.test?.({ id });
+    await refreshEndpoints();
+    setMessage(result?.ok ? `${id}: connected.` : `${id}: ${result?.lastSafeError ?? "Endpoint test failed."}`);
+  }
+
+  async function testAllEndpoints() {
+    const result = await window.botappDesktop?.endpoints?.testAll?.();
+    if (result?.endpoints) setBackendEndpoints(result.endpoints);
+    const notConnected = result?.results.filter((item) => item.status !== "connected").length ?? 0;
+    setMessage(notConnected ? `${notConnected} endpoint(s) need attention.` : "All tested endpoints connected.");
+  }
+
+  async function copyEndpointList() {
+    const lines = backendEndpoints.map((endpoint) => `${endpoint.method} ${endpoint.path} · ${endpoint.usedBy.join(", ")} · ${endpoint.testStatus}`);
+    await navigator.clipboard?.writeText(lines.join("\n"));
+    setMessage("Endpoint list copied.");
+  }
+
+  async function exportConnectionProfile() {
+    const profile = await window.botappDesktop?.endpoints?.exportProfile?.();
+    if (!profile) {
+      setMessage("Connection profile export is available only in the packaged app runtime.");
+      return;
+    }
+    await navigator.clipboard?.writeText(JSON.stringify(profile, null, 2));
+    setMessage("Connection profile copied.");
   }
 
   async function saveRelayConfig() {
@@ -346,7 +383,7 @@ export function APIKeys({
           <div className="status-stack">
             <StatusTile label="Local gateway" status={runtime.localGateway.status} detail={`${runtime.localGateway.transport} · ${runtime.localGateway.mode}`} />
             <StatusTile label="Secure relay" status={relayIntegrationStatus(compassRuntime)} detail={compassRuntime.relayOrigin ?? "Not configured"} />
-            <StatusTile label="Dashboard backend" status={runtime.dashboardBackend.status} detail={runtime.dashboardBackend.baseUrl} />
+            <StatusTile label="Shared backend" status={runtime.dashboardBackend.status} detail={runtime.dashboardBackend.baseUrl} />
           </div>
         </Card>
 
@@ -366,22 +403,66 @@ export function APIKeys({
         </Card>
       </section>
 
+      <Card title="BotApp Backend Endpoints" subtitle="Central registry of backend routes used or expected by BotApp. No secrets, raw headers, or payloads are shown.">
+        <div className="endpoint-registry-actions">
+          <Button onClick={() => prepare("Add endpoint", "botapp-endpoint-registry")}>Add endpoint</Button>
+          <Button onClick={testAllEndpoints}>Test all endpoints</Button>
+          <Button onClick={copyEndpointList}>Copy endpoint list</Button>
+          <Button onClick={exportConnectionProfile}>Export connection profile</Button>
+          <Button onClick={refreshEndpoints}>Refresh registry</Button>
+        </div>
+        <div className="endpoint-registry-table-wrap">
+          <table className="endpoint-registry-table">
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Path</th>
+                <th>Used by</th>
+                <th>Purpose</th>
+                <th>Auth</th>
+                <th>Status</th>
+                <th>Last test</th>
+                <th>Last code</th>
+                <th>Last safe error</th>
+                <th>Test</th>
+              </tr>
+            </thead>
+            <tbody>
+              {backendEndpoints.map((endpoint) => (
+                <tr key={endpoint.id}>
+                  <td><code>{endpoint.method}</code></td>
+                  <td><code>{endpoint.path}</code></td>
+                  <td>{endpoint.usedBy.join(", ")}</td>
+                  <td>{endpoint.purpose}</td>
+                  <td>{endpoint.authRequired ? "Yes" : "No"}</td>
+                  <td><EndpointStatus endpoint={endpoint} /></td>
+                  <td>{endpoint.lastTestAt ?? "Never"}</td>
+                  <td>{endpoint.lastStatusCode ?? "N/A"}</td>
+                  <td>{endpoint.lastSafeError ?? "None"}</td>
+                  <td><Button disabled={endpoint.status !== "active"} onClick={() => testEndpoint(endpoint.id)}>Test</Button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
       <Card title="Compass AI Relay" subtitle="Primary setup for production AI recommendations." id="compass-ai-relay">
         <div className="relay-console">
           <label>
             <span>Relay URL</span>
-            <Input value={relayUrlDraft} onChange={setRelayUrlDraft} placeholder="https://your-dashboard.example/api/instagram-dashboard/compass/analyze" mono type="url" />
+            <Input value={relayUrlDraft} onChange={setRelayUrlDraft} placeholder="https://your-backend.example/api/instagram-dashboard/compass/analyze" mono type="url" />
           </label>
           <label>
-            <span>Relay auth token</span>
-            <Input value={relayCredentialDraft} onChange={setRelayCredentialDraft} placeholder={compassRuntime.relayKeyConfigured ? "Configured. Enter a new token to rotate." : "Paste scoped relay token"} mono type="password" />
+            <span>Relay credential</span>
+            <Input value={relayCredentialDraft} onChange={setRelayCredentialDraft} placeholder={compassRuntime.relayKeyConfigured ? "Configured. Enter a new credential to rotate." : "Paste scoped relay credential"} mono type="password" />
             <small>Write-only from renderer. Electron main stores it and returns only configured/missing state.</small>
           </label>
           <div className="relay-status-grid">
             <StatusPill label="Relay URL" value={relayConfigured ? "configured" : "missing"} tone={relayConfigured ? "success" : "warning"} />
             <StatusPill label="Relay" value={compassRuntime.status === "ready" ? "connected" : "disconnected"} tone={compassRuntime.status === "ready" ? "success" : "warning"} />
             <StatusPill label="Server OpenAI key" value={compassRuntime.serverKeyStatus} tone={compassRuntime.serverKeyStatus === "configured" ? "success" : compassRuntime.serverKeyStatus === "missing" ? "error" : "warning"} />
-            <StatusPill label="Auth token" value={compassRuntime.relayKeyConfigured ? "configured" : "missing"} tone={compassRuntime.relayKeyConfigured ? "success" : "warning"} />
+            <StatusPill label="Relay credential" value={compassRuntime.relayKeyConfigured ? "configured" : "missing"} tone={compassRuntime.relayKeyConfigured ? "success" : "warning"} />
           </div>
           <div className="relay-meta">
             <span>Last relay health check: {compassRuntime.lastConnectionTestAt ?? "Not tested"}</span>
@@ -451,7 +532,7 @@ export function APIKeys({
           {compassRuntime.relayKeyConfigured ? (
             <article className="local-config-card">
               <div>
-                <span>Relay auth token</span>
+                <span>Relay credential</span>
                 <strong>Configured locally</strong>
                 <small>Prefix and usage are not available until the backend key registry is connected.</small>
               </div>
@@ -461,7 +542,7 @@ export function APIKeys({
             <EmptyState title="No scoped keys configured yet." detail="Create or connect a relay key. Backend key generation is not live in BotApp yet." />
           )}
           <div className="button-row">
-            <Button onClick={scrollToRelay}>Add relay token</Button>
+            <Button onClick={scrollToRelay}>Add relay credential</Button>
             <Button onClick={saveRelayConfig}>Save</Button>
             <Button onClick={refreshRuntime}>Test</Button>
             <Button variant="danger" onClick={removeRelayConfig}>Remove</Button>
@@ -632,6 +713,27 @@ function StatusTile({ label, status, detail }: { label: string; status: Integrat
 
 function StatusPill({ label, value, tone }: { label: string; value: string; tone: BadgeTone }) {
   return <div className="status-pill"><span>{label}</span><Badge tone={tone}>{value}</Badge></div>;
+}
+
+function EndpointStatus({ endpoint }: { endpoint: BotAppBackendEndpoint }) {
+  const tone: BadgeTone = endpoint.testStatus === "connected"
+    ? "success"
+    : endpoint.testStatus === "failing" || endpoint.testStatus === "not_deployed"
+      ? "error"
+      : endpoint.testStatus === "auth_protected" || endpoint.testStatus === "planned" || endpoint.testStatus === "untested"
+        ? "warning"
+        : "neutral";
+  const labels: Record<BotAppBackendEndpoint["testStatus"], string> = {
+    untested: "Not tested",
+    connected: "Connected",
+    failing: "Failing",
+    auth_protected: "Auth protected",
+    not_deployed: "Not deployed",
+    planned: "Planned",
+    wiring_missing: "Wiring missing",
+  };
+  const label = labels[endpoint.testStatus] ?? endpoint.testStatus.replaceAll("_", " ");
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 function relayIntegrationStatus(runtime: CompassAiRuntimeStatus): IntegrationStatus {

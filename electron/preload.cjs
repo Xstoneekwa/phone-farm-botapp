@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   runtime: {
     status: () => ipcRenderer.invoke("botapp:runtime:status"),
   },
+  dispatcher: {
+    status: () => ipcRenderer.invoke("botapp:dispatcher:status"),
+    action: (action) => ipcRenderer.invoke("botapp:dispatcher:action", action),
+  },
   compass: {
     status: () => ipcRenderer.invoke("botapp:compass:ai-status"),
     saveRelayConfig: (input) => ipcRenderer.invoke("botapp:compass:save-relay-config", input),
@@ -22,13 +26,22 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   data: {
     overview: () => ipcRenderer.invoke("botapp:data:overview"),
   },
+  relay: {
+    health: () => ipcRenderer.invoke("botapp:relay:health"),
+  },
   devices: {
     list: (input) => ipcRenderer.invoke("botapp:devices:list", input),
   },
   profiles: {
     details: (accountId) => ipcRenderer.invoke("botapp:profiles:details", accountId),
+    statsHistory: (input) => ipcRenderer.invoke("botapp:profiles:stats-history", input),
     createDryRun: (input) => ipcRenderer.invoke("botapp:profiles:create-dry-run", input),
     create: (input) => ipcRenderer.invoke("botapp:profiles:create", input),
+    scheduleSlots: (input) => ipcRenderer.invoke("botapp:profiles:schedule-slots", input),
+    schedule: {
+      get: (accountId) => ipcRenderer.invoke("botapp:profiles:schedule:get", accountId),
+      save: (input) => ipcRenderer.invoke("botapp:profiles:schedule:save", input),
+    },
     verifyUsername: (input) => ipcRenderer.invoke("botapp:profiles:verify-username", input),
     credentials: {
       submit: (input) => ipcRenderer.invoke("botapp:profiles:credentials:submit", input),
@@ -38,6 +51,9 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     },
     assignNow: (input) => ipcRenderer.invoke("botapp:profiles:assign-now", input),
     readinessNow: (input) => ipcRenderer.invoke("botapp:profiles:readiness-now", input),
+    autoLogin: (input) => ipcRenderer.invoke("botapp:profiles:auto-login", input),
+    stopRun: (input) => ipcRenderer.invoke("botapp:profiles:run-stop", input),
+    runProgress: (input) => ipcRenderer.invoke("botapp:profiles:run-progress", input),
     addTarget: (input) => ipcRenderer.invoke("botapp:profiles:targets:add", input),
     bulkAddTargets: (input) => ipcRenderer.invoke("botapp:profiles:targets:bulk-add", input),
     deleteTargets: (input) => ipcRenderer.invoke("botapp:profiles:targets:delete", input),

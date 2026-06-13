@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockClient } from "../api/mock-client";
-import type { ActivityLogEntry, ApiKeySummary, AppSettings, AutoRestartControl, AutoRestartOverview, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotProfile, CompassActionTarget, CompassAnalyzeResult, CompassAiRuntimeStatus, CompassOverview, Device, DeviceProfileGroup, NotificationItem, WebhookSummary } from "../api/types";
+import type { ActivityLogEntry, ApiKeySummary, AppSettings, AutoRestartControl, AutoRestartOverview, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotAppDispatcherHealth, BotAppRelayHealth, BotProfile, CompassActionTarget, CompassAnalyzeResult, CompassAiRuntimeStatus, CompassOverview, Device, DeviceProfileGroup, NotificationItem, WebhookSummary } from "../api/types";
 import { Modal, Toasts, type ToastItem } from "../design/components";
 import { Sidebar } from "../layout/Sidebar";
 import { TopBar } from "../layout/TopBar";
@@ -10,6 +10,7 @@ import { ClientAccounts } from "../views/ClientAccounts";
 import { Credentials } from "../views/Credentials";
 import { Devices } from "../views/Devices";
 import { ActivityLog } from "../views/ActivityLog";
+import { RuntimeHealth } from "../views/RuntimeHealth";
 import { Compass } from "../views/Compass";
 import { AutoRestart } from "../views/AutoRestart";
 import { APIKeys } from "../views/APIKeys";
@@ -47,6 +48,8 @@ export function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ action: string; target: string; danger: boolean } | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [dispatcherHealth, setDispatcherHealth] = useState<BotAppDispatcherHealth | null>(null);
+  const [relayHealth, setRelayHealth] = useState<BotAppRelayHealth | null>(null);
 
   async function loadOverviewData() {
     if (window.botappDesktop?.data?.overview) {
@@ -54,6 +57,8 @@ export function App() {
       setData(result.data);
       setSyncError(result.error ?? null);
       setProfilesMeta(result.profilesMeta ?? null);
+      void loadDispatcherHealth();
+      void loadRelayHealth();
       if (!result.ok && result.error) pushToast(result.error, "info");
       return;
     }
@@ -76,6 +81,34 @@ export function App() {
     });
     setSyncError(null);
     setProfilesMeta(null);
+    void loadDispatcherHealth();
+    void loadRelayHealth();
+  }
+
+  async function loadDispatcherHealth() {
+    const result = await window.botappDesktop?.dispatcher?.status?.();
+    if (result) setDispatcherHealth(result);
+  }
+
+  async function loadRelayHealth() {
+    const result = await window.botappDesktop?.relay?.health?.();
+    if (result) setRelayHealth(result);
+  }
+
+  function copyRelayDiagnostics() {
+    if (!relayHealth) return;
+    const payload = {
+      ok: relayHealth.ok,
+      reason: relayHealth.reason,
+      relay_authenticated: relayHealth.relay_authenticated,
+      backend_configured: relayHealth.backend_configured,
+      backend_key: relayHealth.backend_key,
+      provided_key: relayHealth.provided_key,
+      routes: relayHealth.routes,
+      checkedAt: relayHealth.checkedAt,
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    pushToast("Relay diagnostics copied.", "success");
   }
 
   useEffect(() => {
@@ -224,19 +257,37 @@ export function App() {
   let view: React.ReactNode;
   if (loading) view = <div className="empty-state"><strong>Loading backend data</strong><span>BotApp is syncing through the shared backend relay.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
-  else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} syncError={syncError} profilesMeta={profilesMeta} loading={loading} onRefresh={() => void loadOverviewData()} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message) => pushToast(message, "success")} />;
+  else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} dispatcherHealth={dispatcherHealth} syncError={syncError} profilesMeta={profilesMeta} loading={loading} onRefresh={() => loadOverviewData()} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message, tone) => pushToast(message, tone ?? "success")} />;
   else if (active === "account") view = data.clientAccounts ? <ClientAccounts overview={data.clientAccounts} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} onOpenCredentials={(account) => { setSelectedCredentialsAccountId(account.accountId); setActive("credentials"); }} /> : null;
   else if (active === "credentials") view = data.credentials ? <Credentials overview={data.credentials} selectedAccountId={selectedCredentialsAccountId} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} onRefresh={() => loadOverviewData()} />;
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
+  else if (active === "runtime") view = <RuntimeHealth />;
   else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
   else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onPreviewControl={previewAutoRestartControl} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;
   else if (active === "api") view = <APIKeys apiKeys={data.apiKeys} webhooks={data.webhooks} onAction={requestAction} />;
   else view = data.settings ? <Settings settings={data.settings} onAction={requestAction} /> : null;
 
+  const relayBannerVisible = relayHealth && !relayHealth.ok;
+
   return <div className="app-shell">
     <Sidebar active={active} onNavigate={navigate} counts={counts} />
-    <main className="main"><TopBar active={active} onCommand={() => setCommandOpen(true)} /><div className="content">{view}</div></main>
+    <main className="main">
+      <TopBar active={active} onCommand={() => setCommandOpen(true)} />
+      {relayBannerVisible ? (
+        <div className="relay-auth-banner">
+          <div>
+            <strong>BotApp relay auth is not configured. Backend cannot accept local BotApp requests.</strong>
+            <span>{relayHealth.message}</span>
+          </div>
+          <div className="relay-auth-actions">
+            <button type="button" onClick={() => void loadRelayHealth()}>Retry</button>
+            <button type="button" onClick={copyRelayDiagnostics}>Copy diagnostics</button>
+          </div>
+        </div>
+      ) : null}
+      <div className="content">{view}</div>
+    </main>
     {commandOpen ? <div className="command-overlay" onClick={() => setCommandOpen(false)}><div className="command-box" onClick={(event) => event.stopPropagation()}><input className="input" placeholder="Jump to screen..." autoFocus />{routes.map((route) => <button key={route.id} onClick={() => navigate(route.id)}><span>{route.label}</span><span className="mono">{route.shortcut}</span></button>)}</div></div> : null}
     {pendingAction ? <Modal title={`${pendingAction.action}?`} danger={pendingAction.danger} confirmLabel="Confirm" onClose={() => setPendingAction(null)} onConfirm={confirmAction}><p><strong>Action preview.</strong></p><p>No live runtime or device action will run from this confirmation. Target: <span className="mono">{pendingAction.target}</span>.</p></Modal> : null}
     <Toasts items={toasts} />

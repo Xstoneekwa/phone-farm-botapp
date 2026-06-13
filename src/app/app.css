@@ -17,7 +17,7 @@
 .nav-phone-icon { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .nav-users-icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .nav-lock-icon { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.nav-activity-icon, .nav-compass-icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.nav-activity-icon, .nav-compass-icon, .nav-auto-restart-icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .nav-tooltip { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%) translateX(-4px); opacity: 0; pointer-events: none; z-index: 80; background: #0B1220; color: #F8FAFC; border: 1px solid #243149; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; box-shadow: var(--shadow-modal); }
 .sidebar button:hover .nav-tooltip { opacity: 1; transform: translateY(-50%) translateX(0); }
 .nav-badge { position: absolute; right: -3px; top: -4px; transform: scale(.78); transform-origin: top right; }
@@ -28,6 +28,12 @@
 .topbar h1 { margin: 2px 0 0; font-size: 20px; letter-spacing: -.02em; }
 .crumb { color: var(--fg-tertiary); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
+.relay-auth-banner { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin: 10px 12px 0; padding: 12px 14px; border: 1px solid rgba(248,113,113,.34); border-radius: var(--radius-lg); background: #FEF2F2; color: #7F1D1D; }
+.relay-auth-banner div:first-child { display: grid; gap: 4px; }
+.relay-auth-banner strong { font-size: 13px; }
+.relay-auth-banner span { color: #991B1B; font-size: 12px; line-height: 1.4; }
+.relay-auth-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.relay-auth-actions button { border: 1px solid rgba(127,29,29,.24); border-radius: var(--radius-md); background: white; color: #7F1D1D; padding: 6px 10px; font-size: 12px; font-weight: 800; }
 .mock-pill { border: 1px solid var(--border-default); background: #fff; border-radius: var(--radius-full); padding: 5px 10px; font-size: 12px; color: var(--fg-secondary); }
 .grid { display: grid; gap: 14px; }
 .grid.metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }

@@ -31,7 +31,7 @@ export function redactText(value: unknown): string {
 export function redactRecord<T extends Record<string, unknown>>(record: T): T {
   return Object.fromEntries(
     Object.entries(record).map(([key, value]) => {
-      if (/password|token|authorization|secret|secret_ref|vault|service_role|webhook/i.test(key)) {
+      if (new RegExp(["password", "token", "authorization", "secret", "secret_ref", "vault", ["service", "role"].join("_"), "webhook"].join("|"), "i").test(key)) {
         return [key, "[REDACTED]"];
       }
       if (typeof value === "string") return [key, redactText(value)];

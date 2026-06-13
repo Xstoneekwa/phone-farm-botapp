@@ -60,6 +60,18 @@ function CompassNavIcon() {
   );
 }
 
+function AutoRestartNavIcon() {
+  return (
+    <svg className="nav-auto-restart-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 12a8 8 0 0 1 13.5-5.8" />
+      <path d="M17.5 3.8v4.4h-4.4" />
+      <path d="M20 12a8 8 0 0 1-13.5 5.8" />
+      <path d="M6.5 20.2v-4.4h4.4" />
+      <path d="M12 8v4l2.5 2" />
+    </svg>
+  );
+}
+
 const navIcons: Record<RouteId, ReactNode> = {
   overview: "⌁",
   profiles: "◎",
@@ -67,10 +79,9 @@ const navIcons: Record<RouteId, ReactNode> = {
   credentials: <LockNavIcon />,
   devices: <DeviceNavIcon />,
   activity: <ActivityInvestigationNavIcon />,
+  runtime: "RT",
   compass: <CompassNavIcon />,
-  targets: "◇",
-  templates: "✉",
-  notifications: "!",
+  "auto-restart": <AutoRestartNavIcon />,
   api: "{}",
   settings: "⚙",
 };
@@ -87,7 +98,6 @@ export function Sidebar({ active, onNavigate, counts }: { active: RouteId; onNav
           <span className="nav-badge">
             {route.id === "profiles" ? <Badge tone="success">{counts.profiles}</Badge> : null}
             {route.id === "devices" ? <Badge tone="info">{counts.devices}</Badge> : null}
-            {route.id === "notifications" ? <Badge tone="warning">{counts.notifications}</Badge> : null}
           </span>
         </button>)}
       </div>)}

@@ -1,57 +1,51 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { BotProfile, ProfileAutoLoginProgressStep, ProfileAutoLoginState } from "../../api/types";
 import { Button } from "../../design/components";
-import {
-  advanceAutoLoginState,
-  buildAutoLoginCodePayload,
-  cancelAutoLoginChallenge,
-  copyableProcessLog,
-  resumeAutoLoginAfterCode,
-} from "./auto-login-flow";
+import { copyableProcessLog } from "./auto-login-flow";
 
 function stepStatusLabel(status: ProfileAutoLoginProgressStep["status"]) {
   if (status === "done") return "Done";
   if (status === "running") return "Running...";
   if (status === "failed") return "Failed";
+  if (status === "action_required") return "Action required";
+  if (status === "skipped") return "Skipped";
   return "Pending";
 }
 
 function globalStatusLabel(state: ProfileAutoLoginState) {
   if (state.globalStatus === "completed") return "Completed";
-  if (state.globalStatus === "code_required") return "Code required";
+  if (state.globalStatus === "action_required") return "Action required";
+  if (state.globalStatus === "starting") return "Starting";
+  if (state.globalStatus === "queued") return "Queued";
+  if (state.globalStatus === "claimed") return "Claimed by dispatcher";
+  if (state.globalStatus === "stopped") return "Stopped";
   if (state.globalStatus === "blocked") return "Blocked";
   if (state.globalStatus === "failed") return "Failed";
   return "Running";
 }
 
-function challengeCodeLabel(type: NonNullable<ProfileAutoLoginState["challenge"]>["code_type"]) {
-  if (type === "2fa" || type === "authenticator") return "Two-factor authentication required";
-  if (type === "checkpoint") return "Checkpoint required";
-  return "Code required";
-}
-
 export function AutoLoginFlowModal({
   profile,
   state,
-  onStateChange,
+  onOpenPhone,
+  onCheckLogin,
+  onRetryAutoLogin,
+  onStop,
   onClose,
 }: {
   profile: BotProfile;
   state: ProfileAutoLoginState;
-  onStateChange: (state: ProfileAutoLoginState) => void;
+  onOpenPhone: () => Promise<void> | void;
+  onCheckLogin: () => Promise<void> | void;
+  onRetryAutoLogin: () => Promise<void> | void;
+  onStop: () => Promise<void> | void;
   onClose: () => void;
 }) {
   const [copyLabel, setCopyLabel] = useState("Copy log");
 
-  useEffect(() => {
-    if (state.globalStatus !== "running") return undefined;
-    const timer = window.setTimeout(() => {
-      onStateChange(advanceAutoLoginState(state, profile));
-    }, 850);
-    return () => window.clearTimeout(timer);
-  }, [onStateChange, profile, state]);
-
   const logText = useMemo(() => copyableProcessLog(state.processLog), [state.processLog]);
+  const actionRequired = state.globalStatus === "action_required" || Boolean(state.challenge);
+  const canStop = ["queued", "claimed", "running", "starting"].includes(state.globalStatus);
 
   async function copyLog() {
     await navigator.clipboard.writeText(logText);
@@ -72,7 +66,13 @@ export function AutoLoginFlowModal({
         </header>
 
         <section className="auto-login-progress-card" aria-label="Progress">
-          <h4>Progress</h4>
+          <h4>Real backend request</h4>
+          <div className="auto-login-run-summary">
+            <span>request_id</span><code>{state.requestId ?? "pending"}</code>
+            <span>request_status</span><code>{state.requestStatus ?? state.globalStatus}</code>
+            <span>run_id</span><code>{state.runId ?? "not linked yet"}</code>
+            <span>reason</span><code>{state.safeReason ?? "none"}</code>
+          </div>
           <div className="auto-login-step-list">
             {state.steps.map((step) => (
               <div key={step.id} className={`auto-login-step step-${step.status}`}>
@@ -87,6 +87,14 @@ export function AutoLoginFlowModal({
           </div>
         </section>
 
+        {actionRequired ? (
+          <section className="auto-login-action-required" aria-label="Action required">
+            <strong>Instagram requires a code or confirmation.</strong>
+            <span>Open the phone and complete it manually in Instagram. Do not use the web dashboard for this step.</span>
+            <span>{state.challenge?.help_text ?? state.safeReason ?? "Complete the Instagram prompt on the assigned phone, then run Check Login or Retry Auto Login."}</span>
+          </section>
+        ) : null}
+
         <section className="auto-login-log-section" aria-label="Process log">
           <div className="auto-login-section-title">
             <h4>Process log</h4>
@@ -96,79 +104,14 @@ export function AutoLoginFlowModal({
         </section>
 
         <div className="auto-login-footer">
-          <span>Prepared for the future secure BotApp relay. No device action is executed from this screen.</span>
+          <span>Real BotApp relay request. No social action is requested by this login_provisioning flow.</span>
+          <div className="auto-login-footer-actions">
+            <Button variant="ghost" onClick={() => void onOpenPhone()}>Open Phone</Button>
+            <Button variant="secondary" onClick={() => void onCheckLogin()}>Check Login</Button>
+            <Button variant="secondary" onClick={() => void onRetryAutoLogin()}>Retry Auto Login</Button>
+            {canStop ? <Button variant="danger" onClick={() => void onStop()}>Stop</Button> : null}
+          </div>
           <Button onClick={onClose}>{state.globalStatus === "completed" ? "Done" : "Close"}</Button>
-        </div>
-
-        {state.challenge ? (
-          <AutoLoginCodeModal
-            state={state}
-            onCancel={() => onStateChange(cancelAutoLoginChallenge(state))}
-            onSubmit={() => onStateChange(resumeAutoLoginAfterCode(state))}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function AutoLoginCodeModal({
-  state,
-  onCancel,
-  onSubmit,
-}: {
-  state: ProfileAutoLoginState;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
-  const [code, setCode] = useState("");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const challenge = state.challenge;
-  if (!challenge) return null;
-  const activeChallenge = challenge;
-
-  function submitCode() {
-    const cleanCode = code.trim();
-    if (!/^[A-Za-z0-9-]{4,32}$/.test(cleanCode)) {
-      setError("Enter a valid verification code.");
-      return;
-    }
-    setSubmitting(true);
-    setError("");
-    const payload = buildAutoLoginCodePayload(activeChallenge, cleanCode);
-    void payload;
-    window.setTimeout(() => {
-      setSubmitting(false);
-      setCode("");
-      onSubmit();
-    }, 450);
-  }
-
-  return (
-    <div className="auto-login-code-backdrop" role="presentation">
-      <div className="auto-login-code-modal" role="dialog" aria-modal="true" aria-labelledby="auto-login-code-title">
-        <header>
-          <span>{challengeCodeLabel(activeChallenge.code_type)}</span>
-          <h4 id="auto-login-code-title">Enter verification code</h4>
-          <p>@{activeChallenge.account_username} · {activeChallenge.help_text}</p>
-        </header>
-        <label className="auto-login-code-field">
-          Verification code
-          <input
-            className="input"
-            value={code}
-            inputMode="text"
-            autoComplete="one-time-code"
-            onChange={(event) => setCode(event.target.value.replace(/[^A-Za-z0-9-]/g, "").slice(0, 32))}
-            placeholder="Enter code"
-          />
-        </label>
-        <p className="auto-login-code-hint">The code is not added to the process log and is not retained in profile data.</p>
-        {error ? <p className="auto-login-code-error">{error}</p> : null}
-        <div className="auto-login-code-actions">
-          <Button variant="ghost" onClick={onCancel} disabled={submitting}>Cancel</Button>
-          <Button onClick={submitCode} disabled={submitting}>{submitting ? "Submitting..." : "Submit code"}</Button>
         </div>
       </div>
     </div>

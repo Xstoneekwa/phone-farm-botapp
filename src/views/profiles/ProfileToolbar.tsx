@@ -6,13 +6,14 @@ const toolbarActions: Array<{ id: ProfileToolbarAction; label: string; danger?: 
   { id: "targets", label: "Targets" },
   { id: "play", label: "Start" },
   { id: "auto_login", label: "Auto Login" },
-  { id: "check_readiness", label: "Check Login" },
+  { id: "check_readiness", label: "Refresh readiness" },
   { id: "stop", label: "Stop", danger: true },
   { id: "settings", label: "Settings" },
   { id: "filters", label: "Filters" },
   { id: "assign_now", label: "Assign Now" },
   { id: "archive", label: "Archive", danger: true },
   { id: "delete", label: "Delete", danger: true },
+  { id: "restore", label: "Restore" },
 ];
 
 function Icon({ action }: { action: ProfileToolbarAction }) {
@@ -29,11 +30,22 @@ function Icon({ action }: { action: ProfileToolbarAction }) {
   if (action === "assign_now") return <svg {...common}><circle cx="5.5" cy="5" r="2" /><path d="M2.5 12c.6-2 1.7-3 3-3s2.4 1 3 3" /><path d="M11 5v6M8 8h6" strokeLinecap="round" /></svg>;
   if (action === "archive") return <svg {...common}><path d="M2.8 4.2h10.4l-.7 2H3.5l-.7-2z" /><path d="M3.8 6.2h8.4v6.2a1 1 0 0 1-1 1H4.8a1 1 0 0 1-1-1V6.2z" /><path d="M6.5 8.5h3" strokeLinecap="round" /></svg>;
   if (action === "delete") return <svg {...common}><path d="M4 5h8M6 5V3h4v2M5 7l.5 6h5L11 7" /><path d="M7 8.5v3M9 8.5v3" strokeLinecap="round" /></svg>;
+  if (action === "restore") return <svg {...common}><path d="M3.4 8a4.6 4.6 0 1 0 1.2-3.1" /><path d="M3.2 3.2v3.2h3.2" strokeLinecap="round" strokeLinejoin="round" /><path d="M8 5.8V8l1.6 1.1" strokeLinecap="round" /></svg>;
   return <svg {...common}><path d="M4 4h9l-1 2H5L4 4zM5 7h7l-1 2H6L5 7zM6 10h5l-1 2H7L6 10z" /><path d="M3 13h2M3 4v9" /></svg>;
+}
+
+function actionVisible(profile: BotProfile, action: ProfileToolbarAction) {
+  const lifecycle = profile.lifecycleStatus ?? "active";
+  if (lifecycle === "archived" || lifecycle === "trashed" || profile.status === "archived" || profile.status === "trashed") {
+    return ["stats", "logs", "restore"].includes(action);
+  }
+  if (action === "restore") return false;
+  return true;
 }
 
 function disabledReason(profile: BotProfile, action: ProfileToolbarAction): ProfileRequirementState | null {
   if (action === "auto_login" && !profile.autoLoginRequirement.enabled) return profile.autoLoginRequirement;
+  if (action === "check_readiness" && !profile.refreshReadinessRequirement.enabled) return profile.refreshReadinessRequirement;
   if (action === "assign_now" && !profile.assignNowRequirement.enabled) return profile.assignNowRequirement;
   return null;
 }
@@ -49,16 +61,18 @@ function tooltipText(profile: BotProfile, action: ProfileToolbarAction, label: s
   const runControlReason = runControlDisabledReason(profile, action);
   if (runControlReason) return `${label} · ${runControlReason}`;
   if (requirementReason) return `${label} · ${requirementReason.label}: ${requirementReason.detail}`;
+  if (action === "auto_login") return `${label} · ${profile.autoLoginRequirement.label}: ${profile.autoLoginRequirement.detail}`;
+  if (action === "check_readiness") return `${label} · ${profile.refreshReadinessRequirement.label}: ${profile.refreshReadinessRequirement.detail}`;
   if (action === "play") return "Reactivate account status through secure BotApp relay. Does not start a run.";
-  if (action === "check_readiness") return "Check login/readiness now without starting a Growth session.";
   if (action === "stop") return "Pause account status through secure BotApp relay. Does not stop worker runtime.";
+  if (action === "restore") return "Restore account lifecycle through secure BotApp relay. Does not start a run.";
   return label;
 }
 
 export function ProfileToolbar({ profile, onAction }: { profile: BotProfile; onAction: (action: ProfileToolbarAction) => void }) {
   return (
     <div className="profile-toolbar" role="toolbar" aria-label="Profile actions">
-      {toolbarActions.map((item) => {
+      {toolbarActions.filter((item) => actionVisible(profile, item.id)).map((item) => {
         const disabled = Boolean(disabledReason(profile, item.id) || runControlDisabledReason(profile, item.id));
         return (
           <span

@@ -56,6 +56,9 @@ type BotAppDeviceViewResult = {
 };
 
 type BotAppRuntimeIntegrationStatus = import("./api/types").BotAppRuntimeIntegrationStatus;
+type BotAppDispatcherHealth = import("./api/types").BotAppDispatcherHealth;
+type BotAppRelayHealth = import("./api/types").BotAppRelayHealth;
+type BotAppDispatcherHealthAction = "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
 type CompassAiRuntimeStatus = import("./api/types").CompassAiRuntimeStatus;
 type CompassAiRuntimeAnalyzeRequest = import("./api/types").CompassAiRuntimeAnalyzeRequest;
 type CompassAiRuntimeAnalyzeResult = import("./api/types").CompassAiRuntimeAnalyzeResult;
@@ -75,6 +78,10 @@ interface Window {
     runtime?: {
       status: () => Promise<BotAppRuntimeIntegrationStatus>;
     };
+    dispatcher?: {
+      status: () => Promise<BotAppDispatcherHealth>;
+      action: (action: BotAppDispatcherHealthAction) => Promise<BotAppDispatcherHealth>;
+    };
     compass?: {
       status: () => Promise<CompassAiRuntimeStatus>;
       saveRelayConfig: (input: { relayUrl: string; relayCredential?: string }) => Promise<CompassAiRuntimeStatus>;
@@ -89,22 +96,34 @@ interface Window {
     data?: {
       overview: () => Promise<{ ok: boolean; data: BotAppOverviewData; error?: string | null; profilesMeta?: { source: string; accountsCount: number; counts: Record<string, number> } | null }>;
     };
+    relay?: {
+      health: () => Promise<BotAppRelayHealth>;
+    };
     devices?: {
       list: (input?: { format?: "raw" | "normalized" }) => Promise<{ ok: boolean; data?: Record<string, unknown>[]; error?: string | null }>;
     };
     profiles?: {
       details: (accountId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      statsHistory?: (input: { accountId: string; days?: number }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       createDryRun: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
-      create: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      create: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null; partial?: Record<string, unknown> }>;
+      scheduleSlots?: (input: { device_id: string; app_instance_id: string; runtime_mode: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      schedule?: {
+        get: (accountId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+        save: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      };
       verifyUsername?: (input: { username: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       credentials?: {
         submit: (input: { accountId: string; username: string; password: string; dryRun?: boolean }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       };
       actions?: {
-        perform: (input: { accountId: string; action: "start" | "stop" | "archive" | "restore"; reason?: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+        perform: (input: { accountId: string; action: "start" | "stop" | "archive" | "trash" | "restore"; reason?: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       };
       assignNow?: (input: { accountId: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       readinessNow?: (input: { accountId: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      autoLogin?: (input: { accountId: string; username: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      stopRun?: (input: { accountId: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      runProgress?: (input: { accountId: string; requestId?: string | null }) => Promise<{ ok: boolean; data?: import("./api/types").ProfileRunProgressSnapshot; error?: string | null }>;
       addTarget: (input: { accountId: string; username: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       bulkAddTargets: (input: { accountId: string; usernames: string[] }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       deleteTargets: (input: { accountId: string; ids: string[] }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;

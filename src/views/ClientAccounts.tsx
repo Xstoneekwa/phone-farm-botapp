@@ -83,7 +83,7 @@ function passwordUpdatePayload(account: BotAppClientAccount): ClientAccountPassw
     email: {
       email_template: "instagram_password_update_required",
       delivery_status: "pending_relay",
-      include: ["client_name", "username", "dashboard_link"],
+      include: ["client_name", "username", "client_action_link"],
     },
     metadata_safe: {
       source_surface: "client_accounts",
@@ -125,7 +125,7 @@ export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials }: C
     const payload = passwordUpdatePayload(account);
     void payload;
     setPasswordRequestAccount(null);
-    setMessage(`${account.username}: password update request prepared. Client will receive a dashboard notification and email after secure relay approval.`);
+    setMessage(`${account.username}: password update request prepared. Client will receive a backend notification and email after secure relay approval.`);
   }
 
   return (
@@ -253,7 +253,7 @@ export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials }: C
             <span>Request password update</span>
             <h3>Send password update request?</h3>
             <p>
-              Client will receive a dashboard notification and email after the secure relay accepts this request.
+              Client will receive a backend notification and email after the secure relay accepts this request.
             </p>
             <strong>@{passwordRequestAccount.username}</strong>
             <div className="client-accounts-confirm-actions">
@@ -309,7 +309,7 @@ function ActionList({
       <IconButton label="Open credentials worklist" onClick={() => onAction("open_credentials")}>
         <KeyIcon />
       </IconButton>
-      <IconButton label="Request password update: Client will receive a dashboard notification and email." onClick={() => onAction("request_password_update")}>
+      <IconButton label="Request password update: Client will receive a backend notification and email." onClick={() => onAction("request_password_update")}>
         <RefreshIcon />
       </IconButton>
       <span className="client-accounts-status-menu">

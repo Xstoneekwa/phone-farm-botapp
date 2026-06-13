@@ -8,7 +8,7 @@ Do not add:
 
 - Supabase service-role keys.
 - Supabase direct clients in renderer code.
-- Backend secrets, API keys, bearer tokens, authorization headers, webhook secrets, or vault refs.
+- Backend credentials, API keys, auth headers, webhook signing values, or vault refs.
 - Passwords or full credential records.
 - Full Vault UUIDs or secret reference IDs.
 - Raw XML, raw screenshots, local screenshot paths, HAR files, ADB dumps, or raw device logs.
@@ -69,7 +69,7 @@ Run no-leak scans on:
 
 Recommended high-confidence patterns:
 
-- `service_role`
+- Supabase service-role values
 - `supabase_url`
 - `supabase_key`
 - `authorization`

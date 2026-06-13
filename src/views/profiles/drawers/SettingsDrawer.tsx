@@ -39,6 +39,12 @@ function formatCompactDate(value: string) {
   return `${iso.slice(11, 19)} ${iso.slice(0, 10)}`;
 }
 
+function appInstanceTag(profile: BotProfile) {
+  const index = profile.appInstanceIndex ?? profile.cloneIndex;
+  if (typeof index !== "number" || !Number.isFinite(index) || index < 0) return "unassigned";
+  return index === 0 ? "P" : String(index);
+}
+
 function credentialLabel(status: ProfileSettings["general"]["credentialStatus"]) {
   if (status === "active") return "Credential status: active";
   if (status === "missing") return "Credential status: missing";
@@ -796,8 +802,8 @@ function buildSettingsFromProfileDetails(
       runtimeProfile: profile.runtimeProfile || "schema_only",
       assignedDevice: profile.deviceName || "not_available",
       safeDeviceSerial: profile.deviceId ? `••••${profile.deviceId.slice(-4)}` : "not_available",
-      cloneSlot: `profile #${profile.profileNumber}`,
-      apkClonerSlot: profile.profileNumber === 1 ? "primary Instagram package" : `APK clone slot ${profile.profileNumber - 1}`,
+      cloneSlot: `app instance ${appInstanceTag(profile)}`,
+      apkClonerSlot: profile.appInstanceIndex === 0 ? "primary Instagram package" : `APK clone slot ${appInstanceTag(profile)}`,
       reservedState: profile.status === "running" ? "active" : profile.assignmentState === "assigned" ? "reserved" : profile.assignmentState === "blocked" ? "blocked" : "idle",
       deviceLock: profile.runtimeLock || "none",
       cloneBufferMinutes: readNumber(settings, ["clone_buffer_minutes"], 0),
@@ -807,7 +813,7 @@ function buildSettingsFromProfileDetails(
       appInstanceSummary: profile.assignmentState === "missing_slot" ? "not_available" : "assigned app instance",
       saveReady: false,
       availableSlots: [{
-        slotIndex: profile.profileNumber,
+        slotIndex: profile.appInstanceIndex ?? profile.cloneIndex ?? profile.profileNumber,
         slotKind: profile.slotKind,
         slotKindLabel: profile.runtimeProfile === "outreach_only" ? "Outreach-only · 40 min" : "Full-cycle · 6h",
         localLabel: currentSlot,
@@ -981,7 +987,7 @@ function buildSettingsFromProfileDetails(
     },
     advanced: {
       appMode: "da_normal",
-      apkClonerSlot: profile.profileNumber === 1 ? "primary Instagram package" : `APK clone slot ${profile.profileNumber - 1}`,
+      apkClonerSlot: profile.appInstanceIndex === 0 ? "primary Instagram package" : `APK clone slot ${appInstanceTag(profile)}`,
       turnOffLiking: false,
       startupTimeout: null,
       likePerDay: profile.counters.like.max,

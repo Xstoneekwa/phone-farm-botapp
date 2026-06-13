@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { BotProfile, DeviceProfileGroup, ProfileAutoLoginState, ProfileToolbarAction } from "../../api/types";
-import { Badge, Button, Card, Modal } from "../../design/components";
+import type { BotAppDispatcherHealth, BotProfile, DeviceProfileGroup, ProfileAutoLoginState, ProfileToolbarAction } from "../../api/types";
+import { Badge, Button, Card, Modal, type BadgeTone } from "../../design/components";
 import type { DeviceViewState } from "../../desktop/device-views";
 import { focusDeviceView, listOpenDeviceViews, openDeviceView, subscribeDeviceViewState } from "../../desktop/device-views";
 import { ProfileToolbar } from "./ProfileToolbar";
@@ -10,15 +10,17 @@ import { TargetsDrawer } from "./drawers/TargetsDrawer";
 import { SettingsDrawer } from "./drawers/SettingsDrawer";
 import { FiltersDrawer } from "./drawers/FiltersDrawer";
 import { AddProfileDrawer } from "./drawers/AddProfileDrawer";
+import { resolveAddProfileCredentialsState } from "./add-profile-credentials";
 import { AutoLoginFlowModal } from "./AutoLoginFlowModal";
 import { buildAssignNowPayload, createAssignNowState } from "./assign-now-flow";
-import { buildAutoLoginPayload, createAutoLoginState } from "./auto-login-flow";
+import { autoLoginLogEntry, autoLoginStateFromStartResult, buildAutoLoginPayload, createAutoLoginStartingState, mergeAutoLoginProgressSnapshot } from "./auto-login-flow";
 import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifecycle-flow";
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
-type ConfirmKind = "play" | "auto_login" | "check_readiness" | "assign_now" | "archive" | "delete" | "stop";
+type ConfirmKind = "play" | "auto_login" | "check_readiness" | "assign_now" | "archive" | "delete" | "restore" | "stop";
+type LifecycleFilter = "active" | "archived" | "bin";
 
 function PlatformLogo({ platform }: { platform: BotProfile["platform"] }) {
   const label = platform === "Instagram" ? "Instagram" : "TikTok";
@@ -50,18 +52,47 @@ function normalizePlatform(value: string | undefined) {
   return /tiktok/i.test(String(value || "")) ? "TikTok" : "Instagram";
 }
 
+function profileLifecycle(profile: BotProfile): LifecycleFilter {
+  if (
+    profile.lifecycleStatus === "trashed"
+    || profile.lifecycleStatus === "deleted"
+    || profile.status === "trashed"
+    || profile.trashedAt
+  ) return "bin";
+  if (
+    profile.lifecycleStatus === "archived"
+    || profile.status === "archived"
+    || profile.archivedAt
+  ) return "archived";
+  return "active";
+}
+
+function appInstanceTag(profile: BotProfile) {
+  const index = profile.appInstanceIndex ?? profile.cloneIndex;
+  if (typeof index !== "number" || !Number.isFinite(index) || index < 0) return "";
+  if (index === 0) return "P";
+  return String(index);
+}
+
+function formatRestoreDate(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
+
 function buildFallbackGroups(profiles: BotProfile[]): DeviceProfileGroup[] {
   if (!profiles.length) return [];
   return [{
     deviceId: "unassigned-live-profiles",
-    deviceLabel: "Unassigned / dashboard profiles",
+    deviceLabel: "Unassigned / backend profiles",
     deviceSerial: "",
     deviceSerialLabel: "No device",
     deviceStatus: "maintenance",
     phoneStatus: "idle",
     deviceView: {
       available: false,
-      unavailableReason: "No ADB serial is attached to this dashboard account.",
+      unavailableReason: "No ADB serial is attached to this backend account row.",
     },
     summary: {
       total: profiles.length,
@@ -109,8 +140,9 @@ function profileMatchesSearch(profile: BotProfile, group: DeviceProfileGroup, qu
     profile.readiness,
     profile.eligibility,
     profile.eligibilityDetail.reason_label,
-    `#${profile.profileNumber}`,
-    String(profile.profileNumber),
+    appInstanceTag(profile),
+    profile.appInstanceLabel,
+    profile.lifecycleStatus,
   ].join(" ");
   return normalizeSearch(`${groupText} ${profileText}`).includes(query);
 }
@@ -170,6 +202,49 @@ function phoneViewTooltip(group: DeviceProfileGroup, isOpen: boolean) {
   return isOpen ? "Focus phone view" : "Open phone view";
 }
 
+function CounterMetric({ current, max, label }: { current: number; max: number; label: string }) {
+  return (
+    <span>
+      <strong>{Number.isFinite(current) ? current : "—"}</strong>
+      {Number.isFinite(max) ? <><span className="counter-cap">/{max}</span> {label}</> : <> {label}</>}
+    </span>
+  );
+}
+
+function followerDeltaLabel(value: number | null) {
+  if (value === null) return "—";
+  if (value > 0) return `+${value}`;
+  return String(value);
+}
+
+function followerDeltaTone(value: number | null) {
+  if (value === null) return "unknown";
+  if (value > 0) return "up";
+  if (value === 0) return "zero";
+  return "down";
+}
+
+function connectBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
+  if (profile.loginStatus === "connected") return { label: "connected", tone: "success" };
+  if (profile.credentialStatus === "saved_pending_verification") return { label: "credentials saved", tone: "info" };
+  if (profile.credentialStatus === "active" && profile.autoLoginRequirement.enabled) return { label: "ready to connect", tone: "info" };
+  if (profile.credentialStatus === "missing" || profile.loginStatus === "missing_credentials") return { label: "missing credentials", tone: "warning" };
+  if (profile.credentialStatus === "needs_update" || profile.loginStatus === "password_invalid") return { label: "update password", tone: "error" };
+  if (profile.loginStatus === "needs_2fa" || profile.loginStatus === "challenge_required" || profile.loginStatus === "checkpoint") return { label: "action required", tone: "warning" };
+  if (profile.loginStatus === "logged_out" || profile.readiness === "needs_login") return { label: "login pending", tone: "warning" };
+  return { label: "login pending", tone: "neutral" };
+}
+
+function socialBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
+  if (profile.eligibility === "can_start") return { label: "growth ready", tone: "success" };
+  const reason = `${profile.eligibilityReason} ${profile.eligibilityDetail.primary_block_reason} ${profile.eligibilityDetail.reason_label}`.toLowerCase();
+  if (reason.includes("login")) return { label: "social needs login", tone: "warning" };
+  if (reason.includes("target") || reason.includes("ct")) return { label: "growth needs targets", tone: "warning" };
+  if (reason.includes("schedule") || reason.includes("window")) return { label: "growth waiting slot", tone: "warning" };
+  if (reason.includes("phone") || reason.includes("device") || reason.includes("assignment")) return { label: "growth waiting device", tone: "warning" };
+  return { label: "social blocked", tone: "warning" };
+}
+
 function AccountRow({
   profile,
   onSelect,
@@ -179,6 +254,13 @@ function AccountRow({
   onSelect: (id: string) => void;
   onToolbar: (profile: BotProfile, action: ProfileToolbarAction) => void;
 }) {
+  const followerDelta3dValue = profile.followerDelta3d?.value ?? null;
+  const interactionsToday = profile.interactionsToday ?? 0;
+  const loginBadge = connectBadge(profile);
+  const growthBadge = socialBadge(profile);
+  const instanceTag = appInstanceTag(profile);
+  const lifecycle = profileLifecycle(profile);
+  const restoreDate = formatRestoreDate(profile.scheduledDeleteAt || profile.scheduledTrashAt);
   return (
     <div className="profile-account-row">
       <span className={`profile-dot status-${profile.status}`} />
@@ -186,15 +268,18 @@ function AccountRow({
       <div className="profile-name-cell">
         <button className="link-button profile-username" onClick={() => onSelect(profile.id)}>{profile.username}</button>
         <div className="profile-badges">
-          <Badge tone={profile.readiness === "ready" ? "success" : "warning"}>{profile.readiness}</Badge>
-          <Badge tone={profile.eligibility === "can_start" ? "success" : "warning"}>{profile.eligibilityDetail.reason_label}</Badge>
+          <Badge tone={loginBadge.tone}>{loginBadge.label}</Badge>
+          <Badge tone={growthBadge.tone}>{growthBadge.label}</Badge>
+          {lifecycle === "archived" ? <Badge tone="warning">Archived</Badge> : null}
+          {lifecycle === "bin" ? <Badge tone="error">In Bin</Badge> : null}
+          {restoreDate ? <Badge tone="neutral">Restore until {restoreDate}</Badge> : null}
         </div>
       </div>
 
       <div className="profile-client-cell">
         <div className="profile-platform-index">
           <PlatformLogo platform={profile.platform} />
-          <span className="profile-index mono">#{profile.profileNumber}</span>
+          <span className="profile-index mono" title={profile.appInstanceLabel ?? "No app instance"}>{instanceTag || "—"}</span>
         </div>
         <div className="profile-owner-cell">
           <strong title={profile.displayName}>{profile.displayName}</strong>
@@ -210,14 +295,27 @@ function AccountRow({
       <span className="timeslot-pill mono">{profile.activeWindow}</span>
 
       <div className="profile-counters mono">
-        <span>{profile.counters.follow.current}/{profile.counters.follow.max} F</span>
-        <span>{profile.counters.unfollow.current}/{profile.counters.unfollow.max} UF</span>
-        <span>{profile.counters.like.current}/{profile.counters.like.max} L</span>
-        <span>{profile.counters.comment.current}/{profile.counters.comment.max} C</span>
-        <span>{profile.counters.dm.current}/{profile.counters.dm.max} DM</span>
+        <CounterMetric current={profile.counters.follow.current} max={profile.counters.follow.max} label="F" />
+        <CounterMetric current={profile.counters.unfollow.current} max={profile.counters.unfollow.max} label="UF" />
+        <CounterMetric current={profile.counters.like.current} max={profile.counters.like.max} label="L" />
+        <CounterMetric current={profile.counters.comment.current} max={profile.counters.comment.max} label="C" />
+        <CounterMetric current={profile.counters.dm.current} max={profile.counters.dm.max} label="DM" />
       </div>
 
-      <span className={`delta-pill ${profile.followerDelta > 0 ? "up" : "flat"}`}>{profile.followerDelta > 0 ? `+${profile.followerDelta}` : profile.followerDelta}</span>
+      <div className="profile-row-metrics">
+        <span
+          className={`delta-pill ${followerDeltaTone(followerDelta3dValue)}`}
+          title={`Followers gain 3d · ${profile.followerDelta3d?.source ?? "pending"}`}
+        >
+          {followerDeltaLabel(followerDelta3dValue)}
+        </span>
+        <span
+          className={`interactions-today ${interactionsToday > 0 ? "active" : "zero"}`}
+          title="Interactions today"
+        >
+          {interactionsToday}
+        </span>
+      </div>
 
       <ProfileToolbar profile={profile} onAction={(action) => onToolbar(profile, action)} />
     </div>
@@ -227,6 +325,7 @@ function AccountRow({
 export function ProfilesView({
   profiles,
   groups,
+  dispatcherHealth,
   syncError,
   profilesMeta,
   loading,
@@ -237,15 +336,17 @@ export function ProfilesView({
 }: {
   profiles: BotProfile[];
   groups: DeviceProfileGroup[];
+  dispatcherHealth: BotAppDispatcherHealth | null;
   syncError: string | null;
   profilesMeta: { source: string; accountsCount: number; counts: Record<string, number> } | null;
   loading: boolean;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void> | void;
   onSelect: (id: string) => void;
   onAction: (action: string, target: string, danger?: boolean) => void;
-  onMockSubmit: (message: string) => void;
+  onMockSubmit: (message: string, tone?: "success" | "error" | "info") => void;
 }) {
   const [platformFilter, setPlatformFilter] = useState<"All" | "Instagram" | "TikTok">("All");
+  const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>("active");
   const [searchTerm, setSearchTerm] = useState("");
   const [drawer, setDrawer] = useState<{ kind: DrawerKind; profile: BotProfile } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ kind: ConfirmKind; profile: BotProfile } | null>(null);
@@ -254,6 +355,7 @@ export function ProfilesView({
   const [openDeviceViews, setOpenDeviceViews] = useState<DeviceViewState[]>([]);
   const [phoneViewMessage, setPhoneViewMessage] = useState("");
   const [autoLoginFlow, setAutoLoginFlow] = useState<{ profile: BotProfile; state: ProfileAutoLoginState } | null>(null);
+  const dispatcherBlocksAutoLogin = Boolean(dispatcherHealth && dispatcherHealth.status !== "running");
 
   useEffect(() => {
     let cancelled = false;
@@ -281,26 +383,29 @@ export function ProfilesView({
         ...group,
         profiles: group.profiles.filter((profile) => {
           const platformMatches = platformFilter === "All" || normalizePlatform(profile.platform) === platformFilter;
+          const lifecycleMatches = profileLifecycle(profile) === lifecycleFilter;
           if (!platformMatches) return false;
+          if (!lifecycleMatches) return false;
           if (!query) return true;
           return groupMatchesSearch(group, query) || profileMatchesSearch(profile, group, query);
         }),
       }))
       .map((group) => ({ ...group, summary: summarizeProfiles(group.profiles) }))
       .filter((group) => group.profiles.length > 0);
-  }, [displayGroups, platformFilter, searchTerm]);
+  }, [displayGroups, platformFilter, lifecycleFilter, searchTerm]);
 
   const flattenedProfilesCount = displayGroups.reduce((total, group) => total + group.profiles.length, 0);
   const filteredProfilesCount = filteredGroups.reduce((total, group) => total + group.profiles.length, 0);
   const hasActiveSearch = normalizeSearch(searchTerm).length > 0;
   const hasActivePlatformFilter = platformFilter !== "All";
+  const hasActiveLifecycleFilter = lifecycleFilter !== "active";
   const emptyStateType = loading
     ? "loading"
     : syncError
       ? "relay_error"
       : profiles.length === 0
         ? "no_backend_accounts"
-        : filteredProfilesCount === 0 && (hasActiveSearch || hasActivePlatformFilter)
+          : filteredProfilesCount === 0 && (hasActiveSearch || hasActivePlatformFilter || hasActiveLifecycleFilter)
           ? "filter_no_match"
           : filteredProfilesCount === 0
             ? "grouping_empty"
@@ -315,24 +420,58 @@ export function ProfilesView({
       filteredGroupsLength: filteredGroups.length,
       filteredProfilesCount,
       selectedPlatform: platformFilter,
+      selectedLifecycle: lifecycleFilter,
       searchQuery: searchTerm,
       profilesMetaAccountsCount: profilesMeta?.accountsCount ?? null,
       profilesMetaSource: profilesMeta?.source ?? null,
       syncErrorPresent: Boolean(syncError),
       emptyStateType,
     });
-  }, [groups.length, profiles.length, flattenedProfilesCount, filteredGroups.length, filteredProfilesCount, platformFilter, searchTerm, profilesMeta, syncError, emptyStateType]);
+  }, [groups.length, profiles.length, flattenedProfilesCount, filteredGroups.length, filteredProfilesCount, platformFilter, lifecycleFilter, searchTerm, profilesMeta, syncError, emptyStateType]);
+
+  useEffect(() => {
+    if (!autoLoginFlow) return;
+    const progress = window.botappDesktop?.profiles?.runProgress;
+    if (!progress) return;
+
+    const accountId = autoLoginFlow.profile.id;
+    const requestId = autoLoginFlow.state.requestId;
+    let cancelled = false;
+
+    const pollProgress = async () => {
+      const result = await progress({ accountId, requestId });
+      if (cancelled || !result.ok || !result.data) return;
+      const snapshot = result.data;
+      setAutoLoginFlow((latest) => {
+        if (!latest || latest.profile.id !== accountId) return latest;
+        return {
+          profile: latest.profile,
+          state: mergeAutoLoginProgressSnapshot(latest.state, snapshot),
+        };
+      });
+    };
+
+    void pollProgress();
+    const interval = window.setInterval(() => {
+      void pollProgress();
+    }, 3500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [autoLoginFlow?.profile.id, autoLoginFlow?.state.requestId]);
 
   const sourceLabel = `Profiles patch active: manage-sync-v1 · ${
     profilesMeta
-      ? `Source: Manage / Relay · ${profilesMeta.accountsCount} account${profilesMeta.accountsCount === 1 ? "" : "s"} (${profilesMeta.source})`
+      ? `Source: Shared backend API · ${profilesMeta.accountsCount} account${profilesMeta.accountsCount === 1 ? "" : "s"} (${profilesMeta.source})`
       : profiles.length
-        ? `Source: Manage / Relay · ${profiles.length} account${profiles.length === 1 ? "" : "s"}`
-        : "Source: Manage / Relay · 0 accounts"
+        ? `Source: Shared backend API · ${profiles.length} account${profiles.length === 1 ? "" : "s"}`
+        : "Source: Shared backend API · 0 accounts"
   }`;
 
   function handleToolbar(profile: BotProfile, action: ProfileToolbarAction) {
-    if (action === "play" || action === "auto_login" || action === "check_readiness" || action === "assign_now" || action === "archive" || action === "delete" || action === "stop") {
+    if (action === "play" || action === "auto_login" || action === "check_readiness" || action === "assign_now" || action === "archive" || action === "delete" || action === "restore" || action === "stop") {
       if (action === "stop") setStopReason("");
       setConfirmAction({ kind: action, profile });
       return;
@@ -364,6 +503,15 @@ export function ProfilesView({
     setPhoneViewMessage(result.error || "Could not open phone view.");
   }
 
+  async function openPhoneForProfile(profile: BotProfile) {
+    const group = displayGroups.find((item) => item.deviceId === profile.deviceId || item.profiles.some((candidate) => candidate.id === profile.id));
+    if (!group) {
+      setPhoneViewMessage("No assigned phone group found for this profile.");
+      return;
+    }
+    await handlePhoneView(group);
+  }
+
   async function handleOpenViewDockClick(view: DeviceViewState) {
     const result = await focusDeviceView(view.deviceSerial);
     if (result.ok) {
@@ -373,12 +521,17 @@ export function ProfilesView({
     setPhoneViewMessage(result.error || "Could not focus phone view.");
   }
 
-  function mockSave(label: string) {
+  function mockSave(label: string, tone?: "success" | "error" | "info") {
+    if (tone) {
+      onMockSubmit(label, tone);
+      if (tone === "success") setDrawer(null);
+      return;
+    }
     onAction(label, drawer?.profile.username ?? "profile", false);
     setDrawer(null);
   }
 
-  async function performSafeAccountAction(profile: BotProfile, action: "start" | "stop" | "archive" | "restore", reason: string) {
+  async function performSafeAccountAction(profile: BotProfile, action: "start" | "stop" | "archive" | "trash" | "restore", reason: string) {
     const perform = window.botappDesktop?.profiles?.actions?.perform;
     if (!perform) {
       onMockSubmit(`${action} backend relay unavailable in this runtime.`);
@@ -413,16 +566,78 @@ export function ProfilesView({
   async function checkReadinessNow(profile: BotProfile) {
     const readinessNow = window.botappDesktop?.profiles?.readinessNow;
     if (!readinessNow) {
-      onMockSubmit("Readiness backend relay unavailable in this runtime.");
+      onMockSubmit("Refresh readiness relay unavailable in this runtime.", "error");
       return;
     }
     const result = await readinessNow({ accountId: profile.id });
     if (!result.ok) {
-      onMockSubmit(result.error || "Readiness check failed.");
+      onMockSubmit(result.error || "Refresh readiness failed.", "error");
       return;
     }
     const data = (result.data ?? {}) as Record<string, unknown>;
-    onMockSubmit(`Readiness: ${String(data.readiness_status || "unknown")} · ${String(data.reason || "no_reason")} · preflight=${String(data.preflight_request_created ?? false)}.`);
+    const readinessStatus = String(data.readiness_status || "unknown");
+    const clientStatus = String(data.client_status || "unknown");
+    const reason = String(data.reason || "no_reason");
+    const nextAction = String(data.next_action || "none");
+    onMockSubmit(`Refresh readiness: ${readinessStatus} · ${clientStatus} · ${reason} · next=${nextAction} · device_run=false.`);
+    onRefresh();
+  }
+
+  async function startAutoLogin(profile: BotProfile) {
+    const start = window.botappDesktop?.profiles?.autoLogin;
+    const startingState = createAutoLoginStartingState(profile);
+    setAutoLoginFlow({ profile, state: startingState });
+    if (!start) {
+      setAutoLoginFlow({ profile, state: { ...startingState, globalStatus: "failed", safeReason: "BotApp relay unavailable.", processLog: [...startingState.processLog, autoLoginLogEntry("ERROR", "Auto Login relay unavailable in this runtime.")] } });
+      return;
+    }
+    const result = await start({ accountId: profile.id, username: profile.username });
+    if (!result.ok) {
+      const reason = String(result.error || "auto_login_request_failed");
+      setAutoLoginFlow({
+        profile,
+        state: {
+          ...startingState,
+          globalStatus: "failed",
+          safeReason: reason,
+          nextAction: "none",
+          processLog: [
+            ...startingState.processLog,
+            autoLoginLogEntry("ERROR", `Auto Login request failed: ${reason}.`),
+          ],
+          steps: startingState.steps.map((step) => step.status === "running" || step.id === "result" ? { ...step, status: "failed" } : step),
+        },
+      });
+      onMockSubmit(`Auto Login failed: ${reason}`, "error");
+      return;
+    }
+    const data = (result.data ?? {}) as Record<string, unknown>;
+    const nextState = autoLoginStateFromStartResult(profile, data);
+    setAutoLoginFlow({ profile, state: nextState });
+    onMockSubmit(`Auto Login queued: request ${String(data.request_id || "").slice(0, 8) || "created"}.`, "success");
+    onRefresh();
+  }
+
+  async function stopAutoLogin(profile: BotProfile) {
+    const stopRun = window.botappDesktop?.profiles?.stopRun;
+    if (!stopRun) {
+      onMockSubmit("Run stop relay unavailable in this runtime.", "error");
+      return;
+    }
+    const result = await stopRun({ accountId: profile.id });
+    if (!result.ok) {
+      onMockSubmit(result.error || "Run stop failed.", "error");
+      return;
+    }
+    setAutoLoginFlow((current) => current && current.profile.id === profile.id ? {
+      profile,
+      state: {
+        ...current.state,
+        globalStatus: "stopped",
+        processLog: [...current.state.processLog, autoLoginLogEntry("DONE", "Stop requested for active login run/request.")],
+      },
+    } : current);
+    onMockSubmit("Stop requested for Auto Login run/request.", "success");
     onRefresh();
   }
 
@@ -438,8 +653,13 @@ export function ProfilesView({
       return;
     }
     if (action.kind === "auto_login") {
-      setAutoLoginFlow({ profile: action.profile, state: createAutoLoginState(action.profile) });
+      if (dispatcherBlocksAutoLogin) {
+        onMockSubmit(`Auto Login unavailable: dispatcher is ${dispatcherHealth?.status ?? "unknown"}. Open Runtime Health and resume it first.`, "error");
+        setConfirmAction(null);
+        return;
+      }
       setConfirmAction(null);
+      void startAutoLogin(action.profile);
       return;
     }
     if (action.kind === "check_readiness") {
@@ -458,19 +678,23 @@ export function ProfilesView({
       return;
     }
     if (action.kind === "delete") {
-      const state = createDeleteState(action.profile);
-      void state;
-      onMockSubmit("Move to trash request prepared for future secure BotApp relay.");
       setConfirmAction(null);
+      void performSafeAccountAction(action.profile, "trash", "botapp_account_action_move_to_bin");
+      return;
+    }
+    if (action.kind === "restore") {
+      setConfirmAction(null);
+      void performSafeAccountAction(action.profile, "restore", "botapp_account_action_restore");
       return;
     }
     const labels: Record<ConfirmKind, string> = {
       play: "Start profile",
       auto_login: "Auto Login",
-      check_readiness: "Check Login",
+      check_readiness: "Refresh readiness",
       assign_now: "Assign Now",
       archive: "Archive profile",
       delete: "Delete profile",
+      restore: "Restore profile",
       stop: "Stop profile",
     };
     onAction(labels[action.kind], action.profile.username, true);
@@ -486,6 +710,15 @@ export function ProfilesView({
           <div className="profiles-filters">
             {(["All", "Instagram", "TikTok"] as const).map((item) => (
               <button key={item} type="button" className={platformFilter === item ? "filter-chip active" : "filter-chip"} onClick={() => setPlatformFilter(item)}>{item}</button>
+            ))}
+          </div>
+          <div className="profiles-filters lifecycle-filters">
+            {([
+              ["active", "Active"],
+              ["archived", "Archived"],
+              ["bin", "Bin"],
+            ] as const).map(([id, label]) => (
+              <button key={id} type="button" className={lifecycleFilter === id ? "filter-chip active" : "filter-chip"} onClick={() => setLifecycleFilter(id)}>{label}</button>
             ))}
           </div>
           <Button variant="ghost" onClick={onRefresh}>Refresh</Button>
@@ -523,18 +756,18 @@ export function ProfilesView({
 
       {emptyStateType === "loading" ? (
         <div className="empty-state profiles-empty">
-          <strong>Loading profiles from Manage</strong>
-          <span>Syncing account list through the secure relay.</span>
+          <strong>Loading profiles from shared backend</strong>
+          <span>Syncing account list through the backend relay.</span>
         </div>
       ) : emptyStateType === "relay_error" ? (
         <div className="empty-state profiles-empty">
-          <strong>Relay error / unable to load Manage accounts</strong>
+          <strong>Relay error / unable to load backend accounts</strong>
           <span>{syncError}</span>
         </div>
       ) : emptyStateType === "no_backend_accounts" ? (
         <div className="empty-state profiles-empty">
-          <strong>No accounts returned from Manage</strong>
-          <span>Check relay URL, relay credential, and deployed dashboard endpoints.</span>
+          <strong>No accounts returned from shared backend</strong>
+          <span>Check relay URL, relay credential, and deployed backend endpoints.</span>
         </div>
       ) : emptyStateType === "filter_no_match" ? (
         <div className="empty-state profiles-empty">
@@ -544,7 +777,7 @@ export function ProfilesView({
       ) : emptyStateType === "grouping_empty" ? (
         <div className="empty-state profiles-empty">
           <strong>Accounts loaded but not visible in groups</strong>
-          <span>{profiles.length} account(s) received from Manage. Refresh or check device grouping.</span>
+          <span>{profiles.length} account(s) received from shared backend. Refresh or check device grouping.</span>
         </div>
       ) : null}
 
@@ -593,6 +826,8 @@ export function ProfilesView({
           profile={drawer.profile}
           onClose={() => setDrawer(null)}
           onConfirm={() => mockSave("Save profile settings")}
+          onSaved={(message, tone) => mockSave(message, tone)}
+          onRefreshProfiles={onRefresh}
           onOpenTargets={() => setDrawer({ kind: "targets", profile: drawer.profile })}
         />
       ) : null}
@@ -605,23 +840,51 @@ export function ProfilesView({
             const createFn = mode === "create" ? window.botappDesktop?.profiles?.create : window.botappDesktop?.profiles?.createDryRun;
             if (!createFn) {
               const message = mode === "create" ? "Add Profile backend create unavailable in this runtime." : "Add Profile backend dry-run unavailable in this runtime.";
-              onMockSubmit(message);
+              onMockSubmit(message, "error");
               return { ok: false, message };
+            }
+            if (mode === "create") {
+              console.info("[botapp] profiles_refresh_after_create_started");
             }
             const result = await createFn(payload);
             if (!result.ok) {
+              const partial = (result as { partial?: { account_created?: boolean; account_id?: string; assignment_failed?: boolean; credentials_saved?: boolean } }).partial;
               const message = result.error || (mode === "create" ? "Add Profile backend create failed." : "Add Profile backend dry-run failed.");
-              onMockSubmit(message);
+              if (mode === "create" && partial?.account_created && partial?.account_id) {
+                console.info("[botapp] profiles_refresh_after_create_started", { partial: true, account_id: partial.account_id });
+                await Promise.resolve(onRefresh());
+                console.info("[botapp] profiles_refresh_after_create_ok", { partial: true });
+                const partialMessage = partial.credentials_saved === false
+                  ? `Account created, but credentials were not saved (${message}). Retry credentials from Settings.`
+                  : `Profile created but schedule assignment failed (${message}). Refresh the list and repair schedule from Settings.`;
+                onMockSubmit(
+                  partialMessage,
+                  "error",
+                );
+                return { ok: false, message: partialMessage, partial: true };
+              }
+              if (mode === "create") {
+                console.info("[botapp] profiles_refresh_after_create_failed", { reason: message });
+              }
+              onMockSubmit(message, "error");
               return { ok: false, message };
             }
             const account = (result.data?.account ?? {}) as Record<string, unknown>;
-            const automation = (result.data?.automation ?? {}) as Record<string, unknown>;
+            if (mode === "create") {
+              console.info("[botapp] profiles_refresh_after_create_started", { account_id: account.id || null });
+              await Promise.resolve(onRefresh());
+              console.info("[botapp] profiles_refresh_after_create_ok", { count: "refreshed" });
+            }
+            const resolvedUsername = String(account.username || "unknown");
+            const credentialsRequested = Boolean(String(payload.password || "").trim()) || payload.login_method === "credentials";
+            const credentialsState = mode === "create"
+              ? resolveAddProfileCredentialsState(result.data as Record<string, unknown> | undefined, credentialsRequested, resolvedUsername)
+              : null;
             const message = mode === "create"
-              ? `Add Profile created: @${String(account.username || "unknown")} · ${String(account.status || "created")} · login=${String(automation.login_started ?? false)} · run=${String(automation.run_started ?? false)}.`
-              : `Add Profile dry-run OK: @${String(account.username || "unknown")} · ${String(account.status || "validated")} · no mutation executed.`;
-            onMockSubmit(message);
-            if (mode === "create") onRefresh();
-            return { ok: true, message };
+              ? credentialsState?.footerMessage || `Profile created: @${resolvedUsername}`
+              : `Add Profile dry-run OK: @${resolvedUsername} · ${String(account.status || "validated")} · no mutation executed.`;
+            onMockSubmit(message, mode === "create" ? (credentialsState?.globalStatus === "partial" ? "error" : "success") : "info");
+            return { ok: true, message, data: result.data as Record<string, unknown> | undefined };
           }}
         />
       ) : null}
@@ -630,7 +893,7 @@ export function ProfilesView({
         <Modal
           title={confirmTitle(confirmAction.kind, confirmAction.profile)}
           danger={confirmAction.kind === "delete" || confirmAction.kind === "archive" || confirmAction.kind === "stop" || (confirmAction.kind === "play" && confirmAction.profile.eligibility !== "can_start")}
-          confirmLabel={confirmAction.kind === "play" ? "Start" : confirmAction.kind === "stop" ? "Stop" : confirmAction.kind === "auto_login" ? "Confirm Auto Login" : confirmAction.kind === "check_readiness" ? "Run check" : confirmAction.kind === "assign_now" ? "Assign now" : confirmAction.kind === "archive" ? "Confirm archive" : confirmAction.kind === "delete" ? "Confirm delete" : "Confirm"}
+          confirmLabel={confirmAction.kind === "play" ? "Start" : confirmAction.kind === "stop" ? "Stop" : confirmAction.kind === "auto_login" ? "Confirm Auto Login" : confirmAction.kind === "check_readiness" ? "Refresh" : confirmAction.kind === "assign_now" ? "Assign now" : confirmAction.kind === "archive" ? "Confirm archive" : confirmAction.kind === "delete" ? "Move to Bin" : confirmAction.kind === "restore" ? "Restore" : "Confirm"}
           onClose={() => setConfirmAction(null)}
           onConfirm={() => executeConfirm(confirmAction)}
         >
@@ -638,12 +901,13 @@ export function ProfilesView({
           {confirmAction.kind === "stop" ? (
             <StopConfirmation profile={confirmAction.profile} stopReason={stopReason} onStopReasonChange={setStopReason} />
           ) : null}
-          {confirmAction.kind === "auto_login" ? <AutoLoginConfirmation profile={confirmAction.profile} /> : null}
+          {confirmAction.kind === "auto_login" ? <AutoLoginConfirmation profile={confirmAction.profile} dispatcherHealth={dispatcherHealth} /> : null}
           {confirmAction.kind === "check_readiness" ? <ReadinessNowConfirmation profile={confirmAction.profile} /> : null}
           {confirmAction.kind === "assign_now" ? <AssignNowConfirmation profile={confirmAction.profile} /> : null}
           {confirmAction.kind === "archive" ? <ArchiveConfirmation profile={confirmAction.profile} /> : null}
           {confirmAction.kind === "delete" ? <DeleteConfirmation profile={confirmAction.profile} /> : null}
-          {confirmAction.kind !== "play" && confirmAction.kind !== "stop" && confirmAction.kind !== "auto_login" && confirmAction.kind !== "check_readiness" && confirmAction.kind !== "assign_now" && confirmAction.kind !== "archive" && confirmAction.kind !== "delete" ? <GenericConfirmation profile={confirmAction.profile} /> : null}
+          {confirmAction.kind === "restore" ? <RestoreConfirmation profile={confirmAction.profile} /> : null}
+          {confirmAction.kind !== "play" && confirmAction.kind !== "stop" && confirmAction.kind !== "auto_login" && confirmAction.kind !== "check_readiness" && confirmAction.kind !== "assign_now" && confirmAction.kind !== "archive" && confirmAction.kind !== "delete" && confirmAction.kind !== "restore" ? <GenericConfirmation profile={confirmAction.profile} /> : null}
         </Modal>
       ) : null}
 
@@ -651,7 +915,10 @@ export function ProfilesView({
         <AutoLoginFlowModal
           profile={autoLoginFlow.profile}
           state={autoLoginFlow.state}
-          onStateChange={(state) => setAutoLoginFlow({ profile: autoLoginFlow.profile, state })}
+          onOpenPhone={() => openPhoneForProfile(autoLoginFlow.profile)}
+          onCheckLogin={() => checkReadinessNow(autoLoginFlow.profile)}
+          onRetryAutoLogin={() => startAutoLogin(autoLoginFlow.profile)}
+          onStop={() => stopAutoLogin(autoLoginFlow.profile)}
           onClose={() => setAutoLoginFlow(null)}
         />
       ) : null}
@@ -663,10 +930,11 @@ function confirmTitle(kind: ConfirmKind, profile: BotProfile) {
   if (kind === "play") return `Reactivate account ${profile.username}?`;
   if (kind === "stop") return `Pause account ${profile.username}?`;
   if (kind === "auto_login") return `Auto Login ${profile.username}?`;
-  if (kind === "check_readiness") return "Run login/readiness check?";
+  if (kind === "check_readiness") return "Refresh login readiness?";
   if (kind === "assign_now") return "Assign phone slot now?";
   if (kind === "archive") return "Archive account?";
-  if (kind === "delete") return "Delete account?";
+  if (kind === "delete") return "Move account to Bin?";
+  if (kind === "restore") return "Restore account?";
   return `Confirm action for ${profile.username}?`;
 }
 
@@ -740,12 +1008,14 @@ function StopConfirmation({
   );
 }
 
-function AutoLoginConfirmation({ profile }: { profile: BotProfile }) {
+function AutoLoginConfirmation({ profile, dispatcherHealth }: { profile: BotProfile; dispatcherHealth: BotAppDispatcherHealth | null }) {
   const payload = buildAutoLoginPayload(profile);
+  const dispatcherBlocked = Boolean(dispatcherHealth && dispatcherHealth.status !== "running");
   return (
     <div className="run-confirmation">
       <p><strong>Login request prepared.</strong></p>
       {!profile.autoLoginRequirement.enabled ? <p className="run-control-warning">{profile.autoLoginRequirement.detail}</p> : null}
+      {dispatcherBlocked ? <p className="run-control-warning">Dispatcher is {dispatcherHealth?.status}. Open Runtime Health and resume it before Auto Login or runs.</p> : null}
       <div className="detail-list play-eligibility">
         <span>Account</span><code>@{profile.username}</code>
         <span>Platform</span><code>{profile.platform}</code>
@@ -753,8 +1023,10 @@ function AutoLoginConfirmation({ profile }: { profile: BotProfile }) {
         <span>Credential status</span><code>{profile.credentialStatus}</code>
         <span>Login status</span><code>{profile.loginStatus}</code>
         <span>Assignment</span><code>{profile.assignmentState}</code>
-        <span>Future endpoint</span><code>/api/botapp/instagram-dashboard/connect/now</code>
-        <span>Future contract</span><code>secure BotApp relay to login_provisioning</code>
+        <span>Dispatcher</span><code>{dispatcherHealth?.status ?? "unknown"}</code>
+        <span>launch_enabled</span><code>{dispatcherHealth ? String(dispatcherHealth.launchEnabled) : "unknown"}</code>
+        <span>Endpoint</span><code>/api/instagram-dashboard/runs/start</code>
+        <span>Contract</span><code>secure BotApp relay · login_provisioning · manual trigger</code>
       </div>
       <pre className="payload-preview">{JSON.stringify(payload, null, 2)}</pre>
     </div>
@@ -768,7 +1040,7 @@ function ReadinessNowConfirmation({ profile }: { profile: BotProfile }) {
   return (
     <div className="run-confirmation readiness-now-confirmation">
       <p><strong>{projection.client_message}.</strong></p>
-      <p className="assign-now-copy">This checks Instagram login/readiness now. It will not start a Growth session.</p>
+      <p className="assign-now-copy">This refreshes saved credentials, login status, assignment, and connect readiness through the secure relay. It does not start a Growth session, social action, or device login run. Use Auto Login / Connect for the real Instagram connection.</p>
       <div className="detail-list play-eligibility">
         <span>Account</span><code>@{profile.username}</code>
         <span>Platform</span><code>{profile.platform}</code>
@@ -780,12 +1052,9 @@ function ReadinessNowConfirmation({ profile }: { profile: BotProfile }) {
         <span>Assignment</span><code>{projection.assignment_status}</code>
         <span>Next action</span><code>{projection.next_action}</code>
         <span>Reason</span><code>{projection.reason}</code>
-        <span>Future endpoint</span><code>/api/botapp/instagram-dashboard/readiness/now</code>
-        <span>Future contract</span><code>secure BotApp relay to login_provisioning</code>
+        <span>Endpoint</span><code>/api/instagram-dashboard/readiness/now</code>
+        <span>Contract</span><code>secure BotApp relay · readiness refresh · dry_run=true · no device run</code>
       </div>
-      {projection.expected_preflight_request ? (
-        <p className="readiness-now-note">The secure relay should enqueue a login provisioning preflight request if the backend re-checks pass.</p>
-      ) : null}
       <pre className="payload-preview">{JSON.stringify(payload, null, 2)}</pre>
     </div>
   );
@@ -833,7 +1102,7 @@ function ArchiveConfirmation({ profile }: { profile: BotProfile }) {
     <div className="run-confirmation lifecycle-confirmation">
       <p><strong>This account will be moved out of active profiles.</strong></p>
       <p className="assign-now-copy">
-        It will move to Archives, keep its data, and be scheduled to move to Trash after 30 days. You can restore it later while the admin lifecycle allows restore.
+        Archive this account? It will stop all runs and move to Archived. You can restore it for 30 days.
       </p>
       {warning ? <p className="run-control-warning">{warning}</p> : null}
       <div className="detail-list play-eligibility">
@@ -845,7 +1114,7 @@ function ArchiveConfirmation({ profile }: { profile: BotProfile }) {
         <span>Scheduled trash</span><code>{state.retentionPolicy.scheduledTrashAt}</code>
         <span>Restore</span><span>You can restore it later from Archives.</span>
         <span>Expected result</span><span>Removed from active profiles; account data and credentials remain retained by the admin lifecycle policy.</span>
-        <span>Future endpoint</span><code>/api/botapp/instagram-dashboard/accounts/lifecycle</code>
+        <span>Endpoint</span><code>/api/instagram-dashboard/accounts/lifecycle</code>
       </div>
       <pre className="payload-preview">{JSON.stringify(state.payload, null, 2)}</pre>
     </div>
@@ -859,7 +1128,7 @@ function DeleteConfirmation({ profile }: { profile: BotProfile }) {
     <div className="run-confirmation lifecycle-confirmation">
       <p><strong>This action removes the account from active profiles.</strong></p>
       <p className="assign-now-copy">
-        The account will be moved to Trash. Restore is available for 30 days; after 30 days it is scheduled for permanent deletion when the admin cleanup flow exists.
+        Move this account to Bin? It will stop all runs and can be restored for 30 days.
       </p>
       <p className="run-control-warning">This is not an immediate hard delete.</p>
       {warning ? <p className="run-control-warning">{warning}</p> : null}
@@ -874,9 +1143,36 @@ function DeleteConfirmation({ profile }: { profile: BotProfile }) {
         <span>Delete after</span><code>{state.retentionPolicy.scheduledDeleteAt}</code>
         <span>Permanent delete</span><span>Pending in admin; the current dashboard disables permanent delete.</span>
         <span>Expected result</span><span>Moved to Trash, restorable during the retention window, and blocked from runs/assignment while trashed.</span>
-        <span>Future endpoint</span><code>/api/botapp/instagram-dashboard/accounts/lifecycle</code>
+        <span>Endpoint</span><code>/api/instagram-dashboard/accounts/lifecycle</code>
       </div>
       <pre className="payload-preview">{JSON.stringify(state.payload, null, 2)}</pre>
+    </div>
+  );
+}
+
+function RestoreConfirmation({ profile }: { profile: BotProfile }) {
+  const payload = {
+    account_id: profile.id,
+    action: "restore",
+    reason: "botapp_account_action_restore",
+    start_run: false,
+    provisioning_enabled: false,
+    login_enabled: false,
+  };
+  return (
+    <div className="run-confirmation lifecycle-confirmation">
+      <p><strong>This restores the account to Active.</strong></p>
+      <p className="assign-now-copy">Restore writes lifecycle status only. It does not launch Auto Login, provisioning, account_session, or social actions.</p>
+      <div className="detail-list play-eligibility">
+        <span>Account</span><code>@{profile.username}</code>
+        <span>Current lifecycle</span><code>{profile.lifecycleStatus ?? profile.status}</code>
+        <span>Archived at</span><code>{profile.archivedAt ?? "none"}</code>
+        <span>Bin date</span><code>{profile.trashedAt ?? "none"}</code>
+        <span>Restore until</span><code>{profile.scheduledDeleteAt ?? "admin policy"}</code>
+        <span>Endpoint</span><code>/api/instagram-dashboard/accounts/lifecycle</code>
+        <span>Runtime</span><code>run_started=false</code>
+      </div>
+      <pre className="payload-preview">{JSON.stringify(payload, null, 2)}</pre>
     </div>
   );
 }
@@ -884,7 +1180,7 @@ function DeleteConfirmation({ profile }: { profile: BotProfile }) {
 function GenericConfirmation({ profile }: { profile: BotProfile }) {
   return (
     <>
-      <p><strong>Prepared for secure relay execution.</strong></p>
+      <p><strong>Action preview.</strong></p>
       <div className="detail-list play-eligibility">
         <span>Readiness</span><code>{profile.readiness}</code>
         <span>Eligibility</span><code>{profile.eligibilityDetail.status}</code>

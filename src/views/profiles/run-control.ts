@@ -69,6 +69,7 @@ export function buildStartPayload(profile: BotProfile): BotAppStartRunPayload {
     requested_by: null,
     source: "botapp",
     requested_run_type: "account_session",
+    trigger: "manual",
     reason: eligibility.reason,
     idempotency_key: idempotencyKey("start", profile),
     metadata_safe: {

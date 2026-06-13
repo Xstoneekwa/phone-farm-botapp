@@ -31,5 +31,5 @@ export function sourceLabel(data: ProfileDetailsPayload | null, key: keyof Profi
   const source = data?.source?.[key as string];
   if (status === "backend_pending") return `Backend pending · ${source ?? key}`;
   if (status === "not_available") return `Not available · ${source ?? key}`;
-  return `DB / Manage · ${source ?? key}`;
+  return `Supabase-backed API · ${source ?? key}`;
 }

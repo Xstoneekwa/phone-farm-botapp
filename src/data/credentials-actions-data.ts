@@ -112,7 +112,7 @@ export function buildCredentialsActionsOverview(clientAccounts: BotAppClientAcco
       credentialStatus: account.credentialStatus,
       loginStatus: account.loginStatus,
       provisioningStatus: account.readiness,
-      sourceLabel: fixture.actionType === "update_instagram_password" ? "account_dashboard_actions" : "derived from dashboard overview",
+      sourceLabel: fixture.actionType === "update_instagram_password" ? "account_dashboard_actions" : "derived from shared backend overview",
       assignedPhone: account.assignment.deviceName,
       createdAtLabel: fixture.createdAtLabel,
       updatedAtLabel: fixture.updatedAtLabel,

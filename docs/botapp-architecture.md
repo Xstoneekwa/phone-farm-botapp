@@ -13,14 +13,15 @@ This document is the primary developer onboarding reference. It complements `REA
 | Surface | Role |
 |---------|------|
 | **BotApp (macOS)** | Day-to-day operator UI: profiles, devices, logs, targets, settings, start/stop previews |
-| **Dashboard Admin** | Source of truth for account contracts, CT validation, settings, governance |
-| **Dashboard Client** | Client-safe status, targets, package configuration |
-| **Python worker / runtime** | Device automation, structured logs, runtime events |
-| **Future BotApp API relay** | Secure bridge between desktop and admin/client/DB/worker contracts |
+| **Shared backend API / relay** | Server-side API layer for BotApp, Dashboard Admin, and Dashboard Client |
+| **Supabase** | Source of truth for accounts, CTs, settings, assignments, runs, logs, events, and worker state |
+| **Dashboard Admin** | Admin web interface that reads/writes through shared backend APIs |
+| **Dashboard Client** | Client-safe web interface that reads/writes through shared backend APIs |
+| **Python worker / runtime** | Device automation that writes structured state, runs, logs, and incidents to Supabase/backend runtime |
 
 ### Current state (checkpoint)
 
-BotApp is **not** connected to the real backend. All data flows through a **local projection layer** (`mockClient` + fixtures). Operator-visible labels are product-ready; write actions **prepare payloads only** and do not mutate Supabase, Instagram, ADB, workers, or devices.
+BotApp is being migrated from local fixtures to a shared backend relay. The product source of truth is **Supabase plus safe backend APIs**, not the Dashboard UI. BotApp and Dashboard are both clients over the same backend data.
 
 ### Future API relay
 
@@ -29,13 +30,87 @@ Production sync must follow:
 ```text
 BotApp renderer
   -> secure BotApp API relay (scoped auth, audit, redaction)
-  -> admin/client backend routes
+  -> shared backend API routes
   -> Postgres / Supabase (server-side only)
   -> worker runtime + device farm
   -> events/logs streamed back through relay (WebSocket or polling)
 ```
 
 The renderer must **never** hold service-role keys, direct DB clients, or unrestricted admin URLs.
+
+### Runtime integrations
+
+`npm run dev` only serves the Vite renderer during development. It is not an integration runtime and it does not keep local API routes alive after the dev server stops. The packaged Electron app loads `dist/index.html` and must rely on:
+
+- Electron main process for local runtime duties such as safe IPC bridges, local health checks, optional local gateway transport, and OS-secured local configuration.
+- Secure relay/backend for sensitive DB/API calls, scoped key generation, webhook delivery, and provider calls.
+- Shared backend API routes, currently hosted in the Next.js backend, including Compass AI analysis.
+
+The `API / Webhooks / Keys` tab now reflects that boundary. It reads runtime health through `window.botappDesktop.runtime.status()`, which is exposed by preload as a narrow IPC method. Renderer code receives only safe state: configured/missing flags, masked prefixes, base origins, status labels, and timestamps. It does not receive provider credentials, webhook signing values, service credentials, or raw payload logs.
+
+Compass AI placement:
+
+- Production mode is relay-only. BotApp calls a stable backend relay URL, currently hosted under `/api/instagram-dashboard/...` in the Next.js backend for compatibility.
+- The provider key lives only in the relay server environment. BotApp does not store or read it.
+- If no relay URL is configured, BotApp shows `Compass AI relay not configured. Add a relay URL to enable AI recommendations.` and keeps Compass rules-only facts available.
+
+Packaged Compass AI runtime:
+
+- `Analyze now` in the Compass tab calls `window.botappDesktop.compass.analyze(...)`.
+- Preload forwards the request to Electron main through `botapp:compass:analyze`.
+- Electron main selects the runtime mode:
+  - `BOTAPP_COMPASS_AI_RELAY_URL` or saved relay URL present: POST the safe Compass snapshot to the stable relay endpoint.
+  - No relay URL: return the setup message and keep rules-only recommendations.
+- The renderer never fetches OpenAI and never receives provider credentials.
+- The relay URL can be entered in `API / Webhooks / Keys`; Electron main persists it under the app `userData` directory, outside Git and outside the renderer bundle.
+
+For a packaged local smoke test, pass configuration to the Electron process, not to renderer source:
+
+```bash
+BOTAPP_COMPASS_AI_RELAY_URL="https://your-backend.example/api/instagram-dashboard/compass/analyze" \
+"/Users/admin/Projects/BotApp/release/mac-arm64/BotApp.app/Contents/MacOS/BotApp"
+```
+
+Server/relay environment:
+
+- OpenAI provider key on the backend relay server only; see the backend deployment guide for the exact server env name.
+- `COMPASS_AI_ENABLED=true` on the relay server.
+- `COMPASS_AI_PROVIDER=openai` on the relay server.
+- `COMPASS_AI_MODEL=gpt-5.5` on the relay server.
+- Optional `BOTAPP_RELAY_API_KEY` on both relay server and BotApp runtime for scoped relay authentication.
+
+BotApp environment:
+
+- `BOTAPP_COMPASS_AI_RELAY_URL` or the saved relay URL from `API / Webhooks / Keys`.
+- Optional `BOTAPP_RELAY_API_KEY` for relay authentication.
+
+Final API/Webhooks/Keys production setup:
+
+- Each Mac is configured from the packaged BotApp UI. Operators do not need `npm run dev`, a terminal, or an OpenAI key on the Mac.
+- The `API / Webhooks / Keys` tab owns the install-time checklist: relay URL, relay auth token, Compass health, server provider-key status, saved local webhooks, AI modules, and backend-pending API gateway contracts.
+- Electron main persists relay config in the app `userData` directory. The relay URL is non-secret. The relay token is accepted by the renderer only as a write-only password field and is never returned in status payloads; status exposes only `relayKeyConfigured`.
+- Webhook definitions can be saved locally from Electron main. URLs are returned masked to the renderer; signing values are accepted write-only and not returned. Until Keychain/secure storage is added, these local signing values are stored in the Electron `userData` config file with `0600` permissions.
+- Scoped-key metadata is represented as relay-ready contracts. Backend generation/rotation/revocation remains server-owned; BotApp shows an empty/backend-pending state until a real key registry is connected.
+- Recent API calls and public access/tunnel controls are product-ready contracts. BotApp shows empty/backend-pending states until a real relay traffic source or tunnel manager is connected.
+- Future AI modules such as Comment AI, Targeting AI, DM AI, Caption AI, and Risk AI must be displayed as planned/backend-pending unless their backend relay contracts are live.
+
+Multi-Mac install flow:
+
+1. Install and open packaged BotApp on the Mac.
+2. Open `API / Webhooks / Keys`.
+3. Enter the production relay analyze URL, for example `https://dashboard.example/api/instagram-dashboard/compass/analyze`.
+4. Enter the scoped relay token for that Mac/operator if relay auth is enabled.
+5. Click `Save relay config`.
+6. Click `Test relay connection`; health must show relay reachable and server provider key configured.
+7. Open Compass and run `Analyze now`; BotApp sends the safe snapshot through Electron main to the relay.
+
+Safe integration metadata prepared for future relay calls:
+
+- `machine_id`: safe local machine identifier, never a device serial or hardware secret.
+- `operator_id`: safe operator/user id when available.
+- `external_user_id`: supplied as `X-External-User-Id` for audit attribution.
+- `request_id`: supplied as `X-Request-Id` for every relay request.
+- `idempotency_key`: supplied as `X-Idempotency-Key` for writes/retries.
 
 ---
 
@@ -208,7 +283,7 @@ See `docs/security.md` for the full checklist. Non-negotiable rules:
 
 - No Supabase service role in BotApp
 - No direct DB from renderer
-- No secrets, tokens, or bearer headers in source or bundle
+- No secrets or credential headers in source or bundle
 - No password display; credentials write-only in Add Profile flow
 - No raw XML, screenshot paths, HAR, or device log paths in UI/exports
 - Exports pass through `redactText()` / `redactRecord()`
@@ -249,6 +324,7 @@ Never commit: `dist/`, `release/`, `.env*`, logs, screenshots, temp inspection f
 | Device control | future secure device-control relay | phone view IPC only; restart payload preview only |
 | Credentials actions | `account_dashboard_actions`, `account_credentials`, `client_instagram_accounts` | focused worklist + relay-ready action payloads only |
 | Activity investigation | `ig_interacted_users`, `ig_targets`, `ct_target_audit_events`, `ig_runs`, `account_run_requests` | local interaction evidence projection + safe exports only |
+| Compass AI Advisor | `/api/instagram-dashboard/compass/analyze` | safe snapshot + relay contract preview only; no provider call from renderer |
 | Server Check | `runtime_events`, `ig_action_logs`, heartbeats, incidents, delivery/process logs | future tab; not rendered in Activity Log |
 | Operational email | dashboard client onboarding + future provider/queue/template | pending relay contract only; no real send claim |
 | Avatars | sanitized proxy URL | `/avatars/*.svg` |

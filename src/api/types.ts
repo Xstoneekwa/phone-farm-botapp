@@ -16,7 +16,31 @@ export type ApiSuccess<T> = { ok: true; data: T; request_id: string };
 export type ApiFailure = { ok: false; error: { code: string; message: string }; request_id: string };
 export type ApiResult<T> = ApiSuccess<T> | ApiFailure;
 
-export type ProfileStatus = "running" | "ready" | "blocked" | "paused" | "archived";
+export type BotAppRelayHealth = {
+  ok: boolean;
+  relay_authenticated: boolean;
+  backend_configured: boolean;
+  source: string;
+  server_time: string | null;
+  reason: "relay_auth_required" | "relay_auth_invalid" | "relay_auth_unconfigured" | "unreachable" | null;
+  backend_key: {
+    present: boolean;
+    length: number;
+    sha256_prefix: string | null;
+    environment_scope: string;
+  };
+  provided_key: {
+    present: boolean;
+    length: number;
+    sha256_prefix: string | null;
+  };
+  routes: Record<string, "ok" | "blocked" | "unknown">;
+  route_paths?: Record<string, string>;
+  message: string;
+  checkedAt: string;
+};
+
+export type ProfileStatus = "running" | "ready" | "blocked" | "paused" | "archived" | "trashed";
 export type DeviceStatus = "connected" | "online" | "reserved" | "offline" | "maintenance";
 export type Severity = "info" | "warning" | "error" | "critical";
 
@@ -40,7 +64,8 @@ export type ProfileToolbarAction =
   | "filters"
   | "assign_now"
   | "archive"
-  | "delete";
+  | "delete"
+  | "restore";
 
 export type ProfileRequirementState = {
   enabled: boolean;
@@ -98,6 +123,7 @@ export type BotAppStartRunPayload = {
   requested_by: string | null;
   source: BotAppRunControlSource;
   requested_run_type: "account_session";
+  trigger: "manual";
   reason: string;
   idempotency_key: string;
   metadata_safe: {
@@ -151,34 +177,23 @@ export type ProfileAutoLoginRequirement = ProfileRequirementState;
 
 export type ProfileAutoLoginPayload = {
   account_id: string;
-  action_type: "connect_now";
-  requested_by: string | null;
+  requested_run_type: "login_provisioning";
+  trigger: "manual";
   source: "BotApp";
-  device_id: string;
   idempotency_key: string;
-  reason: string;
-  metadata_safe: {
-    account_username: string;
-    platform: BotProfile["platform"];
-    device_label: string;
-    assignment_state: BotProfile["assignmentState"];
-    credential_status: ProfileCredentialStatus;
-    login_status: ProfileLoginStatus;
-    timeslot: string;
-  };
 };
 
 export type ProfileAutoLoginProgressStep = {
-  id: "templates" | "placement" | "provision" | "persist" | "sync";
+  id: "queued" | "claimed" | "worker" | "login" | "result";
   label: string;
   detail: string;
-  status: "done" | "running" | "pending" | "failed";
+  status: "done" | "running" | "pending" | "failed" | "action_required" | "skipped";
 };
 
 export type ProfileAutoLoginProcessLogEntry = {
   id: string;
   timestamp: string;
-  phase: "TEMPLATES" | "DEVICE" | "PROVISION" | "PERSIST" | "SYNC" | "CODE" | "DONE" | "ERROR";
+  phase: "REQUEST" | "QUEUE" | "DISPATCHER" | "WORKER" | "LOGIN" | "ACTION" | "DONE" | "ERROR";
   message: string;
 };
 
@@ -203,10 +218,14 @@ export type ProfileAutoLoginCodePayload = {
 
 export type ProfileAutoLoginFinalStatus =
   | "prepared"
+  | "starting"
+  | "queued"
+  | "claimed"
   | "running"
-  | "code_required"
+  | "action_required"
   | "completed"
   | "blocked"
+  | "stopped"
   | "failed";
 
 export type ProfileAutoLoginState = {
@@ -219,12 +238,53 @@ export type ProfileAutoLoginState = {
   steps: ProfileAutoLoginProgressStep[];
   processLog: ProfileAutoLoginProcessLogEntry[];
   challenge: ProfileAutoLoginChallenge | null;
+  requestId: string | null;
+  requestStatus: string | null;
+  runId: string | null;
+  safeReason: string | null;
+  nextAction: "open_phone" | "check_login" | "retry_auto_login" | "update_credentials" | "review_mismatch" | "none";
+};
+
+export type ProfileRunProgressSnapshot = {
+  account_id: string;
+  request_id: string | null;
+  request_status: string | null;
+  requested_run_type: string | null;
+  run_id: string | null;
+  run_status: string | null;
+  status: "unknown" | "queued" | "claimed" | "running" | "action_required" | "connected" | "status_sync_missing" | "run_link_missing" | "completed" | "failed" | "stopped";
+  reason: string | null;
+  action_required: null | {
+    id: string;
+    action_type: string;
+    status: string;
+    title: string;
+    message: string;
+  };
+  steps: Array<{
+    id: string;
+    label: string;
+    subtitle: string;
+    status: ProfileAutoLoginProgressStep["status"];
+    started_at: string | null;
+    completed_at: string | null;
+    metadata_safe: Record<string, unknown>;
+  }>;
+  process_log: Array<{
+    id: string;
+    timestamp: string;
+    phase: string;
+    message: string;
+  }>;
+  generated_at: string;
+  metadata_safe: Record<string, unknown>;
 };
 
 export type ProfileReadinessNowAudience = "admin" | "client";
 
 export type ProfileReadinessNowStatus =
   | "ready"
+  | "ready_to_connect"
   | "needs_credentials"
   | "needs_login_verification"
   | "waiting_scheduled_assignment"
@@ -234,6 +294,7 @@ export type ProfileReadinessNowStatus =
 
 export type ProfileReadinessNowClientStatus =
   | "connected_ready"
+  | "ready_to_connect"
   | "checking_connection"
   | "action_required_2fa"
   | "action_required_checkpoint"
@@ -276,7 +337,7 @@ export type ProfileReadinessNowPayload = {
     login_status: ProfileLoginStatus;
     readiness_status: BotProfile["readiness"];
     timeslot: string;
-    expected_effect: "check_login_readiness_without_growth_session";
+      expected_effect: "refresh_login_readiness_without_growth_session";
   };
 };
 
@@ -453,6 +514,16 @@ export type ProfileCounters = {
   dm: { current: number; max: number };
 };
 
+export type ProfileFollowerDelta3d = {
+  value: number | null;
+  currentFollowers: number | null;
+  previousFollowers: number | null;
+  from: string | null;
+  to: string | null;
+  source: string;
+  freshness: string;
+};
+
 export type BotProfile = {
   id: string;
   username: string;
@@ -465,9 +536,21 @@ export type BotProfile = {
   status: ProfileStatus;
   deviceId: string;
   deviceName: string;
+  appInstanceId?: string;
+  appInstanceLabel?: string | null;
+  appInstanceIndex?: number | null;
+  cloneIndex?: number | null;
+  lifecycleStatus?: ProfileLifecycleStatus;
+  archivedAt?: string | null;
+  trashedAt?: string | null;
+  scheduledTrashAt?: string | null;
+  scheduledDeleteAt?: string | null;
   activeWindow: string;
+  scheduleLabel?: string;
   followers: number;
   followerDelta: number;
+  followerDelta3d?: ProfileFollowerDelta3d;
+  interactionsToday?: number;
   followsToday: number;
   dmsToday: number;
   counters: ProfileCounters;
@@ -478,8 +561,10 @@ export type BotProfile = {
   assignmentState: "assigned" | "reserved" | "missing_slot" | "blocked";
   entitlements: string[];
   runtimeProfile: string;
+  scheduleMode?: string | null;
   slotKind: string;
   autoLoginRequirement: ProfileRequirementState;
+  refreshReadinessRequirement: ProfileRequirementState;
   assignNowRequirement: ProfileRequirementState;
   lastSessionAt: string | null;
   readiness: "ready" | "needs_login" | "needs_settings" | "blocked";
@@ -502,6 +587,7 @@ export type BotAppClientAccountAssignment = {
   appInstanceLabel: string;
   packageName: string;
   assignmentStatus: BotProfile["assignmentState"];
+  scheduleMode?: string | null;
   slotKind: string;
   activeWindow: string;
 };
@@ -834,7 +920,7 @@ export type ProfileTargetBulkImportResult = {
   normalizedUsernames: string[];
 };
 
-export type CredentialStatus = "active" | "missing" | "needs_update";
+export type CredentialStatus = "active" | "missing" | "needs_update" | "saved_pending_verification";
 
 export type ProfileAssignmentStatus = "assigned" | "pending" | "active" | "reserved" | "idle" | "blocked";
 
@@ -846,6 +932,8 @@ export type ProfileScheduleSlotReason =
   | "no_clone_available"
   | "no_app_instance_available"
   | "current"
+  | "current_conflict"
+  | "manual_only"
   | null;
 
 export type ProfileAvailableAssignmentSlot = {
@@ -856,8 +944,13 @@ export type ProfileAvailableAssignmentSlot = {
   startsAt: string;
   endsAt: string;
   available: boolean;
+  selectable?: boolean;
+  availability?: "available" | "current" | "conflict" | "occupied" | "blocked" | "manual_only";
+  isCurrent?: boolean;
+  isConflict?: boolean;
   reason: ProfileScheduleSlotReason;
   occupiedBy: string | null;
+  scheduleMode?: "scheduled" | "manual_only";
 };
 
 export type ProfileScheduleGate = {
@@ -898,6 +991,7 @@ export type ProfileSettingsGeneral = {
   readinessRunRequestStatus: string;
   readinessPreflightCreated: boolean;
   assignmentStatus: string;
+  scheduleMode?: string | null;
   currentSlot: string;
   safeMetadata: string;
 };
@@ -907,6 +1001,7 @@ export type ProfileSettingsSchedule = {
   businessWindow: string;
   businessTimezone: string;
   assignmentStatus: string;
+  scheduleMode?: string | null;
   slotKind: string;
   runtimeProfile: string;
   assignedDevice: string;
@@ -1329,6 +1424,8 @@ export type ProfileScheduleAction = "save_schedule";
 export type ProfileScheduleSavePayload = {
   account_id: string;
   device_id: string;
+  app_instance_id?: string;
+  schedule_mode?: "scheduled" | "manual_only";
   starts_at: string;
   ends_at: string;
   selected_slot_key: string;
@@ -1337,7 +1434,7 @@ export type ProfileScheduleSavePayload = {
   reason: "manual_schedule_assignment";
   action: ProfileScheduleAction;
   idempotency_key: string;
-  mock_only: true;
+  mock_only?: boolean;
   metadata_safe: {
     account_username: string;
     device_label: string;
@@ -2123,6 +2220,37 @@ export type BotAppRuntimeIntegrationStatus = {
     relayEndpoint: "/api/instagram-dashboard/compass/analyze";
   };
   environment: "local" | "development" | "production";
+};
+
+export type BotAppDispatcherStatus = "running" | "paused" | "stopped" | "unhealthy" | "starting" | "unknown";
+
+export type BotAppDispatcherHealth = {
+  ok: boolean;
+  status: BotAppDispatcherStatus;
+  dispatcher_id: string;
+  worker_id: string;
+  paused: boolean;
+  processRunning: boolean;
+  pid: number | null;
+  processCount: number;
+  consumerPids?: number[];
+  duplicateProcess: boolean;
+  launchdLoaded: boolean;
+  launchEnabled: boolean;
+  healthOnly: boolean;
+  allowExistingQueue: boolean;
+  heartbeatAge: number | null;
+  lastSeenAt: string | null;
+  preflightOk: boolean;
+  preflight: Record<string, unknown> | null;
+  queueActiveCount: number | null;
+  lastError: string | null;
+  logsPath: string | null;
+  supabaseRestStatus: "ok" | "failed" | "unknown";
+  deviceCountOnline: number | null;
+  checkedAt: string;
+  message: string;
+  action?: "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
 };
 
 export type BotAppEndpointStatus =

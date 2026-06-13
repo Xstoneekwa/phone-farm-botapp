@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DeviceProfileGroup } from "../../../api/types";
 import { Button, Drawer, Input } from "../../../design/components";
+import { resolveAddProfileCredentialsState } from "../add-profile-credentials";
 
 type AddProfileStep = 0 | 1 | 2 | 3 | 4 | 5;
 type LoginMethod = "manual" | "credentials";
@@ -49,6 +50,51 @@ type BackendDevice = {
   displayed_in_add_profile?: boolean;
   display_reason?: string;
 };
+type ScheduleSlotOccupant = {
+  assignment_id: string | null;
+  account_id: string | null;
+  username: string | null;
+  status: string;
+};
+type BackendScheduleSlot = {
+  slot_id: string;
+  schedule_mode: "scheduled" | "manual_only" | string;
+  label: string;
+  local_label: string;
+  starts_at: string;
+  ends_at: string;
+  runtime_mode: string;
+  timezone: string;
+  availability: "available" | "occupied" | "reserved" | "disabled" | string;
+  available: boolean;
+  reason: string;
+  occupied_by: ScheduleSlotOccupant | null;
+};
+type ScheduleSlotsResponse = {
+  device_id: string;
+  app_instance_id: string | null;
+  assignment_type: string;
+  timezone: string;
+  slots: BackendScheduleSlot[];
+};
+type AddProfileProgressStatus = "pending" | "running" | "done" | "failed" | "skipped" | "partial";
+type AddProfileProgressStep = {
+  id: "verify_username" | "save_credentials" | "create_account" | "assign_device" | "save_settings" | "sync_targets";
+  label: string;
+  subtitle: string;
+  status: AddProfileProgressStatus;
+};
+type AddProfileProgressLog = {
+  timestamp: string;
+  phase: string;
+  message: string;
+};
+type AddProfileSubmitResult = {
+  ok: boolean;
+  message: string;
+  data?: Record<string, unknown>;
+  partial?: boolean;
+};
 
 const steps = ["Device", "Account", "App Instance", "Package & Add-ons", "Schedule", "Review"];
 
@@ -76,13 +122,6 @@ const addonOptions = [
   { value: "custom_package_addon", label: "Custom package add-on", wired: false },
 ];
 
-const slotOptions = [
-  { label: "09:00-12:00", starts_at: "09:00", ends_at: "12:00", kind: "full_cycle", available: true },
-  { label: "13:00-16:00", starts_at: "13:00", ends_at: "16:00", kind: "full_cycle", available: true },
-  { label: "17:00-20:00", starts_at: "17:00", ends_at: "20:00", kind: "full_cycle", available: true },
-  { label: "20:00-23:00", starts_at: "20:00", ends_at: "23:00", kind: "outreach_only", available: true },
-];
-
 function defaultForm(groups: DeviceProfileGroup[]) {
   const firstGroup = groups[0];
   return {
@@ -98,8 +137,9 @@ function defaultForm(groups: DeviceProfileGroup[]) {
     commercial_package: "growth" as CommercialPackage,
     addons: [] as string[],
     runtime_mode: "safe_setup" as RuntimeMode,
-    starts_at: slotOptions[0].starts_at,
-    ends_at: slotOptions[0].ends_at,
+    schedule_mode: "scheduled" as "scheduled" | "manual_only",
+    starts_at: "",
+    ends_at: "",
   };
 }
 
@@ -129,6 +169,64 @@ function readBoolean(row: Record<string, unknown>, key: string, fallback = false
   return typeof value === "boolean" ? value : fallback;
 }
 
+function progressTime() {
+  return new Date().toLocaleTimeString();
+}
+
+function progressStatusLabel(status: AddProfileProgressStatus) {
+  if (status === "done") return "Done";
+  if (status === "partial") return "Partial";
+  if (status === "running") return "Running...";
+  if (status === "failed") return "Failed";
+  if (status === "skipped") return "Skipped";
+  return "Pending";
+}
+
+function buildInitialAddProfileProgress(form: ReturnType<typeof defaultForm>, appLabel: string, slotLabel: string, credentialsRequested: boolean): AddProfileProgressStep[] {
+  return [
+    {
+      id: "verify_username",
+      label: "Verify username",
+      subtitle: `@${form.username.trim().replace(/^@+/, "") || "instagram"} · backend verification required before create`,
+      status: "done",
+    },
+    {
+      id: "save_credentials",
+      label: "Save credentials",
+      subtitle: credentialsRequested ? "Vault-backed write-only credentials save." : "Manual login selected; credentials skipped.",
+      status: credentialsRequested ? "running" : "skipped",
+    },
+    {
+      id: "create_account",
+      label: "Create account",
+      subtitle: "POST /api/instagram-dashboard/accounts/create",
+      status: "running",
+    },
+    {
+      id: "assign_device",
+      label: "Assign device/app instance",
+      subtitle: appLabel || "Selected app instance",
+      status: "pending",
+    },
+    {
+      id: "save_settings",
+      label: "Save settings",
+      subtitle: slotLabel || "Runtime, package, schedule and metadata.",
+      status: "pending",
+    },
+    {
+      id: "sync_targets",
+      label: "Sync targets/settings",
+      subtitle: "Admin, client, database, and BotApp projections.",
+      status: "pending",
+    },
+  ];
+}
+
+function copyableAddProfileLog(logs: AddProfileProgressLog[]) {
+  return logs.map((entry) => `${entry.timestamp} · ${entry.phase} · ${entry.message}`).join("\n");
+}
+
 function readOccupant(value: unknown): BackendAppOccupant | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
@@ -138,6 +236,51 @@ function readOccupant(value: unknown): BackendAppOccupant | null {
     account_id: accountId || null,
     username: readString(row, "username") || null,
     status: readString(row, "status", "unknown"),
+  };
+}
+
+function readScheduleOccupant(value: unknown): ScheduleSlotOccupant | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const accountId = readString(row, "account_id");
+  return {
+    assignment_id: readString(row, "assignment_id") || null,
+    account_id: accountId || null,
+    username: readString(row, "username") || null,
+    status: readString(row, "status", "unknown"),
+  };
+}
+
+function readScheduleSlot(value: unknown, timezone: string): BackendScheduleSlot {
+  const row = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const startsAt = readString(row, "starts_at");
+  const endsAt = readString(row, "ends_at");
+  const availability = readString(row, "availability", readBoolean(row, "available", false) ? "available" : "disabled");
+  const label = readString(row, "label", readString(row, "local_label", `${startsAt} - ${endsAt}`));
+  return {
+    slot_id: readString(row, "slot_id", `${startsAt}:${endsAt}`),
+    schedule_mode: readString(row, "schedule_mode", startsAt && endsAt ? "scheduled" : "manual_only"),
+    label,
+    local_label: readString(row, "local_label", label),
+    starts_at: startsAt,
+    ends_at: endsAt,
+    runtime_mode: readString(row, "runtime_mode", readString(row, "slot_kind", "")),
+    timezone: readString(row, "timezone", timezone),
+    availability,
+    available: availability === "available" && readBoolean(row, "available", availability === "available"),
+    reason: readString(row, "reason", availability === "available" ? "free" : availability),
+    occupied_by: readScheduleOccupant(row.occupied_by),
+  };
+}
+
+function readScheduleSlotsResponse(value: Record<string, unknown>): ScheduleSlotsResponse {
+  const timezone = readString(value, "timezone", "Europe/Paris");
+  return {
+    device_id: readString(value, "device_id"),
+    app_instance_id: readString(value, "app_instance_id") || null,
+    assignment_type: readString(value, "assignment_type"),
+    timezone,
+    slots: Array.isArray(value.slots) ? value.slots.map((slot) => readScheduleSlot(slot, timezone)).filter((slot) => slot.schedule_mode === "manual_only" || (slot.starts_at && slot.ends_at)) : [],
   };
 }
 
@@ -202,7 +345,7 @@ function fallbackDevicesFromGroups(groups: DeviceProfileGroup[]): BackendDevice[
     .filter((group) => group.deviceId !== "unassigned-live-profiles")
     .map((group) => {
       const apps = [1, 2, 3].map((index): BackendAppInstance => {
-        const occupant = group.profiles.find((profile) => profile.profileNumber === index);
+        const occupant = group.profiles.find((profile) => (profile.appInstanceIndex ?? profile.cloneIndex ?? profile.profileNumber) === index);
         return {
           app_instance_id: `${group.deviceId}:clone_${index}`,
           device_id: group.deviceId,
@@ -270,6 +413,16 @@ function maskSerial(value: string) {
   return value.length <= 4 ? value : `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
+function isRelayAuthError(value: string) {
+  return /relay authentication|relay auth|authentication required|relay_auth_|backend relay|relay key/i.test(value || "");
+}
+
+function relayFriendlyMessage(value: string, fallback: string) {
+  const message = value || fallback;
+  if (!isRelayAuthError(message)) return message;
+  return `${message} Check the BotApp relay credential on the backend and in BotApp. Open Runtime Health > BotApp relay auth, then Retry.`;
+}
+
 export function AddProfileDrawer({
   groups,
   onClose,
@@ -277,7 +430,7 @@ export function AddProfileDrawer({
 }: {
   groups: DeviceProfileGroup[];
   onClose: () => void;
-  onSubmit: (payload: Record<string, unknown>, mode: "dry_run" | "create") => Promise<{ ok: boolean; message: string }>;
+  onSubmit: (payload: Record<string, unknown>, mode: "dry_run" | "create") => Promise<AddProfileSubmitResult>;
 }) {
   const [step, setStep] = useState<AddProfileStep>(0);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -285,16 +438,33 @@ export function AddProfileDrawer({
   const [setupDevices, setSetupDevices] = useState<BackendDevice[]>(() => fallbackDevicesFromGroups(groups));
   const [setupLoading, setSetupLoading] = useState(false);
   const [setupError, setSetupError] = useState("");
+  const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlotsResponse | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
+  const [scheduleReloadKey, setScheduleReloadKey] = useState(0);
   const [verification, setVerification] = useState<UsernameVerification | null>(null);
   const [isVerifyingUsername, setIsVerifyingUsername] = useState(false);
   const [submitState, setSubmitState] = useState<{ loading: boolean; message: string }>({ loading: false, message: "" });
+  const [progressState, setProgressState] = useState<{
+    title: string;
+    status: AddProfileProgressStatus;
+    steps: AddProfileProgressStep[];
+    logs: AddProfileProgressLog[];
+    message: string;
+  } | null>(null);
   const selectedDevice = useMemo(() => setupDevices.find((device) => device.id === form.device_id) ?? setupDevices[0], [form.device_id, setupDevices]);
   const appInstances = selectedDevice?.app_instances ?? [];
   const selectedApp = appInstances.find((app) => app.app_instance_id === form.app_instance_id) ?? appInstances.find((app) => app.selectable);
   const selectedPackage = packageOptions.find((item) => item.value === form.commercial_package) ?? packageOptions[0];
   const selectedRuntime = runtimeOptions.find((item) => item.value === form.runtime_mode) ?? runtimeOptions[0];
-  const selectedSlot = slotOptions.find((slot) => slot.starts_at === form.starts_at && slot.ends_at === form.ends_at);
+  const selectedSlot = scheduleSlots?.slots.find((slot) => (
+    form.schedule_mode === "manual_only"
+      ? slot.schedule_mode === "manual_only"
+      : slot.schedule_mode !== "manual_only" && slot.starts_at === form.starts_at && slot.ends_at === form.ends_at
+  )) ?? null;
   const selectedAddons = addonOptions.filter((addon) => form.addons.includes(addon.value));
+  const scheduleTimezone = scheduleSlots?.timezone || "Europe/Paris";
+  const credentialsRequested = form.login_method === "credentials" && Boolean(form.password.trim());
 
   useEffect(() => {
     let cancelled = false;
@@ -318,7 +488,7 @@ export function AddProfileDrawer({
         if (!result.ok) {
           const fallback = fallbackDevicesFromGroups(groups);
           setSetupDevices(fallback);
-          setSetupError(result.error || "Device inventory unavailable.");
+          setSetupError(relayFriendlyMessage(result.error || "", "Device inventory unavailable."));
           setForm((current) => ensureFormDeviceSelection(current, fallback));
           return;
         }
@@ -333,8 +503,65 @@ export function AddProfileDrawer({
     return () => { cancelled = true; };
   }, [groups]);
 
+  useEffect(() => {
+    if (step !== 4 || !form.device_id || !form.app_instance_id) return;
+    let cancelled = false;
+    const loadSlots = window.botappDesktop?.profiles?.scheduleSlots;
+    if (!loadSlots) {
+      void Promise.resolve().then(() => {
+        if (cancelled) return;
+        setScheduleSlots(null);
+        setScheduleError("Schedule slots unavailable from BotApp bridge.");
+        setForm((current) => ({ ...current, starts_at: "", ends_at: "" }));
+      });
+      return () => { cancelled = true; };
+    }
+    void Promise.resolve().then(async () => {
+      setScheduleLoading(true);
+      setScheduleError("");
+      try {
+        const result = await loadSlots({
+          device_id: form.device_id,
+          app_instance_id: form.app_instance_id,
+          runtime_mode: form.runtime_mode,
+        });
+        if (cancelled) return;
+        if (!result.ok) {
+          setScheduleSlots(null);
+          setScheduleError(relayFriendlyMessage(result.error || "", "Could not load schedule slots."));
+          setForm((current) => ({ ...current, starts_at: "", ends_at: "" }));
+          return;
+        }
+        const slots = readScheduleSlotsResponse(result.data ?? {});
+        setScheduleSlots(slots);
+        setForm((current) => {
+          const currentStillAvailable = slots.slots.some((slot) => slot.available && (
+            current.schedule_mode === "manual_only"
+              ? slot.schedule_mode === "manual_only"
+              : slot.schedule_mode !== "manual_only" && slot.starts_at === current.starts_at && slot.ends_at === current.ends_at
+          ));
+          const firstAvailable = slots.slots.find((slot) => slot.available);
+          return {
+            ...current,
+            schedule_mode: currentStillAvailable ? current.schedule_mode : firstAvailable?.schedule_mode === "manual_only" ? "manual_only" : "scheduled",
+            starts_at: currentStillAvailable ? current.starts_at : firstAvailable?.starts_at || "",
+            ends_at: currentStillAvailable ? current.ends_at : firstAvailable?.ends_at || "",
+          };
+        });
+      } finally {
+        if (!cancelled) setScheduleLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [form.app_instance_id, form.device_id, form.runtime_mode, scheduleReloadKey, step]);
+
   function updateField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+      ...(["device_id", "app_instance_id", "runtime_mode"].includes(String(key)) ? { schedule_mode: "scheduled" as const, starts_at: "", ends_at: "" } : {}),
+    }));
+    if (["device_id", "app_instance_id", "runtime_mode"].includes(String(key))) setScheduleSlots(null);
     if (key === "username") setVerification(null);
   }
 
@@ -344,16 +571,50 @@ export function AddProfileDrawer({
       ...current,
       device_id: device.id,
       app_instance_id: firstAvailable?.app_instance_id ?? "",
+      schedule_mode: "scheduled",
+      starts_at: "",
+      ends_at: "",
     }));
+    setScheduleSlots(null);
   }
 
   function canMoveNext() {
     if (step === 0) return Boolean(selectedDevice);
-    if (step === 1) return verification?.status === "found" && (form.login_method !== "credentials" || Boolean(form.password.trim()));
+    if (step === 1) return verification?.status === "found";
     if (step === 2) return Boolean(selectedApp?.selectable);
     if (step === 3) return Boolean(selectedPackage.selectable && form.runtime_mode);
     if (step === 4) return Boolean(selectedSlot?.available);
     return Boolean(selectedDevice && selectedApp && selectedSlot);
+  }
+
+  function createDisabledReason() {
+    if (submitState.loading) return "submit_in_progress";
+    if (isRelayAuthError(setupError) || isRelayAuthError(scheduleError)) return "relay_auth_failed";
+    if (!window.botappDesktop?.profiles?.create) return "backend_create_unavailable";
+    if (verification?.status !== "found") return "username_not_verified";
+    if (!selectedDevice) return "missing_device";
+    if (!selectedApp) return "missing_app_instance";
+    if (!selectedApp.selectable) return "app_instance_unavailable";
+    if (!selectedPackage.selectable) return "package_unavailable";
+    if (!form.runtime_mode) return "missing_runtime_mode";
+    if (!selectedSlot?.available) return "missing_schedule";
+    return null;
+  }
+
+  function disabledReasonLabel(reason: string | null) {
+    if (!reason) return "";
+    return {
+      submit_in_progress: "Cannot create yet: backend request is already running.",
+      relay_auth_failed: "Backend relay auth failed. Check the BotApp relay credential on backend and BotApp.",
+      backend_create_unavailable: "Cannot create yet: backend create endpoint unavailable.",
+      username_not_verified: "Cannot create yet: username verification is missing.",
+      missing_device: "Cannot create yet: device is missing.",
+      missing_app_instance: "Cannot create yet: app instance is missing.",
+      app_instance_unavailable: "Cannot create yet: selected app instance is unavailable.",
+      package_unavailable: "Cannot create yet: selected package is unavailable.",
+      missing_runtime_mode: "Cannot create yet: runtime mode is missing.",
+      missing_schedule: "Cannot create yet: schedule selection is missing.",
+    }[reason] ?? `Cannot create yet: ${reason}.`;
   }
 
   async function verifyUsername() {
@@ -380,7 +641,7 @@ export function AddProfileDrawer({
           normalized_username: null,
           verification_status: "error",
           provider: "backend_relay",
-          reason: result.error || "verification_failed",
+          reason: relayFriendlyMessage(result.error || "", "verification_failed"),
         });
         return;
       }
@@ -401,18 +662,22 @@ export function AddProfileDrawer({
   }
 
   async function submitProfile(mode: "dry_run" | "create") {
-    if (mode === "create" && form.login_method !== "manual") {
-      setSubmitState({ loading: false, message: "Backend create from BotApp is manual-login only; credentials are not submitted from BotApp yet." });
+    const disabledReason = mode === "create" ? createDisabledReason() : null;
+    if (disabledReason) {
+      setSubmitState({ loading: false, message: disabledReasonLabel(disabledReason) });
       return;
     }
     const payload = {
       endpoint_contract: "/api/instagram-dashboard/accounts/create",
       mode: mode === "create" ? "backend_real_write" : "backend_dry_run",
       username: verification?.normalized_username || form.username.trim().toLowerCase(),
-      login_method: form.login_method,
-      password: mode === "dry_run" && form.login_method === "credentials" ? form.password : "",
-      password_status: form.login_method === "credentials" ? (mode === "dry_run" ? "write_only_dry_run" : "blocked_from_botapp_real_write") : "not_submitted",
-      email: mode === "dry_run" ? form.email.trim() : "",
+      login_method: credentialsRequested ? "credentials" : "manual",
+      credential_status: credentialsRequested ? "pending_write_only" : "not_submitted",
+      credentials_submitted: credentialsRequested,
+      submit_credentials: credentialsRequested,
+      password_status: credentialsRequested ? "write_only_pending" : "not_submitted",
+      password: mode === "create" && credentialsRequested ? form.password : "",
+      email: form.email.trim(),
       email_present: Boolean(form.email.trim()),
       display_name: form.display_name.trim(),
       internal_label: form.internal_label.trim(),
@@ -426,8 +691,10 @@ export function AddProfileDrawer({
       commercial_package_code: selectedPackage.commercialCode,
       addons: form.addons,
       runtime_mode: form.runtime_mode,
-      starts_at: form.starts_at,
-      ends_at: form.ends_at,
+      schedule_mode: form.schedule_mode,
+      starts_at: form.schedule_mode === "scheduled" ? form.starts_at : null,
+      ends_at: form.schedule_mode === "scheduled" ? form.ends_at : null,
+      credentials_deferred: !credentialsRequested,
       automation: {
         provisioning_started: false,
         login_started: false,
@@ -438,12 +705,68 @@ export function AddProfileDrawer({
       start_run: false,
       sync_targets: ["admin_client", "client_app", "database", "botapp"],
     };
+    const progressSteps = buildInitialAddProfileProgress(
+      form,
+      selectedApp?.label ?? "",
+      form.schedule_mode === "manual_only" ? "Manual-only schedule" : selectedSlot?.label ?? selectedSlot?.local_label ?? "",
+      credentialsRequested,
+    );
+    const progressTitle = mode === "create" ? "Add Profile · Instagram" : "Add Profile dry-run · Instagram";
+    setProgressState({
+      title: progressTitle,
+      status: "running",
+      steps: progressSteps,
+      logs: [
+        { timestamp: progressTime(), phase: "VERIFY", message: `Verified username @${verification?.normalized_username || form.username.trim().replace(/^@+/, "")}.` },
+        { timestamp: progressTime(), phase: "REQUEST", message: mode === "create" ? "Starting backend account create." : "Starting backend create dry-run." },
+      ],
+      message: mode === "create" ? "Creating account through shared backend..." : "Validating create contract through shared backend...",
+    });
     setSubmitState({ loading: true, message: mode === "create" ? "Creating account through shared backend..." : "Validating create contract through shared backend..." });
     const result = await onSubmit(payload, mode);
     setSubmitState({ loading: false, message: result.message });
-    if (!result.ok) return;
+    if (!result.ok) {
+      setProgressState((current) => current ? {
+        ...current,
+        status: "failed",
+        steps: current.steps.map((item) => item.status === "running" || item.id === "create_account" ? { ...item, status: "failed" } : item),
+        logs: [
+          ...current.logs,
+          { timestamp: progressTime(), phase: "ERROR", message: result.message },
+        ],
+        message: result.message,
+      } : current);
+      if ((result as { partial?: boolean }).partial) {
+        setShowConfirm(false);
+        return;
+      }
+      if (/slot_no_longer_available|occupied_by_account|reserved_slot|assignment_failed|app_instance_already_reserved|manual_only_requires_app_instance|invalid_schedule_mode|assignment_validation_failed/i.test(result.message)) {
+        setStep(4);
+        setScheduleReloadKey((current) => current + 1);
+      }
+      return;
+    }
+    const account = (result.data?.account ?? {}) as Record<string, unknown>;
+    const accountId = readString(account, "id", "created");
+    const resolvedUsername = readString(account, "username", verification?.normalized_username || form.username);
+    const credentialsState = resolveAddProfileCredentialsState(result.data, credentialsRequested, resolvedUsername);
+    setProgressState((current) => current ? {
+      ...current,
+      status: credentialsState.globalStatus,
+      steps: current.steps.map((item) => {
+        if (item.id === "save_credentials") return { ...item, status: credentialsState.saveStepStatus };
+        return { ...item, status: "done" };
+      }),
+      logs: [
+        ...current.logs,
+        { timestamp: progressTime(), phase: "PERSIST", message: `Created account ${accountId}.` },
+        { timestamp: progressTime(), phase: "CREDENTIALS", message: credentialsState.credentialsLogMessage },
+        { timestamp: progressTime(), phase: "SYNC", message: "Backend returned account setup confirmation." },
+        { timestamp: progressTime(), phase: "DONE", message: credentialsState.globalStatus === "partial" ? `Add Profile partial for @${resolvedUsername}.` : `Add Profile complete for @${resolvedUsername}.` },
+      ],
+      message: credentialsState.footerMessage,
+    } : current);
     setShowConfirm(false);
-    onClose();
   }
 
   return (
@@ -492,13 +815,13 @@ export function AddProfileDrawer({
                 <option value="manual">manual</option>
                 <option value="credentials">credentials</option>
               </select>
-              <small>{form.login_method === "credentials" ? "Password is write-only and never shown in review." : "No password collected; login remains a later manual step."}</small>
+              <small>{form.login_method === "credentials" ? "Credentials will be securely saved during account creation. No login, provisioning, or run will start." : "No password collected; login remains a later manual step."}</small>
             </label>
             {form.login_method === "credentials" ? (
               <label className="settings-row-block">
-                <span>Password (write-only)</span>
+                <span>Password · write-only</span>
                 <input className="input" type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} autoComplete="new-password" />
-                <small>Credential will be submitted securely through a future server API, not stored in BotApp.</small>
+                <small>Stored through the secure backend during Create. The password is never shown in review or returned by the API.</small>
               </label>
             ) : null}
             <label className="settings-row-block"><span>Email optional</span><Input value={form.email} onChange={(value) => updateField("email", value)} /></label>
@@ -561,28 +884,45 @@ export function AddProfileDrawer({
 
         {step === 4 ? (
           <div className="add-profile-options">
-            {slotOptions.map((slot) => (
-              <button key={slot.label} type="button" className={form.starts_at === slot.starts_at && form.ends_at === slot.ends_at ? "add-profile-option active" : "add-profile-option"} disabled={!slot.available} onClick={() => setForm((current) => ({ ...current, starts_at: slot.starts_at, ends_at: slot.ends_at }))}>
-                <strong>{slot.label}</strong>
-                <span>{slot.kind} · Europe/Paris</span>
-                <span>{slot.available ? "available" : "unavailable"}</span>
+            {scheduleLoading ? <div className="empty-state">Loading real schedule availability from shared backend...</div> : null}
+            {scheduleError ? <div className="ig-profile-message">{scheduleError}</div> : null}
+            {(scheduleSlots?.slots ?? []).map((slot) => (
+              <button
+                key={slot.slot_id}
+                type="button"
+                className={selectedSlot?.slot_id === slot.slot_id ? "add-profile-option active" : "add-profile-option"}
+                disabled={!slot.available}
+                onClick={() => setForm((current) => ({
+                  ...current,
+                  schedule_mode: slot.schedule_mode === "manual_only" ? "manual_only" : "scheduled",
+                  starts_at: slot.schedule_mode === "manual_only" ? "" : slot.starts_at,
+                  ends_at: slot.schedule_mode === "manual_only" ? "" : slot.ends_at,
+                }))}
+              >
+                <strong>{slot.label || slot.local_label}</strong>
+                <span>{slot.schedule_mode === "manual_only" ? "Manual-only · no scheduled window" : `${slot.runtime_mode || selectedRuntime.value} · ${scheduleTimezone}`}</span>
+                <span>{slot.availability}{slot.occupied_by?.username ? ` · Occupied by @${slot.occupied_by.username}` : slot.occupied_by?.account_id ? ` · Occupied by ${shortAccountId(slot.occupied_by.account_id)}` : ""}</span>
+                {!slot.available ? <em>{slot.reason}{slot.occupied_by?.status ? ` · ${slot.occupied_by.status}` : ""}</em> : <em>{slot.schedule_mode === "manual_only" ? "manual only" : "free"}</em>}
               </button>
             ))}
+            {!scheduleLoading && scheduleSlots && !scheduleSlots.slots.some((slot) => slot.available) ? <div className="empty-state">No available schedule slot for this device/app instance.</div> : null}
+            {!scheduleLoading && !scheduleSlots ? <div className="empty-state">Select a device and app instance to load schedule availability.</div> : null}
           </div>
         ) : null}
 
         {step === 5 ? (
           <dl className="add-profile-review">
             <div><dt>Username</dt><dd>{verification?.normalized_username || form.username || "-"} · {verification?.status || "pending_verification"}</dd></div>
+            <div><dt>Email provided</dt><dd>{form.email.trim() ? "yes" : "no"}</dd></div>
             <div><dt>Device</dt><dd>{selectedDevice?.device_name || "-"} · {selectedDevice?.adb_serial_display || "serial masked"}</dd></div>
             <div><dt>App instance</dt><dd>{selectedApp?.label || "-"} · index {selectedApp?.instance_index ?? "-"}</dd></div>
-            <div><dt>Login method</dt><dd>{form.login_method} · {form.login_method === "credentials" ? "Credential will be submitted securely" : "credentials not submitted"}</dd></div>
+            <div><dt>Credentials</dt><dd>{credentialsRequested ? "will be saved securely during creation" : "not submitted"}</dd></div>
             <div><dt>Package</dt><dd>{packageLabel(form.commercial_package)} · {selectedPackage.commercialCode}</dd></div>
             <div><dt>Runtime mode</dt><dd>{selectedRuntime.label}</dd></div>
             <div><dt>Add-ons</dt><dd>{selectedAddons.length ? selectedAddons.map((addon) => addon.label).join(", ") : "none"}</dd></div>
-            <div><dt>Schedule</dt><dd>{selectedSlot?.label || "-"} · visible later in Schedule drawer</dd></div>
-            <div><dt>Safety</dt><dd>Create writes backend records only. It does not log in, provision a phone, start a worker, or start a run.</dd></div>
-            <div><dt>Submit contract</dt><dd>POST `/api/instagram-dashboard/accounts/create` through shared backend. Credentials real-write from BotApp is blocked.</dd></div>
+            <div><dt>Schedule</dt><dd>{form.schedule_mode === "manual_only" ? "Manual-only · no scheduled window" : `${selectedSlot?.label || selectedSlot?.local_label || "-"} · ${scheduleTimezone}`} · {selectedSlot?.reason || "not_selected"}</dd></div>
+            <div><dt>Safety</dt><dd>No login / no provisioning / no run. Credentials save is Vault-backed and write-only.</dd></div>
+            <div><dt>Submit contract</dt><dd>POST `/api/instagram-dashboard/accounts/create` through shared backend.</dd></div>
             {submitState.message ? <div><dt>Backend status</dt><dd>{submitState.message}</dd></div> : null}
           </dl>
         ) : null}
@@ -592,12 +932,64 @@ export function AddProfileDrawer({
       <div className="add-profile-confirm-backdrop" role="presentation" onMouseDown={() => setShowConfirm(false)}>
         <section className="add-profile-confirm" role="dialog" aria-modal="true" aria-labelledby="add-profile-confirm-title" onMouseDown={(event) => event.stopPropagation()}>
           <h3 id="add-profile-confirm-title">Create this profile?</h3>
-          <p>This can validate the contract in dry-run mode or create the account through the shared backend only. It will not log in, provision a phone, start a worker, or start a run.</p>
-          {form.login_method !== "manual" ? <p className="ig-profile-message">Create in backend is manual-login only from BotApp; credentials are not submitted in this step.</p> : null}
+          <p>Create account, settings, assignment, and optional credentials in one backend call. No login, provisioning, or run will start.</p>
+          {credentialsRequested ? <p className="ig-profile-message">Credentials will be securely saved during account creation. Password remains write-only and is not returned.</p> : null}
+          {submitState.message ? <p className="ig-profile-message">{submitState.message}</p> : null}
           <div className="add-profile-confirm-actions">
             <Button variant="ghost" onClick={() => setShowConfirm(false)} disabled={submitState.loading}>Cancel</Button>
             <Button onClick={() => void submitProfile("dry_run")} disabled={submitState.loading}>{submitState.loading ? "Working..." : "Dry-run"}</Button>
-            <Button variant="primary" onClick={() => void submitProfile("create")} disabled={submitState.loading || form.login_method !== "manual"}>{submitState.loading ? "Working..." : "Create in backend"}</Button>
+            <Button variant="primary" onClick={() => void submitProfile("create")} disabled={Boolean(createDisabledReason()) || submitState.loading}>{submitState.loading ? "Working..." : "Create in backend"}</Button>
+          </div>
+          {createDisabledReason() ? <p className="ig-profile-message">Create disabled: {createDisabledReason()} · {disabledReasonLabel(createDisabledReason())}</p> : null}
+        </section>
+      </div>
+    ) : null}
+    {progressState ? (
+      <div className="account-progress-backdrop" role="presentation" onMouseDown={() => progressState.status !== "running" ? setProgressState(null) : undefined}>
+        <section className="account-progress-modal" role="dialog" aria-modal="true" aria-labelledby="account-progress-title" onMouseDown={(event) => event.stopPropagation()}>
+          <header className="account-progress-header">
+            <div>
+              <span>@{verification?.normalized_username || form.username.trim().replace(/^@+/, "")} · Instagram</span>
+              <h3 id="account-progress-title">{progressState.title}</h3>
+              <p>{selectedDevice?.device_name || "Selected phone"} · {selectedApp?.label || "Selected app"}</p>
+            </div>
+            <em className={`account-progress-status status-${progressState.status}`}>{progressStatusLabel(progressState.status)}</em>
+          </header>
+
+          <section className="account-progress-card" aria-label="Progress">
+            <h4>Progress</h4>
+            <div className="account-progress-steps">
+              {progressState.steps.map((item) => (
+                <div key={item.id} className={`account-progress-step status-${item.status}`}>
+                  <span aria-hidden="true">{item.status === "done" ? "✓" : item.status === "failed" ? "!" : item.status === "running" ? "…" : "•"}</span>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <small>{item.subtitle}</small>
+                  </div>
+                  <em>{progressStatusLabel(item.status)}</em>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="account-progress-log-card">
+            <div className="account-progress-log-heading">
+              <h4>Process log</h4>
+              <Button variant="ghost" onClick={() => void navigator.clipboard?.writeText(copyableAddProfileLog(progressState.logs))}>Copy log</Button>
+            </div>
+            <pre>{copyableAddProfileLog(progressState.logs)}</pre>
+          </section>
+
+          {progressState.message ? <p className="ig-profile-message">{progressState.message}</p> : null}
+          <div className="add-profile-confirm-actions">
+            {progressState.status === "done" ? <Button variant="primary" onClick={onClose}>Close and return to Profiles</Button> : null}
+            {progressState.status === "partial" ? (
+              <>
+                <Button variant="ghost" onClick={onClose}>Return to Profiles</Button>
+                <Button variant="primary" onClick={onClose}>Go to Credentials</Button>
+              </>
+            ) : null}
+            {progressState.status === "failed" ? <Button variant="ghost" onClick={() => setProgressState(null)}>Back to form</Button> : null}
           </div>
         </section>
       </div>

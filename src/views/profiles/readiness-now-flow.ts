@@ -14,6 +14,7 @@ function idempotencyKey(profile: BotProfile) {
 function clientMessage(status: ProfileReadinessNowClientStatus) {
   return {
     connected_ready: "Connected",
+    ready_to_connect: "Credentials saved. Connect your account.",
     checking_connection: "Checking connection",
     action_required_2fa: "2FA required",
     action_required_checkpoint: "Checkpoint required",
@@ -53,7 +54,7 @@ function projection(input: {
 }
 
 export function buildReadinessNowProjection(profile: BotProfile): ProfileReadinessNowProjection {
-  if (profile.status === "archived" || profile.status === "paused" || profile.status === "blocked") {
+  if (profile.status === "archived" || profile.status === "paused") {
     return projection({
       readinessStatus: "retry_later",
       clientStatus: "try_again_later",
@@ -74,6 +75,18 @@ export function buildReadinessNowProjection(profile: BotProfile): ProfileReadine
       assignmentStatus: "missing",
       phoneAvailable: null,
       appInstanceAvailable: null,
+    });
+  }
+
+  if (profile.credentialStatus === "saved_pending_verification") {
+    return projection({
+      readinessStatus: "ready_to_connect",
+      clientStatus: "ready_to_connect",
+      reason: "credentials_saved_pending_verification",
+      nextAction: "start_auto_login",
+      assignmentStatus: profile.assignmentState === "missing_slot" ? "missing" : "ready",
+      phoneAvailable: profile.assignmentState !== "missing_slot",
+      appInstanceAvailable: profile.assignmentState !== "missing_slot",
     });
   }
 
@@ -162,14 +175,14 @@ export function buildReadinessNowProjection(profile: BotProfile): ProfileReadine
   }
 
   return projection({
-    readinessStatus: "checking_connection",
-    clientStatus: "checking_connection",
-    reason: "login_preflight_now_queued",
-    nextAction: "monitor_preflight",
+    readinessStatus: "ready_to_connect",
+    clientStatus: "ready_to_connect",
+    reason: "credentials_saved_login_verification_required",
+    nextAction: "start_auto_login",
     assignmentStatus: "ready",
     phoneAvailable: true,
     appInstanceAvailable: true,
-    expectedPreflightRequest: true,
+    expectedPreflightRequest: false,
   });
 }
 
@@ -192,7 +205,7 @@ export function buildReadinessNowPayload(profile: BotProfile): ProfileReadinessN
       login_status: profile.loginStatus,
       readiness_status: profile.readiness,
       timeslot: profile.activeWindow,
-      expected_effect: "check_login_readiness_without_growth_session",
+      expected_effect: "refresh_login_readiness_without_growth_session",
     },
   };
 }

@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, ApiKeySummary, AppSettings, Device, DmTemplate, NotificationItem, Target, WebhookSummary } from "../api/types";
+import type { ActivityLogEntry, ApiKeySummary, AppSettings, Device, NotificationItem, Target, WebhookSummary } from "../api/types";
 import { buildDeviceProfileGroups, mockProfilesExpanded } from "./profile-mock-data";
 
 export const mockProfiles = mockProfilesExpanded;
@@ -66,12 +66,6 @@ export const mockTargets: Target[] = [
   { id: "ct_003", handle: "old_target_source", source: "legacy", qualityScore: 31, status: "archived", notes: "Archived locally." },
 ];
 
-export const mockDmTemplates: DmTemplate[] = [
-  { id: "tpl_001", name: "Welcome Pro", type: "welcome", status: "active", body: "Bonjour {name}, merci pour le follow. Ravi de vous connecter ici.", sent: 128, replies: 19 },
-  { id: "tpl_002", name: "Warm intro", type: "welcome", status: "draft", body: "Hello {username}, thanks for connecting.", sent: 0, replies: 0 },
-  { id: "tpl_003", name: "Outreach Add-on", type: "outreach", status: "draft", body: "Draft template. Outreach remains add-on gated.", sent: 0, replies: 0 },
-];
-
 export const mockNotifications: NotificationItem[] = [
   { id: "ntf_001", severity: "critical", title: "Welcome real send disabled", message: "Ready config, but start is blocked by ops safety flag.", profileId: "prof_001", createdAt: "10:13:00 2026-06-09", acknowledged: false },
   { id: "ntf_002", severity: "warning", title: "Assignment window closed", message: "Profile is ready but cannot start outside its assigned window.", profileId: "prof_002", createdAt: "10:05:33 2026-06-09", acknowledged: false },
@@ -79,13 +73,14 @@ export const mockNotifications: NotificationItem[] = [
 ];
 
 export const mockApiKeys: ApiKeySummary[] = [
-  { id: "key_001", name: "Web App", prefix: "ak_live_••••••••", scopes: ["profile:read", "devices:read", "stats:read"], status: "active", lastSeenAt: "09:44:12 2026-06-09" },
-  { id: "key_002", name: "Automation", prefix: "ak_test_••••••••", scopes: ["profile:read", "webhooks:manage"], status: "revoked", lastSeenAt: null },
+  { id: "key_001", name: "Operator Dashboard Relay", prefix: "ak_live_••••9c2a", scopes: ["profile:read", "devices:read", "stats:read", "compass:read"], status: "active", createdAt: "2026-06-08 08:00", lastSeenAt: "09:44:12 2026-06-09", callCountToday: 146, productionCallCount: 153 },
+  { id: "key_002", name: "Webhook Manager", prefix: "ak_test_••••41bf", scopes: ["profile:read", "webhooks:manage", "activity:read"], status: "revoked", createdAt: "2026-06-06 14:20", lastSeenAt: null, callCountToday: 0, productionCallCount: 12 },
 ];
 
 export const mockWebhooks: WebhookSummary[] = [
-  { id: "wh_001", url: "https://example.invalid/botapp/webhook", events: ["profile.started", "incident.created"], status: "active", lastDeliveryStatus: "ok" },
-  { id: "wh_002", url: "https://automation.example.invalid/hooks/phone-farm", events: ["device.offline"], status: "disabled", lastDeliveryStatus: "failed" },
+  { id: "wh_001", url: "https://hooks.example.invalid/••••/slack-incidents", events: ["slack.incident", "credential.action_required", "account.blocked"], status: "active", lastDeliveryStatus: "ok", lastDeliveryAt: "2026-06-11 10:12", provider: "slack", latestError: null },
+  { id: "wh_002", url: "https://hooks.example.invalid/••••/ops-discord", events: ["discord.incident", "device.offline", "run.failed"], status: "active", lastDeliveryStatus: "pending", lastDeliveryAt: null, provider: "discord", latestError: null },
+  { id: "wh_003", url: "https://client.example.invalid/••••/compass", events: ["compass.critical_recommendation", "ct.quality_alert", "profile.targets.updated"], status: "disabled", lastDeliveryStatus: "failed", lastDeliveryAt: "2026-06-10 18:25", provider: "custom", latestError: "The read operation timed out." },
 ];
 
 export const mockSettings: AppSettings = {

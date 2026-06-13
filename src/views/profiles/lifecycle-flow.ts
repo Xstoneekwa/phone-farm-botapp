@@ -17,6 +17,8 @@ function addUtcDays(date: Date, days: number) {
 }
 
 function lifecycleStatus(profile: BotProfile): ProfileLifecycleStatus {
+  if (profile.lifecycleStatus) return profile.lifecycleStatus;
+  if (profile.status === "trashed") return "trashed";
   if (profile.status === "archived") return "archived";
   return "active";
 }

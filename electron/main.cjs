@@ -3,6 +3,7 @@
 const { app, BrowserWindow, ipcMain, session, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const { spawnSync } = require("node:child_process");
 const { closeAllDeviceViews, registerDeviceViewIpc, runDeviceViewSelfTest } = require("./device-view-manager.cjs");
@@ -348,6 +349,23 @@ function relayHeaders(cfg = compassConfig()) {
   return headers;
 }
 
+function safeSha256Prefix(value) {
+  const normalized = String(value || "");
+  if (!normalized) return null;
+  return crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 8);
+}
+
+function localRelayDiagnostics(cfg = compassConfig()) {
+  return {
+    present: Boolean(cfg.relayKey),
+    length: cfg.relayKey ? cfg.relayKey.length : 0,
+    sha256_prefix: safeSha256Prefix(cfg.relayKey),
+    relayUrlConfigured: Boolean(cfg.relayUrl),
+    relayOrigin: dashboardOrigin(cfg) || null,
+    loadedFrom: process.env[["BOTAPP", "RELAY", "API", "KEY"].join("_")] ? "env" : readRuntimeConfig().botappRelayKey ? "runtime_config" : "missing",
+  };
+}
+
 function dashboardOrigin(cfg = compassConfig()) {
   if (!cfg.relayUrl) return "";
   try {
@@ -385,6 +403,8 @@ const endpointTestState = new Map();
 const botappBuildCommit = "9cf02ad";
 const runtimeIpcHandlers = [
   "botapp:runtime:status",
+  "botapp:dispatcher:status",
+  "botapp:dispatcher:action",
   "botapp:compass:ai-status",
   "botapp:compass:save-relay-config",
   "botapp:compass:remove-relay-config",
@@ -393,6 +413,7 @@ const runtimeIpcHandlers = [
   "botapp:auto-restart:dry-run",
   "botapp:auto-restart:action-preview",
   "botapp:data:overview",
+  "botapp:relay:health",
   "botapp:devices:list",
   "botapp:profiles:details",
   "botapp:profiles:create-dry-run",
@@ -403,6 +424,9 @@ const runtimeIpcHandlers = [
   "botapp:profiles:action",
   "botapp:profiles:assign-now",
   "botapp:profiles:readiness-now",
+  "botapp:profiles:auto-login",
+  "botapp:profiles:run-stop",
+  "botapp:profiles:run-progress",
   "botapp:profiles:targets:add",
   "botapp:profiles:targets:bulk-add",
   "botapp:profiles:targets:delete",
@@ -415,6 +439,8 @@ const runtimeIpcHandlers = [
   "botapp:integrations:save-webhook",
   "botapp:integrations:remove-webhook",
 ];
+const dispatcherWrapperPath = process.env.BOTAPP_DISPATCHER_WRAPPER_PATH || "/Users/admin/instagram-worker-python/scripts/run_control_dispatcher_service.sh";
+const dispatcherAllowedActions = new Set(["status", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"]);
 const botappEndpointRegistry = [
   {
     id: "botapp_overview",
@@ -428,12 +454,34 @@ const botappEndpointRegistry = [
     testStrategy: "fetch",
   },
   {
+    id: "botapp_relay_health",
+    name: "BotApp relay health",
+    method: "GET",
+    path: "/api/instagram-dashboard/botapp/relay-health",
+    usedBy: ["Runtime Health", "Profiles"],
+    purpose: "Verify BotApp relay authentication and critical route availability without creating runs or accounts",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
     id: "devices_overview",
     name: "Devices overview",
     method: "GET",
     path: "/api/instagram-dashboard/devices",
     usedBy: ["Devices", "Overview", "Auto Restart", "Compass"],
     purpose: "Load physical phones and runtime heartbeat status",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "run_control_health",
+    name: "Run Control dispatcher health",
+    method: "GET",
+    path: "/api/instagram-dashboard/runs/health",
+    usedBy: ["Runtime Health", "Profiles"],
+    purpose: "Read Supabase heartbeat projection for the local run-control dispatcher without mutating runs",
     authRequired: true,
     status: "active",
     testStrategy: "fetch",
@@ -565,7 +613,40 @@ const botappEndpointRegistry = [
     method: "POST",
     path: "/api/instagram-dashboard/readiness/now",
     usedBy: ["Profiles", "Settings"],
-    purpose: "Preview login/provisioning readiness through secure relay without creating run requests",
+    purpose: "Refresh login/connect readiness through secure relay (dry_run, no device run)",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_auto_login_start",
+    name: "Profile Auto Login start",
+    method: "POST",
+    path: "/api/instagram-dashboard/runs/start",
+    usedBy: ["Profiles"],
+    purpose: "Create a real login_provisioning account_run_request through the secure BotApp relay",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_run_stop",
+    name: "Profile run stop",
+    method: "POST",
+    path: "/api/instagram-dashboard/stop",
+    usedBy: ["Profiles"],
+    purpose: "Cancel an active account_run_request or reconcile an active technical run through secure relay",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_run_progress",
+    name: "Profile run progress",
+    method: "GET",
+    path: "/api/instagram-dashboard/runs/progress",
+    usedBy: ["Profiles"],
+    purpose: "Poll safe login provisioning progress without creating runs",
     authRequired: true,
     status: "active",
     testStrategy: "none",
@@ -1246,21 +1327,22 @@ async function profileCreate(input) {
   if (!cfg.relayUrl) return { ok: false, error: "Configure the relay URL in API / Webhooks / Keys to create profiles." };
   try {
     const payload = sanitizeAddProfilePayload(input);
-    delete payload.password;
-    delete payload.email;
+    const hasPassword = Boolean(String(payload.password || "").trim());
     console.log("[botapp] profile_create_request", {
       schedule_mode: payload.schedule_mode || null,
       has_starts_at: Boolean(payload.starts_at),
       has_ends_at: Boolean(payload.ends_at),
       has_device_id: Boolean(payload.device_id),
       has_app_instance_id: Boolean(payload.app_instance_id),
+      credentials_requested: hasPassword,
     });
     const result = await dashboardRequestResult("POST", "profiles_create", {
       ...payload,
       dry_run: false,
-      login_method: "manual",
-      credential_status: "not_submitted",
-      credentials_submitted: false,
+      login_method: hasPassword ? "credentials" : (payload.login_method || "manual"),
+      submit_credentials: hasPassword,
+      credential_status: hasPassword ? "pending_write_only" : "not_submitted",
+      credentials_submitted: hasPassword,
       provisioning_enabled: false,
       login_enabled: false,
       start_run: false,
@@ -1271,11 +1353,18 @@ async function profileCreate(input) {
         reason: result.error,
         account_id: partial?.account_id || null,
         assignment_failed: partial?.assignment_failed ?? null,
+        credentials_saved: partial?.credentials_saved ?? null,
       });
       return { ok: false, error: result.error, partial };
     }
     const accountId = result.data?.account?.id || result.data?.account_id || null;
-    console.log("[botapp] create_success", { account_id: accountId });
+    console.log("[botapp] create_success", {
+      account_id: accountId,
+      credentials_configured: result.data?.credentials_configured ?? null,
+      login_started: false,
+      provisioning_started: false,
+      run_started: false,
+    });
     return { ok: true, data: result.data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Profile create failed.") };
@@ -1543,7 +1632,7 @@ async function performProfileAction(input) {
   const action = String(input?.action || "").trim().toLowerCase();
   const reason = String(input?.reason || "botapp_account_action").trim().slice(0, 160) || "botapp_account_action";
   if (!accountId) return { ok: false, error: "Missing account id." };
-  if (!["start", "stop", "archive", "restore"].includes(action)) return { ok: false, error: "Unsupported account action." };
+  if (!["start", "stop", "archive", "trash", "restore"].includes(action)) return { ok: false, error: "Unsupported account action." };
   try {
     const common = {
       account_id: accountId,
@@ -1572,7 +1661,7 @@ async function performProfileAction(input) {
       });
     return { ok: true, data };
   } catch (error) {
-    return { ok: false, error: safeRuntimeError(error, "Profile account action failed.") };
+    return { ok: false, error: safeLifecycleActionError(error, action) };
   }
 }
 
@@ -1604,6 +1693,61 @@ async function profileReadinessNow(input) {
     return { ok: true, data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Readiness check failed.") };
+  }
+}
+
+function safeIdempotencyPart(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_.:-]+/g, "_")
+    .slice(0, 80) || "account";
+}
+
+async function profileAutoLoginStart(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const username = safeIdempotencyPart(input?.username || input?.account_username || accountId);
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  try {
+    const data = await dashboardPost("profiles_auto_login_start", {
+      account_id: accountId,
+      requested_run_type: "login_provisioning",
+      trigger: "manual",
+      manual_start: true,
+      idempotency_key: `botapp:${username}:login_provisioning:${Date.now()}`,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Auto Login request failed.") };
+  }
+}
+
+async function profileRunStop(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  try {
+    const data = await dashboardPost("profiles_run_stop", {
+      account_id: accountId,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Run stop failed.") };
+  }
+}
+
+async function profileRunProgress(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const requestId = String(input?.requestId || input?.request_id || "").trim();
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  try {
+    const data = await dashboardGetWithQuery("profiles_run_progress", {
+      account_id: accountId,
+      request_id: requestId,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Run progress unavailable.") };
   }
 }
 
@@ -1701,6 +1845,7 @@ function sanitizeAddProfilePayload(input) {
     "schedule_mode",
     "starts_at",
     "ends_at",
+    "submit_credentials",
     "credential_status",
     "credentials_submitted",
     "credentials_deferred",
@@ -2167,6 +2312,35 @@ function readProfileNumber(account, index) {
   return Number.isFinite(value) && value > 0 ? value : index + 1;
 }
 
+function readNullableProfileNumber(account, keys) {
+  for (const key of keys) {
+    const value = Number(account?.[key]);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+  return null;
+}
+
+function readProfileLifecycleStatus(account) {
+  const accountLifecycle = normalizeMatchText(
+    account?.accountLifecycleStatus || account?.account_lifecycle_status || account?.status || "",
+  );
+  if (accountLifecycle === "trashed" || accountLifecycle === "trash" || account?.trashedAt || account?.trashed_at) return "trashed";
+  if (accountLifecycle === "archived" || account?.archivedAt || account?.archived_at) return "archived";
+  if (account?.trashedAt || account?.trashed_at) return "trashed";
+  if (account?.archivedAt || account?.archived_at) return "archived";
+  return "active";
+}
+
+function safeLifecycleActionError(error, action) {
+  const raw = safeRuntimeError(error, "Profile account action failed.");
+  if (/check constraint|violates|admin_lifecycle_status_check|lifecycle status mapping is invalid/i.test(raw)) {
+    if (action === "trash") return "Move to Bin failed. Lifecycle status mapping is invalid.";
+    if (action === "archive") return "Archive failed. Lifecycle status mapping is invalid.";
+    if (action === "restore") return "Restore failed. Lifecycle status mapping is invalid.";
+  }
+  return raw;
+}
+
 function readDeviceId(account, device) {
   return String(device?.id || account?.deviceId || account?.device_id || account?.phoneId || account?.phone_id || account?.assignment?.deviceId || "");
 }
@@ -2198,6 +2372,7 @@ function readProfileStatus(account, blocked) {
   if (raw.includes("running")) return "running";
   if (raw.includes("pause")) return "paused";
   if (raw.includes("archive")) return "archived";
+  if (raw.includes("trash") || raw.includes("delete")) return "trashed";
   if (blocked) return "blocked";
   return "ready";
 }
@@ -2239,9 +2414,13 @@ function readEntitlements(account, packageValue) {
 
 function readCredentialStatus(account) {
   const value = String(account?.credentialsStatus || account?.credentialStatus || account?.credential_status || "");
+  const reauthRequired = account?.reauthRequired === true || account?.reauth_required === true;
   if (/missing/i.test(value)) return "missing";
-  if (/reauth|invalid|failed|update/i.test(value)) return "needs_update";
-  return "active";
+  if (/invalid|failed|password_invalid/i.test(value)) return "needs_update";
+  if (/active|configured/i.test(value)) return reauthRequired ? "saved_pending_verification" : "active";
+  if (/reauth/i.test(value)) return reauthRequired ? "saved_pending_verification" : "needs_update";
+  if (/update/i.test(value)) return "needs_update";
+  return value ? "active" : "missing";
 }
 
 function readLoginStatus(account) {
@@ -2253,6 +2432,35 @@ function readLoginStatus(account) {
   return "ready";
 }
 
+function readRefreshReadinessRequirement({
+  account,
+  credentialStatus,
+  loginStatus,
+  device,
+  appInstanceId,
+  assignmentState,
+  deviceAvailability,
+  profileStatus,
+}) {
+  const lifecycle = normalizeMatchText(`${account?.adminStatus || account?.admin_status || ""} ${account?.customerStatus || account?.customer_status || ""} ${account?.subscriptionStatus || account?.subscription_status || ""} ${account?.status || ""}`);
+  if (lifecycle.includes("cancel") || lifecycle.includes("delete") || lifecycle.includes("trashed") || lifecycle.includes("archived") || profileStatus === "archived" || profileStatus === "paused") {
+    return requirementState(false, "status_blocked", "Account unavailable", "Archived, deleted, cancelled, or paused accounts cannot refresh readiness.");
+  }
+  if (credentialStatus === "missing" || loginStatus === "missing_credentials") {
+    return requirementState(false, "missing_credentials", "Missing credentials", "Save Instagram credentials before refreshing readiness.");
+  }
+  if (credentialStatus === "needs_update" || loginStatus === "password_invalid") {
+    return requirementState(false, "password_needs_update", "Credentials invalid", "Update the Instagram password before refreshing readiness.");
+  }
+  if (!device?.id || !appInstanceId || assignmentState === "missing_slot") {
+    return requirementState(false, "assignment_missing", "Device not assigned", "Assign a phone and Instagram app instance first.");
+  }
+  if (assignmentState === "blocked" || deviceAvailability === "offline" || deviceAvailability === "maintenance") {
+    return requirementState(false, "device_unavailable", "Device unavailable", "The assigned phone or Instagram app instance is unavailable.");
+  }
+  return requirementState(true, "ready", "Ready", "Refresh saved credentials, login status, assignment, and connect readiness.");
+}
+
 function readRequirement(blocked, label) {
   return {
     enabled: !blocked,
@@ -2260,6 +2468,46 @@ function readRequirement(blocked, label) {
     label: blocked ? "Blocked" : label,
     detail: blocked ? "Runtime or credential gate blocked" : "Prerequisites are satisfied.",
   };
+}
+
+function requirementState(enabled, reason, label, detail) {
+  return { enabled, reason, label, detail };
+}
+
+function readAutoLoginRequirement({
+  account,
+  credentialStatus,
+  loginStatus,
+  device,
+  appInstanceId,
+  assignmentState,
+  deviceAvailability,
+  runtimeLock,
+  profileStatus,
+}) {
+  const lifecycle = normalizeMatchText(`${account?.adminStatus || account?.admin_status || ""} ${account?.customerStatus || account?.customer_status || ""} ${account?.subscriptionStatus || account?.subscription_status || ""} ${account?.status || ""}`);
+  if (lifecycle.includes("cancel") || lifecycle.includes("delete") || lifecycle.includes("trashed") || lifecycle.includes("archived")) {
+    return requirementState(false, "status_blocked", "Account unavailable", "Archived, deleted, cancelled, or trashed accounts cannot start Auto Login.");
+  }
+  if (credentialStatus === "missing" || loginStatus === "missing_credentials") {
+    return requirementState(false, "missing_credentials", "Missing credentials", "Add or update Instagram credentials before Auto Login.");
+  }
+  if (credentialStatus === "saved_pending_verification") {
+    return requirementState(true, "ready_to_connect", "Ready to connect", "Credentials are saved. Auto Login will verify the Instagram session on the assigned phone.");
+  }
+  if (credentialStatus === "needs_update" || loginStatus === "password_invalid") {
+    return requirementState(false, "password_needs_update", "Credentials invalid", "Update the Instagram password before Auto Login.");
+  }
+  if (!device?.id || !appInstanceId || assignmentState === "missing_slot") {
+    return requirementState(false, "assignment_missing", "Device not assigned", "Assign a phone and Instagram app instance before Auto Login.");
+  }
+  if (assignmentState === "blocked" || deviceAvailability === "offline" || deviceAvailability === "maintenance") {
+    return requirementState(false, "device_unavailable", "Device unavailable", "The assigned phone or Instagram app instance is not available for Auto Login.");
+  }
+  if (runtimeLock !== "none" || profileStatus === "running") {
+    return requirementState(false, "login_already_running", "Active run in progress", "Wait for the active run/request to finish before Auto Login.");
+  }
+  return requirementState(true, "ready", "Ready to connect", "Credentials are saved and the assigned phone/app can run login_provisioning.");
 }
 
 function readFollowerDelta(account) {
@@ -2296,7 +2544,13 @@ function readLastSessionAt(account) {
 }
 
 function profileFromManageAccount(account, index, devices) {
-  const blocked = Boolean(account?.blockingCampaign || account?.pendingActionsCount > 0 || /checkpoint|challenge|missing|blocked|failed|reauth/i.test(`${account?.loginStatus || ""} ${account?.credentialsStatus || ""}`));
+  const loginVerificationPending = account?.reauthRequired === true || account?.reauth_required === true;
+  const hardLoginBlock = /checkpoint|challenge|password_invalid|missing_credentials/i.test(String(account?.loginStatus || account?.login_status || ""));
+  const blocked = Boolean(
+    account?.blockingCampaign
+    || (account?.pendingActionsCount > 0 && !loginVerificationPending)
+    || hardLoginBlock,
+  );
   const device = resolveProfileDevice(account, devices);
   const eligibilityReason = readEligibilityReason(account, blocked);
   const eligibility = readEligibility(account, blocked);
@@ -2305,6 +2559,15 @@ function profileFromManageAccount(account, index, devices) {
   const entitlements = readEntitlements(account, packageValue);
   const scheduleModeValue = readScheduleMode(account) || null;
   const scheduleLabelValue = readActiveWindow(account);
+  const credentialStatus = readCredentialStatus(account);
+  const loginStatus = readLoginStatus(account);
+  const deviceAvailability = readDeviceAvailability(account, device);
+  const assignmentState = readAssignmentState(account, device);
+  const appInstanceId = String(account?.appInstanceId || account?.app_instance_id || account?.assignment?.appInstanceId || account?.assignment?.app_instance_id || "");
+  const lifecycleStatus = readProfileLifecycleStatus(account);
+  const appInstanceIndex = readNullableProfileNumber(account, ["appInstanceIndex", "app_instance_index", "cloneIndex", "clone_index"]);
+  const profileStatus = lifecycleStatus === "archived" ? "archived" : lifecycleStatus === "trashed" ? "trashed" : readProfileStatus(account, blocked);
+  const runtimeLock = String(account?.runtimeLock || account?.runtime_lock || "none");
   const hasAssignment = Boolean(
     account?.assignmentStatus
     || account?.assignment_status
@@ -2329,10 +2592,18 @@ function profileFromManageAccount(account, index, devices) {
     planType: "normal",
     profileNumber: readProfileNumber(account, index),
     clientName: String(account?.clientName || "Client"),
-    status: readProfileStatus(account, blocked),
+    status: profileStatus,
     deviceId: readDeviceId(account, device),
     deviceName: readDeviceName(account, device),
-    appInstanceId: String(account?.appInstanceId || account?.app_instance_id || account?.assignment?.appInstanceId || account?.assignment?.app_instance_id || ""),
+    appInstanceId,
+    appInstanceLabel: account?.appInstanceLabel || account?.app_instance_label || account?.assignment?.appInstanceLabel || null,
+    appInstanceIndex,
+    cloneIndex: appInstanceIndex,
+    lifecycleStatus,
+    archivedAt: account?.archivedAt || account?.archived_at || null,
+    trashedAt: account?.trashedAt || account?.trashed_at || null,
+    scheduledTrashAt: account?.scheduledTrashAt || account?.scheduled_trash_at || null,
+    scheduledDeleteAt: account?.scheduledDeleteAt || account?.scheduled_delete_at || null,
     activeWindow: scheduleLabelValue,
     scheduleLabel: scheduleLabelValue,
     followers: Number(account?.followerDelta3d?.currentFollowers ?? account?.followersCount ?? account?.followers_count ?? account?.followers ?? 0),
@@ -2343,15 +2614,35 @@ function profileFromManageAccount(account, index, devices) {
     dmsToday: Number(account?.dmsToday || account?.dms_today || 0),
     counters: profileCounters(account),
     twoFactorEnabled: /enabled/i.test(String(account?.twoFactorDisplay || "")),
-    credentialStatus: readCredentialStatus(account),
-    loginStatus: readLoginStatus(account),
-    deviceAvailability: readDeviceAvailability(account, device),
-    assignmentState: readAssignmentState(account, device),
+    credentialStatus,
+    loginStatus,
+    deviceAvailability,
+    assignmentState,
     entitlements,
     runtimeProfile: readRuntimeProfile(account),
     scheduleMode: scheduleModeValue,
     slotKind: readSlotKind(account),
-    autoLoginRequirement: readRequirement(blocked, "Ready to login"),
+    autoLoginRequirement: readAutoLoginRequirement({
+      account,
+      credentialStatus,
+      loginStatus,
+      device,
+      appInstanceId,
+      assignmentState,
+      deviceAvailability,
+      runtimeLock,
+      profileStatus,
+    }),
+    refreshReadinessRequirement: readRefreshReadinessRequirement({
+      account,
+      credentialStatus,
+      loginStatus,
+      device,
+      appInstanceId,
+      assignmentState,
+      deviceAvailability,
+      profileStatus,
+    }),
     assignNowRequirement: readRequirement(blocked, "Ready to assign"),
     lastSessionAt: readLastSessionAt(account),
     readiness,
@@ -2363,7 +2654,7 @@ function profileFromManageAccount(account, index, devices) {
       reason_label: eligibility === "blocked_now" ? eligibilityReason.replaceAll("_", " ") : "Ready",
       reason_description: eligibility === "blocked_now" ? "Start is blocked until eligibility is resolved." : "Ready",
     },
-    runtimeLock: String(account?.runtimeLock || account?.runtime_lock || "none"),
+    runtimeLock,
   };
 }
 
@@ -2386,7 +2677,7 @@ function clientAccountFromManage(account, profile, devices) {
     adminStatus: String(account?.adminStatus || "unknown"),
     customerStatus: String(account?.customerStatus || "unknown"),
     subscriptionStatus: String(account?.subscriptionStatus || "unknown"),
-    lifecycleStatus: status === "cancelled" ? "cancelled" : status === "paused" ? "paused" : "active",
+    lifecycleStatus: profile.lifecycleStatus || (status === "cancelled" ? "deleted" : "active"),
     loginStatus: profile.loginStatus,
     credentialStatus: profile.credentialStatus,
     credentialsConfigured: Boolean(account?.credentialsConfigured),
@@ -2880,6 +3171,75 @@ async function botappOverviewData() {
   };
 }
 
+async function botappRelayHealth() {
+  const cfg = compassConfig();
+  const checkedAt = new Date().toISOString();
+  const localRelay = localRelayDiagnostics(cfg);
+  if (!cfg.relayUrl) {
+    return {
+      ok: false,
+      relay_authenticated: false,
+      backend_configured: false,
+      source: "botapp_local",
+      server_time: null,
+      reason: "unreachable",
+      backend_key: { present: false, length: 0, sha256_prefix: null, environment_scope: "unknown" },
+      provided_key: { present: localRelay.present, length: localRelay.length, sha256_prefix: localRelay.sha256_prefix },
+      routes: {},
+      message: "Relay URL is not configured in BotApp.",
+      checkedAt,
+      localRelay,
+    };
+  }
+
+  try {
+    const result = await dashboardRequestResult("GET", "botapp_relay_health");
+    const data = result.ok ? result.data : (result.data?.data || result.data || {});
+    const backendKey = data?.backend_key && typeof data.backend_key === "object" ? data.backend_key : {};
+    const providedKey = data?.provided_key && typeof data.provided_key === "object" ? data.provided_key : {};
+    const routes = data?.routes && typeof data.routes === "object" ? data.routes : {};
+    return {
+      ok: Boolean(data?.ok),
+      relay_authenticated: Boolean(data?.relay_authenticated),
+      backend_configured: Boolean(data?.backend_configured),
+      source: String(data?.source || "botapp_relay"),
+      server_time: typeof data?.server_time === "string" ? data.server_time : null,
+      reason: data?.reason || null,
+      backend_key: {
+        present: Boolean(backendKey.present),
+        length: Number.isFinite(Number(backendKey.length)) ? Number(backendKey.length) : 0,
+        sha256_prefix: typeof backendKey.sha256_prefix === "string" ? backendKey.sha256_prefix : null,
+        environment_scope: typeof backendKey.environment_scope === "string" ? backendKey.environment_scope : "unknown",
+      },
+      provided_key: {
+        present: Boolean(providedKey.present),
+        length: Number.isFinite(Number(providedKey.length)) ? Number(providedKey.length) : localRelay.length,
+        sha256_prefix: typeof providedKey.sha256_prefix === "string" ? providedKey.sha256_prefix : localRelay.sha256_prefix,
+      },
+      routes,
+      route_paths: data?.route_paths && typeof data.route_paths === "object" ? data.route_paths : {},
+      message: data?.relay_authenticated ? "BotApp relay auth OK." : result.error || readRelayError(data, "BotApp relay auth failed."),
+      checkedAt,
+      localRelay,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      relay_authenticated: false,
+      backend_configured: false,
+      source: "botapp_relay",
+      server_time: null,
+      reason: "unreachable",
+      backend_key: { present: false, length: 0, sha256_prefix: null, environment_scope: "unknown" },
+      provided_key: { present: localRelay.present, length: localRelay.length, sha256_prefix: localRelay.sha256_prefix },
+      routes: {},
+      message: safeRuntimeError(error, "BotApp relay health unavailable."),
+      checkedAt,
+      localRelay,
+    };
+  }
+}
+
 async function botappDevicesList(input = {}) {
   try {
     const data = await dashboardGet("devices_overview");
@@ -2905,6 +3265,7 @@ function readRelayError(data, fallback) {
   if (typeof providerErrorCode === "string" && providerErrorCode) return `Provider error: ${providerErrorCode}`;
   if (reason === "relay_auth_required") return "Relay authentication is required.";
   if (reason === "relay_auth_invalid") return "Relay authentication failed.";
+  if (reason === "relay_auth_unconfigured") return "Dashboard backend relay credential is not configured. Set the matching backend and BotApp relay credential, then restart/deploy the dashboard backend.";
   if (typeof data?.error === "string") return data.error;
   if (typeof data?.message === "string") return data.message;
   return fallback;
@@ -3100,8 +3461,222 @@ function runtimeIntegrationStatus() {
   };
 }
 
+function safeDispatcherText(value) {
+  const sensitiveEnvNames = [
+    ["SUPABASE", "SERVICE", "ROLE", "KEY"].join("_"),
+    ["BOTAPP", "RELAY", "API", "KEY"].join("_"),
+    "RELAY_KEY",
+    "PASSWORD",
+    "TOKEN",
+    "SECRET",
+  ].join("|");
+  return String(value || "")
+    .replace(new RegExp(`(${sensitiveEnvNames})[^,\\n]*`, "gi"), "$1=[redacted]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .slice(0, 600);
+}
+
+function dispatcherFallbackStatus(status, message, extra = {}) {
+  const now = new Date().toISOString();
+  return {
+    ok: false,
+    status,
+    dispatcher_id: "",
+    worker_id: "",
+    paused: false,
+    processRunning: false,
+    pid: null,
+    processCount: 0,
+    duplicateProcess: false,
+    launchdLoaded: false,
+    launchEnabled: false,
+    healthOnly: false,
+    allowExistingQueue: false,
+    heartbeatAge: null,
+    lastSeenAt: null,
+    preflightOk: false,
+    preflight: null,
+    queueActiveCount: null,
+    lastError: message,
+    logsPath: null,
+    supabaseRestStatus: "unknown",
+    deviceCountOnline: null,
+    checkedAt: now,
+    message,
+    ...extra,
+  };
+}
+
+function normalizeDispatcherStatus(raw, action) {
+  const preflight = raw && typeof raw.preflight === "object" && !Array.isArray(raw.preflight) ? raw.preflight : null;
+  const lastError = safeDispatcherText(raw?.lastError || preflight?.reason || preflight?.error || "");
+  const status = ["running", "paused", "stopped", "unhealthy", "starting", "unknown"].includes(raw?.status) ? raw.status : "unknown";
+  return {
+    ok: Boolean(raw?.ok),
+    status,
+    dispatcher_id: String(raw?.dispatcher_id || raw?.worker_id || ""),
+    worker_id: String(raw?.worker_id || raw?.dispatcher_id || ""),
+    paused: Boolean(raw?.paused),
+    processRunning: Boolean(raw?.processRunning),
+    pid: Number.isFinite(Number(raw?.pid)) ? Number(raw.pid) : null,
+    processCount: Number.isFinite(Number(raw?.processCount)) ? Number(raw.processCount) : 0,
+    duplicateProcess: Boolean(raw?.duplicateProcess),
+    launchdLoaded: Boolean(raw?.launchdLoaded),
+    launchEnabled: Boolean(raw?.launchEnabled),
+    healthOnly: Boolean(raw?.healthOnly),
+    allowExistingQueue: Boolean(raw?.allowExistingQueue),
+    heartbeatAge: Number.isFinite(Number(raw?.heartbeatAge)) ? Number(raw.heartbeatAge) : null,
+    lastSeenAt: typeof raw?.lastSeenAt === "string" && raw.lastSeenAt ? raw.lastSeenAt : null,
+    preflightOk: Boolean(raw?.preflightOk),
+    preflight,
+    queueActiveCount: Number.isFinite(Number(raw?.queueActiveCount)) ? Number(raw.queueActiveCount) : null,
+    lastError: lastError || null,
+    logsPath: typeof raw?.logsPath === "string" ? raw.logsPath : null,
+    supabaseRestStatus: raw?.preflightOk ? "ok" : lastError ? "failed" : "unknown",
+    deviceCountOnline: Number.isFinite(Number(raw?.deviceCountOnline)) ? Number(raw.deviceCountOnline) : null,
+    checkedAt: typeof raw?.checkedAt === "string" && raw.checkedAt ? raw.checkedAt : new Date().toISOString(),
+    message: safeDispatcherText(raw?.message || "Dispatcher status unavailable."),
+    action,
+  };
+}
+
+function mergeRunControlProjection(localStatus, projection) {
+  if (!projection || typeof projection !== "object") return localStatus;
+  const heartbeatAge = Number.isFinite(Number(projection.heartbeatAgeSeconds)) ? Number(projection.heartbeatAgeSeconds) : null;
+  const remoteStatus = typeof projection.dispatcherStatus === "string" && projection.dispatcherStatus ? projection.dispatcherStatus : null;
+  const remoteWorkerId = typeof projection.dispatcherWorkerId === "string" && projection.dispatcherWorkerId ? projection.dispatcherWorkerId : "";
+  const remoteLaunchEnabled = typeof projection.dispatcherLaunchEnabled === "boolean" ? projection.dispatcherLaunchEnabled : localStatus.launchEnabled;
+  return {
+    ...localStatus,
+    dispatcher_id: localStatus.dispatcher_id || remoteWorkerId,
+    worker_id: localStatus.worker_id || remoteWorkerId,
+    launchEnabled: remoteLaunchEnabled,
+    heartbeatAge,
+    lastSeenAt: typeof projection.lastSeenAt === "string" && projection.lastSeenAt ? projection.lastSeenAt : localStatus.lastSeenAt,
+    supabaseRestStatus: "ok",
+    message: localStatus.status === "unknown" && typeof projection.message === "string" ? projection.message : localStatus.message,
+    lastError: localStatus.lastError || (projection.healthy === false ? String(projection.reason || remoteStatus || "dispatcher_unhealthy") : null),
+  };
+}
+
+async function readRunControlProjection() {
+  try {
+    return await dashboardGet("run_control_health");
+  } catch {
+    return null;
+  }
+}
+
+function parseDispatcherJson(stdout) {
+  const lines = String(stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (!line.startsWith("{") || !line.endsWith("}")) continue;
+    try {
+      return JSON.parse(line);
+    } catch {
+      // Try the previous line if stderr-like noise reached stdout.
+    }
+  }
+  return null;
+}
+
+function runDispatcherWrapper(command, args = [], timeoutMs = 25000) {
+  if (!dispatcherAllowedActions.has(command)) {
+    return { ok: false, error: "dispatcher_action_not_allowed" };
+  }
+  if (!fs.existsSync(dispatcherWrapperPath)) {
+    return { ok: false, error: "dispatcher_wrapper_missing" };
+  }
+  try {
+    fs.accessSync(dispatcherWrapperPath, fs.constants.X_OK);
+  } catch {
+    return { ok: false, error: "dispatcher_wrapper_not_executable" };
+  }
+  const result = spawnSync(dispatcherWrapperPath, [command, ...args], {
+    cwd: path.dirname(path.dirname(dispatcherWrapperPath)),
+    encoding: "utf8",
+    shell: false,
+    timeout: timeoutMs,
+    maxBuffer: 1024 * 1024,
+  });
+  if (result.error) {
+    const reason = result.error.code === "ETIMEDOUT" ? "dispatcher_command_timeout" : safeRuntimeError(result.error, "Dispatcher command failed.");
+    return { ok: false, error: reason, stdout: safeDispatcherText(result.stdout), stderr: safeDispatcherText(result.stderr), exitCode: result.status ?? null };
+  }
+  return {
+    ok: result.status === 0,
+    stdout: String(result.stdout || ""),
+    stderr: safeDispatcherText(result.stderr),
+    exitCode: result.status ?? 0,
+  };
+}
+
+async function dispatcherStatus() {
+  const result = runDispatcherWrapper("status", ["--json"]);
+  if (!result.ok && !result.stdout) {
+    const projection = await readRunControlProjection();
+    return mergeRunControlProjection(dispatcherFallbackStatus("unknown", result.error || "Dispatcher status unavailable."), projection);
+  }
+  const parsed = parseDispatcherJson(result.stdout);
+  if (!parsed) {
+    const projection = await readRunControlProjection();
+    return mergeRunControlProjection(dispatcherFallbackStatus("unknown", "Dispatcher status output was not valid JSON.", {
+      lastError: result.error || result.stderr || "dispatcher_status_json_invalid",
+    }), projection);
+  }
+  return mergeRunControlProjection(normalizeDispatcherStatus(parsed, "status"), await readRunControlProjection());
+}
+
+async function dispatcherAction(action) {
+  const normalized = String(action || "").trim();
+  if (!dispatcherAllowedActions.has(normalized) || normalized === "status") {
+    return dispatcherFallbackStatus("unknown", "Dispatcher action is not allowed.", { action: normalized || "status" });
+  }
+  try {
+    if (normalized === "logs") {
+      const result = runDispatcherWrapper("logs", ["--path"], 8000);
+      const logPath = String(result.stdout || "").split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
+      if (!result.ok || !logPath) {
+        return dispatcherFallbackStatus("unknown", result.error || "Dispatcher logs path unavailable.", { action: "logs" });
+      }
+      const openResult = fs.existsSync(logPath)
+        ? shell.showItemInFolder(logPath)
+        : await shell.openPath(path.dirname(logPath));
+      const current = await dispatcherStatus();
+      return {
+        ...current,
+        action: "logs",
+        logsPath: logPath,
+        message: openResult ? safeDispatcherText(openResult) : "Dispatcher logs opened.",
+      };
+    }
+    const timeoutMs = normalized === "restart" || normalized === "fix-duplicate" ? 45000 : 25000;
+    const result = runDispatcherWrapper(normalized, [], timeoutMs);
+    const current = await dispatcherStatus();
+    return {
+      ...current,
+      action: normalized,
+      ok: result.ok && current.ok,
+      lastError: result.ok ? current.lastError : safeDispatcherText(result.error || result.stderr || current.lastError || "dispatcher_action_failed"),
+      message: result.ok ? current.message : `Dispatcher ${normalized} failed. Runtime Health stayed open; retry or use Restart cleanly.`,
+    };
+  } catch (error) {
+    const current = await dispatcherStatus().catch(() => dispatcherFallbackStatus("unknown", "Dispatcher status unavailable after action error."));
+    return {
+      ...current,
+      action: normalized,
+      ok: false,
+      lastError: safeRuntimeError(error, "dispatcher_action_exception"),
+      message: `Dispatcher ${normalized} failed safely. BotApp stayed open.`,
+    };
+  }
+}
+
 function registerRuntimeIpc() {
   ipcMain.handle("botapp:runtime:status", () => runtimeIntegrationStatus());
+  ipcMain.handle("botapp:dispatcher:status", () => dispatcherStatus());
+  ipcMain.handle("botapp:dispatcher:action", (_event, action) => dispatcherAction(action).catch((error) => dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher action crashed safely."))));
   ipcMain.handle("botapp:compass:ai-status", () => compassHealth());
   ipcMain.handle("botapp:compass:save-relay-config", (_event, input) => saveCompassRelayConfig(input));
   ipcMain.handle("botapp:compass:remove-relay-config", () => removeCompassRelayConfig());
@@ -3110,6 +3685,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:auto-restart:dry-run", () => autoRestartDryRun());
   ipcMain.handle("botapp:auto-restart:action-preview", (_event, input) => autoRestartActionPreview(input));
   ipcMain.handle("botapp:data:overview", () => botappOverviewData());
+  ipcMain.handle("botapp:relay:health", () => botappRelayHealth());
   ipcMain.handle("botapp:devices:list", (_event, input) => botappDevicesList(input));
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
   ipcMain.handle("botapp:profiles:stats-history", (_event, input) => profileStatsHistoryData(input?.accountId || input?.account_id || input, input?.days));
@@ -3123,6 +3699,9 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:action", (_event, input) => performProfileAction(input));
   ipcMain.handle("botapp:profiles:assign-now", (_event, input) => assignProfileNow(input));
   ipcMain.handle("botapp:profiles:readiness-now", (_event, input) => profileReadinessNow(input));
+  ipcMain.handle("botapp:profiles:auto-login", (_event, input) => profileAutoLoginStart(input));
+  ipcMain.handle("botapp:profiles:run-stop", (_event, input) => profileRunStop(input));
+  ipcMain.handle("botapp:profiles:run-progress", (_event, input) => profileRunProgress(input));
   ipcMain.handle("botapp:profiles:targets:add", (_event, input) => addProfileTarget(input));
   ipcMain.handle("botapp:profiles:targets:bulk-add", (_event, input) => bulkAddProfileTargets(input));
   ipcMain.handle("botapp:profiles:targets:delete", (_event, input) => deleteProfileTargets(input));

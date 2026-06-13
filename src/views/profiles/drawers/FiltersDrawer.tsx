@@ -15,7 +15,7 @@ export function FiltersDrawer({ profile, onClose, onSave }: { profile: BotProfil
       <span className="subtle">{sourceLabel(data, "filters")}</span>
       <Button onClick={onSave} disabled>Save Filters · backend pending</Button>
     </>}>
-      {loading ? <div className="empty-state">Loading filters from Manage…</div> : null}
+      {loading ? <div className="empty-state">Loading filters from shared backend…</div> : null}
       {!loading && error ? <div className="empty-state"><strong>Filters unavailable</strong><span>{error}</span></div> : null}
       {!loading && !error && data?.filters?.status === "not_available" ? (
         <div className="empty-state"><strong>No filters row in DB</strong><span>Backend pending or account not initialized.</span></div>
