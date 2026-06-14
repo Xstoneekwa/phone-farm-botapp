@@ -1,10 +1,11 @@
 import type { BotProfile, ProfileToolbarAction, ProfileRequirementState } from "../../api/types";
+import { isStartDisabled, isStopEnabled, startDisabledReason, stopDisabledReason } from "./run-control";
 
 const toolbarActions: Array<{ id: ProfileToolbarAction; label: string; danger?: boolean }> = [
   { id: "stats", label: "Stats" },
   { id: "logs", label: "Logs / History" },
   { id: "targets", label: "Targets" },
-  { id: "play", label: "Start" },
+  { id: "play", label: "Start run" },
   { id: "auto_login", label: "Auto Login" },
   { id: "check_readiness", label: "Refresh readiness" },
   { id: "stop", label: "Stop", danger: true },
@@ -51,8 +52,8 @@ function disabledReason(profile: BotProfile, action: ProfileToolbarAction): Prof
 }
 
 function runControlDisabledReason(profile: BotProfile, action: ProfileToolbarAction) {
-  void profile;
-  void action;
+  if (action === "play" && isStartDisabled(profile)) return startDisabledReason(profile);
+  if (action === "stop" && !isStopEnabled(profile)) return stopDisabledReason(profile);
   return null;
 }
 
@@ -63,8 +64,8 @@ function tooltipText(profile: BotProfile, action: ProfileToolbarAction, label: s
   if (requirementReason) return `${label} · ${requirementReason.label}: ${requirementReason.detail}`;
   if (action === "auto_login") return `${label} · ${profile.autoLoginRequirement.label}: ${profile.autoLoginRequirement.detail}`;
   if (action === "check_readiness") return `${label} · ${profile.refreshReadinessRequirement.label}: ${profile.refreshReadinessRequirement.detail}`;
-  if (action === "play") return "Reactivate account status through secure BotApp relay. Does not start a run.";
-  if (action === "stop") return "Pause account status through secure BotApp relay. Does not stop worker runtime.";
+  if (action === "play") return "Start account run through the secure BotApp runtime relay.";
+  if (action === "stop") return "Stop or cancel the active account run through the secure BotApp runtime relay.";
   if (action === "restore") return "Restore account lifecycle through secure BotApp relay. Does not start a run.";
   return label;
 }

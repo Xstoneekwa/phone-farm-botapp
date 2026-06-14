@@ -115,7 +115,7 @@ export type RunControlEligibilityProjection = {
   requested_run_type: "account_session";
 };
 
-export type BotAppRunControlSource = "botapp";
+export type BotAppRunControlSource = "botapp" | "botapp_manual_play" | "botapp_manual_stop";
 
 export type BotAppStartRunPayload = {
   account_id: string;

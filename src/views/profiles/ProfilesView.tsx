@@ -16,6 +16,7 @@ import { buildAssignNowPayload, createAssignNowState } from "./assign-now-flow";
 import { autoLoginLogEntry, autoLoginStateFromStartResult, buildAutoLoginPayload, createAutoLoginStartingState, mergeAutoLoginProgressSnapshot } from "./auto-login-flow";
 import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifecycle-flow";
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
+import { buildStartPayload, buildStopPayload } from "./run-control";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
@@ -547,6 +548,41 @@ export function ProfilesView({
     onRefresh();
   }
 
+  async function startAccountRun(profile: BotProfile) {
+    const startRun = window.botappDesktop?.profiles?.startRun;
+    if (!startRun) {
+      onMockSubmit("Run start relay unavailable in this runtime.", "error");
+      return;
+    }
+    const result = await startRun({ accountId: profile.id, username: profile.username });
+    if (!result.ok) {
+      onMockSubmit(result.error || "Run start failed.", "error");
+      return;
+    }
+    const data = (result.data ?? {}) as Record<string, unknown>;
+    const requestId = String(data.request_id || "").slice(0, 8);
+    const status = String(data.status || "queued");
+    const runType = String(data.requested_run_type || "account_session");
+    onMockSubmit(`Run queued: ${runType} · request=${requestId || "created"} · status=${status}.`, "success");
+    onRefresh();
+  }
+
+  async function stopAccountRun(profile: BotProfile, reason: string) {
+    const stopRun = window.botappDesktop?.profiles?.stopRun;
+    if (!stopRun) {
+      onMockSubmit("Run stop relay unavailable in this runtime.", "error");
+      return;
+    }
+    const result = await stopRun({ accountId: profile.id, reason });
+    if (!result.ok) {
+      onMockSubmit(result.error || "Run stop failed.", "error");
+      return;
+    }
+    const data = (result.data ?? {}) as Record<string, unknown>;
+    onMockSubmit(`Run stop: ${String(data.message || "stop requested")} · canceled=${String(data.canceled_request ?? false)} · stopped=${String(data.stopped ?? false)}.`, "success");
+    onRefresh();
+  }
+
   async function assignProfileNow(profile: BotProfile) {
     const assignNow = window.botappDesktop?.profiles?.assignNow;
     if (!assignNow) {
@@ -644,12 +680,12 @@ export function ProfilesView({
   function executeConfirm(action: { kind: ConfirmKind; profile: BotProfile }) {
     if (action.kind === "play") {
       setConfirmAction(null);
-      void performSafeAccountAction(action.profile, "start", "botapp_account_action_start");
+      void startAccountRun(action.profile);
       return;
     }
     if (action.kind === "stop") {
       setConfirmAction(null);
-      void performSafeAccountAction(action.profile, "stop", stopReason || "botapp_account_action_stop");
+      void stopAccountRun(action.profile, stopReason || "botapp_manual_stop");
       return;
     }
     if (action.kind === "auto_login") {
@@ -927,8 +963,8 @@ export function ProfilesView({
 }
 
 function confirmTitle(kind: ConfirmKind, profile: BotProfile) {
-  if (kind === "play") return `Reactivate account ${profile.username}?`;
-  if (kind === "stop") return `Pause account ${profile.username}?`;
+  if (kind === "play") return `Start account run for ${profile.username}?`;
+  if (kind === "stop") return `Stop account run for ${profile.username}?`;
   if (kind === "auto_login") return `Auto Login ${profile.username}?`;
   if (kind === "check_readiness") return "Refresh login readiness?";
   if (kind === "assign_now") return "Assign phone slot now?";
@@ -939,26 +975,20 @@ function confirmTitle(kind: ConfirmKind, profile: BotProfile) {
 }
 
 function StartConfirmation({ profile }: { profile: BotProfile }) {
-  const payload = {
-    account_id: profile.id,
-    action: "start",
-    reason: "botapp_account_action_start",
-    start_run: false,
-    provisioning_enabled: false,
-    login_enabled: false,
-  };
+  const payload = buildStartPayload(profile);
   return (
     <div className="run-confirmation">
-      <p><strong>This is a backend-only account status write.</strong></p>
-      <p className="assign-now-copy">It reactivates the account admin status. It does not create a run request, start a worker, login, or provision a phone.</p>
+      <p><strong>This creates a real account run request.</strong></p>
+      <p className="assign-now-copy">BotApp will call the secure runtime relay to create an account_session account_run_request. Manual / Run manually accounts can start now; scheduled accounts are still protected by the backend schedule gate.</p>
       <div className="detail-list play-eligibility">
         <span>Account</span><code>@{profile.username}</code>
         <span>Device</span><code>{profile.deviceName}</code>
         <span>Timeslot</span><code>{profile.activeWindow}</code>
         <span>Current status</span><code>{profile.status}</code>
         <span>Package</span><code>{profile.package}</code>
-        <span>Endpoint</span><code>/api/instagram-dashboard/accounts/status</code>
-        <span>Runtime</span><code>run_started=false</code>
+        <span>Endpoint</span><code>/api/instagram-dashboard/runs/start</code>
+        <span>Run type</span><code>account_session</code>
+        <span>Source</span><code>botapp_manual_play</code>
       </div>
       <pre className="payload-preview">{JSON.stringify(payload, null, 2)}</pre>
     </div>
@@ -974,25 +1004,18 @@ function StopConfirmation({
   stopReason: string;
   onStopReasonChange: (value: string) => void;
 }) {
-  const payload = {
-    account_id: profile.id,
-    action: "stop",
-    reason: stopReason.trim().slice(0, 160) || "botapp_account_action_stop",
-    start_run: false,
-    provisioning_enabled: false,
-    login_enabled: false,
-  };
+  const payload = buildStopPayload(profile, stopReason);
   return (
     <div className="run-confirmation">
-      <p><strong>This is a backend-only account pause.</strong></p>
-      <p className="assign-now-copy">It writes account admin status only. It does not stop a worker process or reconcile a running session.</p>
+      <p><strong>This stops or cancels the active account run.</strong></p>
+      <p className="assign-now-copy">BotApp will call the secure runtime stop relay to cancel an active account_run_request or reconcile an active ig_run.</p>
       <div className="detail-list play-eligibility">
         <span>Account</span><code>@{profile.username}</code>
         <span>Current status</span><code>{profile.status}</code>
         <span>Last session</span><code>{profile.lastSessionAt ?? "none"}</code>
-        <span>Expected effect</span><span>Pause account admin status through secure BotApp relay.</span>
-        <span>Endpoint</span><code>/api/instagram-dashboard/accounts/status</code>
-        <span>Runtime</span><code>run_started=false</code>
+        <span>Expected effect</span><span>Cancel active account_run_requests and request stop/reconcile active ig_runs.</span>
+        <span>Endpoint</span><code>/api/instagram-dashboard/stop</code>
+        <span>Source</span><code>botapp_manual_stop</code>
       </div>
       <label className="stop-reason-field">
         Optional stop reason

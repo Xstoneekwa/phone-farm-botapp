@@ -58,7 +58,7 @@ export function mockCurrentRunId(profile: BotProfile) {
 }
 
 function idempotencyKey(prefix: "start" | "stop", profile: BotProfile) {
-  return `botapp:${prefix}:${profile.id}:preview`;
+  return `botapp:${prefix}:${profile.id}:manual`;
 }
 
 export function buildStartPayload(profile: BotProfile): BotAppStartRunPayload {
@@ -67,7 +67,7 @@ export function buildStartPayload(profile: BotProfile): BotAppStartRunPayload {
     account_id: profile.id,
     device_id: profile.deviceId,
     requested_by: null,
-    source: "botapp",
+    source: "botapp_manual_play",
     requested_run_type: "account_session",
     trigger: "manual",
     reason: eligibility.reason,
@@ -88,7 +88,7 @@ export function buildStopPayload(profile: BotProfile, reason: string): BotAppSto
     account_id: profile.id,
     device_id: profile.deviceId,
     requested_by: null,
-    source: "botapp",
+    source: "botapp_manual_stop",
     reason: cleanReason,
     run_request_id: mockRunRequestId(profile),
     current_run_id: mockCurrentRunId(profile),

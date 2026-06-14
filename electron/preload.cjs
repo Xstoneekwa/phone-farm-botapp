@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     assignNow: (input) => ipcRenderer.invoke("botapp:profiles:assign-now", input),
     readinessNow: (input) => ipcRenderer.invoke("botapp:profiles:readiness-now", input),
     autoLogin: (input) => ipcRenderer.invoke("botapp:profiles:auto-login", input),
+    startRun: (input) => ipcRenderer.invoke("botapp:profiles:run-start", input),
     stopRun: (input) => ipcRenderer.invoke("botapp:profiles:run-stop", input),
     runProgress: (input) => ipcRenderer.invoke("botapp:profiles:run-progress", input),
     addTarget: (input) => ipcRenderer.invoke("botapp:profiles:targets:add", input),

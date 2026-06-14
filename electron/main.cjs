@@ -426,6 +426,7 @@ const runtimeIpcHandlers = [
   "botapp:profiles:assign-now",
   "botapp:profiles:readiness-now",
   "botapp:profiles:auto-login",
+  "botapp:profiles:run-start",
   "botapp:profiles:run-stop",
   "botapp:profiles:run-progress",
   "botapp:profiles:targets:add",
@@ -670,6 +671,17 @@ const botappEndpointRegistry = [
     path: "/api/instagram-dashboard/readiness/now",
     usedBy: ["Profiles", "Settings"],
     purpose: "Refresh login/connect readiness through secure relay (dry_run, no device run)",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_run_start",
+    name: "Profile run start",
+    method: "POST",
+    path: "/api/instagram-dashboard/runs/start",
+    usedBy: ["Profiles"],
+    purpose: "Create a real account_session account_run_request through the secure BotApp relay",
     authRequired: true,
     status: "active",
     testStrategy: "none",
@@ -1797,6 +1809,25 @@ function safeIdempotencyPart(value) {
     .slice(0, 80) || "account";
 }
 
+async function profileRunStart(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const username = safeIdempotencyPart(input?.username || input?.account_username || accountId);
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  try {
+    const data = await dashboardPost("profiles_run_start", {
+      account_id: accountId,
+      requested_run_type: "account_session",
+      trigger: "manual_botapp",
+      source: "botapp_manual_play",
+      manual_start: true,
+      idempotency_key: `botapp:${username}:account_session:${Date.now()}`,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Account run request failed.") };
+  }
+}
+
 async function profileAutoLoginStart(input) {
   const accountId = String(input?.accountId || input?.account_id || "").trim();
   const username = safeIdempotencyPart(input?.username || input?.account_username || accountId);
@@ -1817,10 +1848,13 @@ async function profileAutoLoginStart(input) {
 
 async function profileRunStop(input) {
   const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const reason = String(input?.reason || "botapp_manual_stop").trim().slice(0, 160) || "botapp_manual_stop";
   if (!accountId) return { ok: false, error: "Missing account id." };
   try {
     const data = await dashboardPost("profiles_run_stop", {
       account_id: accountId,
+      reason,
+      source: "botapp_manual_stop",
     });
     return { ok: true, data };
   } catch (error) {
@@ -3795,6 +3829,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:assign-now", (_event, input) => assignProfileNow(input));
   ipcMain.handle("botapp:profiles:readiness-now", (_event, input) => profileReadinessNow(input));
   ipcMain.handle("botapp:profiles:auto-login", (_event, input) => profileAutoLoginStart(input));
+  ipcMain.handle("botapp:profiles:run-start", (_event, input) => profileRunStart(input));
   ipcMain.handle("botapp:profiles:run-stop", (_event, input) => profileRunStop(input));
   ipcMain.handle("botapp:profiles:run-progress", (_event, input) => profileRunProgress(input));
   ipcMain.handle("botapp:profiles:targets:add", (_event, input) => addProfileTarget(input));

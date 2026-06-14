@@ -122,8 +122,22 @@ test("Emoji renderer parser detects full DM emoji matrix", () => {
 });
 
 test("Stop account run and dispatcher stop are separated", () => {
+  assert.match(mainSource, /profiles_run_start/);
+  assert.match(mainSource, /botapp:profiles:run-start/);
+  assert.match(mainSource, /requested_run_type: "account_session"/);
+  assert.match(mainSource, /trigger: "manual_botapp"/);
+  assert.match(mainSource, /source: "botapp_manual_play"/);
+  assert.match(profilesViewSource, /startAccountRun/);
+  assert.match(profilesViewSource, /\/api\/instagram-dashboard\/runs\/start/);
+  assert.match(profilesViewSource, /Start account run for/);
+  assert.doesNotMatch(profilesViewSource, /Reactivate account/);
+  assert.doesNotMatch(profilesViewSource, /It reactivates the account admin status/);
   assert.match(mainSource, /profiles_run_stop/);
   assert.match(mainSource, /path: "\/api\/instagram-dashboard\/stop"/);
+  assert.match(profilesViewSource, /stopAccountRun/);
+  assert.match(profilesViewSource, /botapp_manual_stop/);
+  assert.doesNotMatch(profilesViewSource, /Pause account/);
+  assert.doesNotMatch(profilesViewSource, /It writes account admin status only/);
   assert.match(mainSource, /profiles_account_status/);
   assert.match(mainSource, /path: "\/api\/instagram-dashboard\/accounts\/status"/);
   assert.match(mainSource, /dispatcherAllowedActions = new Set\(\["status", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"\]\)/);
