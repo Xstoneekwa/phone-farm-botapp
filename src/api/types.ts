@@ -524,6 +524,27 @@ export type ProfileFollowerDelta3d = {
   freshness: string;
 };
 
+export type ProfileRunCounters = {
+  follows: number;
+  unfollows: number;
+  likes: number;
+  comments: number;
+  dms: number;
+  stories: number;
+  interactionsTotal: number;
+  source?: string;
+  runId?: string | null;
+};
+
+export type ProfileRuntimeIndicator = {
+  state: "idle" | "active" | "error";
+  reason: string;
+  lastRunId?: string | null;
+  lastRunStatus?: string | null;
+  lastRunExitCode?: number | null;
+  lastRunFinishedAt?: string | null;
+};
+
 export type BotProfile = {
   id: string;
   username: string;
@@ -551,6 +572,7 @@ export type BotProfile = {
   followerDelta: number;
   followerDelta3d?: ProfileFollowerDelta3d;
   interactionsToday?: number;
+  currentRunCounters?: ProfileRunCounters;
   followsToday: number;
   dmsToday: number;
   counters: ProfileCounters;
@@ -576,6 +598,7 @@ export type BotProfile = {
   activeRunRequestStatus?: string | null;
   activeRunId?: string | null;
   activeRunStatus?: string | null;
+  runtimeIndicator?: ProfileRuntimeIndicator;
 };
 
 export type BotAppClientAccountStatus = "active" | "pending" | "onboarding" | "paused" | "cancelled" | "unknown";

@@ -2667,6 +2667,42 @@ function readInteractionsToday(account) {
   return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
+function readCurrentRunCounters(account) {
+  const source = account?.currentRunCounters && typeof account.currentRunCounters === "object"
+    ? account.currentRunCounters
+    : {};
+  const readCount = (camel, snake) => {
+    const value = Number(source?.[camel] ?? source?.[snake] ?? 0);
+    return Number.isFinite(value) && value >= 0 ? value : 0;
+  };
+  return {
+    follows: readCount("follows", "follows"),
+    unfollows: readCount("unfollows", "unfollows"),
+    likes: readCount("likes", "likes"),
+    comments: readCount("comments", "comments"),
+    dms: readCount("dms", "dms"),
+    stories: readCount("stories", "stories"),
+    interactionsTotal: readCount("interactionsTotal", "interactions_total"),
+    source: String(source?.source || ""),
+    runId: source?.runId || source?.run_id || null,
+  };
+}
+
+function readRuntimeIndicator(account) {
+  const source = account?.runtimeIndicator && typeof account.runtimeIndicator === "object"
+    ? account.runtimeIndicator
+    : {};
+  const state = String(source?.state || "idle").toLowerCase();
+  return {
+    state: state === "active" || state === "error" ? state : "idle",
+    reason: String(source?.reason || "no_active_run"),
+    lastRunId: source?.lastRunId || source?.last_run_id || null,
+    lastRunStatus: source?.lastRunStatus || source?.last_run_status || null,
+    lastRunExitCode: source?.lastRunExitCode ?? source?.last_run_exit_code ?? null,
+    lastRunFinishedAt: source?.lastRunFinishedAt || source?.last_run_finished_at || null,
+  };
+}
+
 function readLastSessionAt(account) {
   return formatCompactDateTime(account?.lastSafeUpdate || account?.last_safe_update || account?.lastSessionAt || account?.last_session_at || null);
 }
@@ -2738,6 +2774,7 @@ function profileFromManageAccount(account, index, devices) {
     followerDelta: readFollowerDelta(account) ?? 0,
     followerDelta3d: readFollowerDelta3d(account),
     interactionsToday: readInteractionsToday(account),
+    currentRunCounters: readCurrentRunCounters(account),
     followsToday: Number(account?.followsToday || account?.follows_today || 0),
     dmsToday: Number(account?.dmsToday || account?.dms_today || 0),
     counters: profileCounters(account),
@@ -2787,6 +2824,7 @@ function profileFromManageAccount(account, index, devices) {
     activeRunRequestStatus: account?.activeRunRequestStatus || account?.active_run_request_status || null,
     activeRunId: account?.activeRunId || account?.active_run_id || null,
     activeRunStatus: account?.activeRunStatus || account?.active_run_status || null,
+    runtimeIndicator: readRuntimeIndicator(account),
   };
 }
 

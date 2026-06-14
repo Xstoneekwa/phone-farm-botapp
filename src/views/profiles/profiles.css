@@ -31,9 +31,9 @@
 .profile-account-row { display: grid; grid-template-columns: 6px minmax(88px, .58fr) minmax(134px, .8fr) minmax(94px, .58fr) 94px minmax(118px, .78fr) 64px 330px; gap: 4px; align-items: center; min-height: 42px; padding: 5px 6px; border-top: 1px solid #F0F0EE; }
 .profile-account-row:hover { background: #FAFAF8; }
 .profile-dot { width: 8px; height: 8px; border-radius: 2px; background: #9CA3AF; justify-self: center; }
-.profile-dot.status-running { background: #22C55E; }
-.profile-dot.status-blocked, .profile-dot.status-paused { background: #F59E0B; }
-.profile-dot.status-archived, .profile-dot.status-trashed { background: #9CA3AF; }
+.profile-dot.runtime-active { background: #22C55E; box-shadow: 0 0 0 2px rgba(34, 197, 94, .12); }
+.profile-dot.runtime-error { background: #DC2626; box-shadow: 0 0 0 2px rgba(220, 38, 38, .12); }
+.profile-dot.runtime-idle { background: #9CA3AF; }
 .profile-name-cell { min-width: 0; display: grid; gap: 2px; }
 .profile-username { font-size: 11.5px; line-height: 1.1; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .profile-client-cell { min-width: 0; display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 5px; align-items: center; }

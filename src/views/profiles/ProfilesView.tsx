@@ -16,7 +16,7 @@ import { buildAssignNowPayload, createAssignNowState } from "./assign-now-flow";
 import { autoLoginLogEntry, autoLoginStateFromStartResult, buildAutoLoginPayload, createAutoLoginStartingState, mergeAutoLoginProgressSnapshot } from "./auto-login-flow";
 import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifecycle-flow";
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
-import { buildStartPayload, buildStopPayload } from "./run-control";
+import { buildStartPayload, buildStopPayload, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
@@ -168,16 +168,15 @@ function summarizeProfiles(profiles: BotProfile[]): DeviceProfileGroup["summary"
 
 function phoneGroupSummaryLabel(group: DeviceProfileGroup) {
   const total = group.summary.total;
-  const running = group.profiles.filter((profile) => profile.status === "running").length;
-  if (running > 0) return `${total} profiles · ${running} running`;
+  const running = group.profiles.filter((profile) => runtimeIndicatorState(profile) === "active").length;
+  if (running > 0) return `${total} profiles · ${running} active`;
   if (group.phoneStatus === "running" || group.phoneStatus === "active") return `${total} profiles · ready`;
   return `${total} profiles · idle`;
 }
 
 function phoneStatusTone(status: DeviceProfileGroup["phoneStatus"]) {
-  if (status === "running") return "success" as const;
-  if (status === "active") return "accent" as const;
-  if (status === "inactive") return "error" as const;
+  if (status === "running" || status === "active") return "success" as const;
+  if (status === "inactive") return "neutral" as const;
   return "warning" as const;
 }
 
@@ -256,15 +255,22 @@ function AccountRow({
   onToolbar: (profile: BotProfile, action: ProfileToolbarAction) => void;
 }) {
   const followerDelta3dValue = profile.followerDelta3d?.value ?? null;
-  const interactionsToday = profile.interactionsToday ?? 0;
+  const displayCounters = displayRunCounters(profile);
+  const interactionsToday = displayCounters.total;
   const loginBadge = connectBadge(profile);
   const growthBadge = socialBadge(profile);
   const instanceTag = appInstanceTag(profile);
   const lifecycle = profileLifecycle(profile);
   const restoreDate = formatRestoreDate(profile.scheduledDeleteAt || profile.scheduledTrashAt);
+  const runtimeState = runtimeIndicatorState(profile);
+  const runtimeTitle = runtimeState === "active"
+    ? "Runtime active: queued, claimed, running, stopping, or canceling."
+    : runtimeState === "error"
+      ? `Last run abnormal: ${profile.runtimeIndicator?.reason || "abnormal_run"}`
+      : "Runtime idle: no active run and last run normal.";
   return (
     <div className="profile-account-row">
-      <span className={`profile-dot status-${profile.status}`} />
+      <span className={`profile-dot runtime-${runtimeState}`} title={runtimeTitle} aria-label={runtimeTitle} />
 
       <div className="profile-name-cell">
         <button className="link-button profile-username" onClick={() => onSelect(profile.id)}>{profile.username}</button>
@@ -296,11 +302,21 @@ function AccountRow({
       <span className="timeslot-pill mono">{profile.activeWindow}</span>
 
       <div className="profile-counters mono">
-        <CounterMetric current={profile.counters.follow.current} max={profile.counters.follow.max} label="F" />
-        <CounterMetric current={profile.counters.unfollow.current} max={profile.counters.unfollow.max} label="UF" />
-        <CounterMetric current={profile.counters.like.current} max={profile.counters.like.max} label="L" />
-        <CounterMetric current={profile.counters.comment.current} max={profile.counters.comment.max} label="C" />
-        <CounterMetric current={profile.counters.dm.current} max={profile.counters.dm.max} label="DM" />
+        {displayCounters.mode === "run" ? (
+          <>
+            <CounterMetric current={displayCounters.follow} max={Number.NaN} label="Run F" />
+            <CounterMetric current={displayCounters.like} max={Number.NaN} label="Run L" />
+            <CounterMetric current={displayCounters.total} max={Number.NaN} label="Run Total" />
+          </>
+        ) : (
+          <>
+            <CounterMetric current={profile.counters.follow.current} max={profile.counters.follow.max} label="F" />
+            <CounterMetric current={profile.counters.unfollow.current} max={profile.counters.unfollow.max} label="UF" />
+            <CounterMetric current={profile.counters.like.current} max={profile.counters.like.max} label="L" />
+            <CounterMetric current={profile.counters.comment.current} max={profile.counters.comment.max} label="C" />
+            <CounterMetric current={profile.counters.dm.current} max={profile.counters.dm.max} label="DM" />
+          </>
+        )}
       </div>
 
       <div className="profile-row-metrics">
@@ -312,7 +328,7 @@ function AccountRow({
         </span>
         <span
           className={`interactions-today ${interactionsToday > 0 ? "active" : "zero"}`}
-          title="Interactions today"
+          title={displayCounters.mode === "run" ? "Interactions in current run" : "Interactions today"}
         >
           {interactionsToday}
         </span>
@@ -390,6 +406,22 @@ export function ProfilesView({
       activeRunRequestStatus: optimistic.requestStatus,
       activeRunId: optimistic.runId,
       activeRunStatus: optimistic.runStatus,
+      currentRunCounters: profile.currentRunCounters || {
+        follows: 0,
+        unfollows: 0,
+        likes: 0,
+        comments: 0,
+        dms: 0,
+        stories: 0,
+        interactionsTotal: 0,
+        source: "botapp_optimistic",
+        runId: optimistic.runId,
+      },
+      runtimeIndicator: {
+        state: "active",
+        reason: "botapp_optimistic_queued",
+        lastRunId: profile.runtimeIndicator?.lastRunId || null,
+      },
       eligibility: "blocked_now" as const,
       eligibilityReason: "already_requested",
       eligibilityDetail: {
@@ -888,7 +920,10 @@ export function ProfilesView({
           <header className="phone-group-header">
             <div>
               <strong>{group.deviceLabel} · {group.deviceSerialLabel}</strong>
-              <Badge tone={phoneStatusTone(group.phoneStatus)}>{group.phoneStatus}</Badge>
+              {(() => {
+                const runtimeStatus = resolveDeviceRuntimeStatus(group.profiles, group.phoneStatus);
+                return <Badge tone={phoneStatusTone(runtimeStatus as DeviceProfileGroup["phoneStatus"])}>{runtimeStatus}</Badge>;
+              })()}
             </div>
             <div className="phone-group-header-actions">
               <div className="phone-group-summary mono">
