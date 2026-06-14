@@ -16,7 +16,7 @@ import { buildAssignNowPayload, createAssignNowState } from "./assign-now-flow";
 import { autoLoginLogEntry, autoLoginStateFromStartResult, buildAutoLoginPayload, createAutoLoginStartingState, mergeAutoLoginProgressSnapshot } from "./auto-login-flow";
 import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifecycle-flow";
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
-import { buildStartPayload, buildStopPayload, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
+import { buildStartPayload, buildStopPayload, displayCounterMetrics, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
@@ -256,6 +256,7 @@ function AccountRow({
 }) {
   const followerDelta3dValue = profile.followerDelta3d?.value ?? null;
   const displayCounters = displayRunCounters(profile);
+  const counterMetrics = displayCounterMetrics(profile);
   const interactionsToday = displayCounters.total;
   const loginBadge = connectBadge(profile);
   const growthBadge = socialBadge(profile);
@@ -302,21 +303,9 @@ function AccountRow({
       <span className="timeslot-pill mono">{profile.activeWindow}</span>
 
       <div className="profile-counters mono">
-        {displayCounters.mode === "run" ? (
-          <>
-            <CounterMetric current={displayCounters.follow} max={Number.NaN} label="Run F" />
-            <CounterMetric current={displayCounters.like} max={Number.NaN} label="Run L" />
-            <CounterMetric current={displayCounters.total} max={Number.NaN} label="Run Total" />
-          </>
-        ) : (
-          <>
-            <CounterMetric current={profile.counters.follow.current} max={profile.counters.follow.max} label="F" />
-            <CounterMetric current={profile.counters.unfollow.current} max={profile.counters.unfollow.max} label="UF" />
-            <CounterMetric current={profile.counters.like.current} max={profile.counters.like.max} label="L" />
-            <CounterMetric current={profile.counters.comment.current} max={profile.counters.comment.max} label="C" />
-            <CounterMetric current={profile.counters.dm.current} max={profile.counters.dm.max} label="DM" />
-          </>
-        )}
+        {counterMetrics.map((metric) => (
+          <CounterMetric key={metric.key} current={metric.current} max={metric.max} label={metric.label} />
+        ))}
       </div>
 
       <div className="profile-row-metrics">

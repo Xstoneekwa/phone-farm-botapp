@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { displayRunCounters, isStopEnabled, resolveDeviceRuntimeStatus, runtimeIndicatorState, shouldPollProfilesLiveCounters } from "./run-control.ts";
+import { displayCounterMetrics, displayRunCounters, isStopEnabled, resolveDeviceRuntimeStatus, runtimeIndicatorState, shouldPollProfilesLiveCounters } from "./run-control.ts";
 
 function profile(overrides = {}) {
   return {
@@ -17,11 +17,11 @@ function profile(overrides = {}) {
     },
     runtimeLock: "none",
     counters: {
-      follow: { current: 5, max: 12 },
+      follow: { current: 5, max: 80 },
       unfollow: { current: 0, max: 100 },
-      like: { current: 3, max: 150 },
+      like: { current: 3, max: 100 },
       comment: { current: 0, max: 0 },
-      dm: { current: 0, max: 0 },
+      dm: { current: 0, max: 1 },
     },
     interactionsToday: 8,
     ...overrides,
@@ -61,7 +61,7 @@ test("Runtime indicator maps active, abnormal, and normal idle states", () => {
 
 test("Displayed counters switch to current run counters while runtime is active", () => {
   const idle = displayRunCounters(profile());
-  assert.deepEqual(idle, { mode: "today", follow: 5, like: 3, total: 8 });
+  assert.deepEqual(idle, { mode: "today", follow: 5, like: 3, dm: 0, total: 8 });
 
   const active = displayRunCounters(profile({
     activeRunRequestStatus: "queued",
@@ -75,5 +75,38 @@ test("Displayed counters switch to current run counters while runtime is active"
       interactionsTotal: 2,
     },
   }));
-  assert.deepEqual(active, { mode: "run", follow: 1, like: 1, total: 2 });
+  assert.deepEqual(active, { mode: "run", follow: 1, like: 1, dm: 0, total: 2 });
+});
+
+test("Counter metrics use live numerators and product caps during runs", () => {
+  const active = displayCounterMetrics(profile({
+    activeRunStatus: "running",
+    currentRunCounters: {
+      follows: 1,
+      unfollows: 0,
+      likes: 1,
+      comments: 0,
+      dms: 0,
+      stories: 0,
+      interactionsTotal: 2,
+    },
+  }));
+
+  assert.deepEqual(active, [
+    { key: "follow", current: 1, max: 80, label: "F", live: true },
+    { key: "like", current: 1, max: 100, label: "L", live: true },
+    { key: "dm", current: 0, max: 1, label: "DM", live: true },
+  ]);
+});
+
+test("Counter metrics return daily totals outside active runs", () => {
+  const idle = displayCounterMetrics(profile());
+
+  assert.deepEqual(idle, [
+    { key: "follow", current: 5, max: 80, label: "F", live: false },
+    { key: "unfollow", current: 0, max: 100, label: "UF", live: false },
+    { key: "like", current: 3, max: 100, label: "L", live: false },
+    { key: "comment", current: 0, max: 0, label: "C", live: false },
+    { key: "dm", current: 0, max: 1, label: "DM", live: false },
+  ]);
 });

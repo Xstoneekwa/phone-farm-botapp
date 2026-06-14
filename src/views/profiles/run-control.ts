@@ -99,6 +99,7 @@ export function displayRunCounters(profile: BotProfile) {
       mode: "today" as const,
       follow: profile.counters.follow.current,
       like: profile.counters.like.current,
+      dm: profile.counters.dm.current,
       total: profile.interactionsToday ?? 0,
     };
   }
@@ -107,8 +108,27 @@ export function displayRunCounters(profile: BotProfile) {
     mode: "run" as const,
     follow: Number.isFinite(run?.follows) ? Number(run?.follows) : 0,
     like: Number.isFinite(run?.likes) ? Number(run?.likes) : 0,
+    dm: Number.isFinite(run?.dms) ? Number(run?.dms) : 0,
     total: Number.isFinite(run?.interactionsTotal) ? Number(run?.interactionsTotal) : 0,
   };
+}
+
+export function displayCounterMetrics(profile: BotProfile) {
+  const displayCounters = displayRunCounters(profile);
+  if (displayCounters.mode === "run") {
+    return [
+      { key: "follow" as const, current: displayCounters.follow, max: profile.counters.follow.max, label: "F", live: true },
+      { key: "like" as const, current: displayCounters.like, max: profile.counters.like.max, label: "L", live: true },
+      { key: "dm" as const, current: displayCounters.dm, max: profile.counters.dm.max, label: "DM", live: true },
+    ];
+  }
+  return [
+    { key: "follow" as const, current: profile.counters.follow.current, max: profile.counters.follow.max, label: "F", live: false },
+    { key: "unfollow" as const, current: profile.counters.unfollow.current, max: profile.counters.unfollow.max, label: "UF", live: false },
+    { key: "like" as const, current: profile.counters.like.current, max: profile.counters.like.max, label: "L", live: false },
+    { key: "comment" as const, current: profile.counters.comment.current, max: profile.counters.comment.max, label: "C", live: false },
+    { key: "dm" as const, current: profile.counters.dm.current, max: profile.counters.dm.max, label: "DM", live: false },
+  ];
 }
 
 export function resolveDeviceRuntimeStatus<T extends Pick<BotProfile, "activeRunRequestStatus" | "activeRunStatus" | "status">>(
