@@ -356,6 +356,13 @@ export function ProfilesView({
   const [openDeviceViews, setOpenDeviceViews] = useState<DeviceViewState[]>([]);
   const [phoneViewMessage, setPhoneViewMessage] = useState("");
   const [autoLoginFlow, setAutoLoginFlow] = useState<{ profile: BotProfile; state: ProfileAutoLoginState } | null>(null);
+  const [optimisticRunControls, setOptimisticRunControls] = useState<Record<string, {
+    requestId: string | null;
+    requestStatus: string;
+    runId: string | null;
+    runStatus: string | null;
+    expiresAt: number;
+  }>>({});
   const dispatcherBlocksAutoLogin = Boolean(dispatcherHealth && dispatcherHealth.status !== "running");
 
   useEffect(() => {
@@ -372,10 +379,59 @@ export function ProfilesView({
     };
   }, []);
 
+  const liveProfiles = useMemo<BotProfile[]>(() => profiles.map((profile): BotProfile => {
+    const optimistic = optimisticRunControls[profile.id];
+    if (!optimistic || optimistic.expiresAt <= Date.now()) return profile;
+    if (profile.activeRunRequestStatus || profile.activeRunStatus || profile.status === "running") return profile;
+    return {
+      ...profile,
+      status: "running" as const,
+      activeRunRequestId: optimistic.requestId,
+      activeRunRequestStatus: optimistic.requestStatus,
+      activeRunId: optimistic.runId,
+      activeRunStatus: optimistic.runStatus,
+      eligibility: "blocked_now" as const,
+      eligibilityReason: "already_requested",
+      eligibilityDetail: {
+        ...profile.eligibilityDetail,
+        status: "blocked_now",
+        primary_block_reason: "already_requested",
+        reason_label: "Run requested",
+        reason_description: "A manual run has been queued and is waiting for the runtime projection.",
+      },
+    } as BotProfile;
+  }), [profiles, optimisticRunControls]);
+
+  useEffect(() => {
+    setOptimisticRunControls((current) => {
+      let changed = false;
+      const next = { ...current };
+      const now = Date.now();
+      for (const profile of profiles) {
+        if (
+          next[profile.id]
+          && (next[profile.id].expiresAt <= now || profile.activeRunRequestStatus || profile.activeRunStatus || profile.status === "running")
+        ) {
+          delete next[profile.id];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [profiles]);
+
+  useEffect(() => {
+    if (!Object.keys(optimisticRunControls).length) return;
+    const interval = window.setInterval(() => {
+      void onRefresh();
+    }, 4000);
+    return () => window.clearInterval(interval);
+  }, [optimisticRunControls, onRefresh]);
+
   const displayGroups = useMemo(() => {
-    if (groups.length) return mergeProfileGroups(groups, profiles);
-    return buildFallbackGroups(profiles);
-  }, [groups, profiles]);
+    if (groups.length) return mergeProfileGroups(groups, liveProfiles);
+    return buildFallbackGroups(liveProfiles);
+  }, [groups, liveProfiles]);
 
   const filteredGroups = useMemo(() => {
     const query = normalizeSearch(searchTerm);
@@ -404,7 +460,7 @@ export function ProfilesView({
     ? "loading"
     : syncError
       ? "relay_error"
-      : profiles.length === 0
+      : liveProfiles.length === 0
         ? "no_backend_accounts"
           : filteredProfilesCount === 0 && (hasActiveSearch || hasActivePlatformFilter || hasActiveLifecycleFilter)
           ? "filter_no_match"
@@ -428,7 +484,7 @@ export function ProfilesView({
       syncErrorPresent: Boolean(syncError),
       emptyStateType,
     });
-  }, [groups.length, profiles.length, flattenedProfilesCount, filteredGroups.length, filteredProfilesCount, platformFilter, lifecycleFilter, searchTerm, profilesMeta, syncError, emptyStateType]);
+  }, [groups.length, liveProfiles.length, flattenedProfilesCount, filteredGroups.length, filteredProfilesCount, platformFilter, lifecycleFilter, searchTerm, profilesMeta, syncError, emptyStateType]);
 
   useEffect(() => {
     if (!autoLoginFlow) return;
@@ -466,8 +522,8 @@ export function ProfilesView({
   const sourceLabel = `Profiles patch active: manage-sync-v1 · ${
     profilesMeta
       ? `Source: Shared backend API · ${profilesMeta.accountsCount} account${profilesMeta.accountsCount === 1 ? "" : "s"} (${profilesMeta.source})`
-      : profiles.length
-        ? `Source: Shared backend API · ${profiles.length} account${profiles.length === 1 ? "" : "s"}`
+      : liveProfiles.length
+        ? `Source: Shared backend API · ${liveProfiles.length} account${liveProfiles.length === 1 ? "" : "s"}`
         : "Source: Shared backend API · 0 accounts"
   }`;
 
@@ -563,6 +619,16 @@ export function ProfilesView({
     const requestId = String(data.request_id || "").slice(0, 8);
     const status = String(data.status || "queued");
     const runType = String(data.requested_run_type || "account_session");
+    setOptimisticRunControls((current) => ({
+      ...current,
+      [profile.id]: {
+        requestId: String(data.request_id || "") || null,
+        requestStatus: status,
+        runId: String(data.run_id || "") || null,
+        runStatus: String(data.run_status || "") || null,
+        expiresAt: Date.now() + 120000,
+      },
+    }));
     onMockSubmit(`Run queued: ${runType} · request=${requestId || "created"} · status=${status}.`, "success");
     onRefresh();
   }

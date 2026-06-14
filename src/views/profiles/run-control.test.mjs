@@ -21,6 +21,7 @@ function profile(overrides = {}) {
 }
 
 test("Stop stays enabled while an active run request is queued or running", () => {
+  assert.equal(isStopEnabled(profile({ activeRunRequestStatus: "queued" })), true);
   assert.equal(isStopEnabled(profile({ activeRunRequestStatus: "claimed" })), true);
   assert.equal(isStopEnabled(profile({ activeRunRequestStatus: "running" })), true);
   assert.equal(isStopEnabled(profile({ activeRunStatus: "running" })), true);
