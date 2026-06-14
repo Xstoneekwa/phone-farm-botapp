@@ -16,6 +16,7 @@ import { AutoRestart } from "../views/AutoRestart";
 import { APIKeys } from "../views/APIKeys";
 import { Settings } from "../views/Settings";
 import { routes, type RouteId } from "./routes";
+import { shouldPollProfilesLiveCounters } from "../views/profiles/run-control";
 import "./app.css";
 
 type AppData = {
@@ -120,6 +121,19 @@ export function App() {
     void load();
     return () => { cancelled = true; };
   }, []);
+
+  const profilesNeedLiveCounters = useMemo(
+    () => data.profiles.some((profile) => shouldPollProfilesLiveCounters(profile)),
+    [data.profiles],
+  );
+
+  useEffect(() => {
+    if (!profilesNeedLiveCounters) return;
+    const interval = window.setInterval(() => {
+      void loadOverviewData();
+    }, 4000);
+    return () => window.clearInterval(interval);
+  }, [profilesNeedLiveCounters]);
 
   const counts = useMemo(() => ({ profiles: data.profiles.length, devices: data.devices.length, notifications: data.notifications.filter((item) => !item.acknowledged).length }), [data]);
 

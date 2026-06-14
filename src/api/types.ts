@@ -572,6 +572,10 @@ export type BotProfile = {
   eligibilityReason: string;
   eligibilityDetail: ProfileEligibility;
   runtimeLock: "none" | "device_level_lock" | "assignment_reserved";
+  activeRunRequestId?: string | null;
+  activeRunRequestStatus?: string | null;
+  activeRunId?: string | null;
+  activeRunStatus?: string | null;
 };
 
 export type BotAppClientAccountStatus = "active" | "pending" | "onboarding" | "paused" | "cancelled" | "unknown";

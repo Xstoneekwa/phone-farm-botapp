@@ -2783,6 +2783,10 @@ function profileFromManageAccount(account, index, devices) {
       reason_description: eligibility === "blocked_now" ? "Start is blocked until eligibility is resolved." : "Ready",
     },
     runtimeLock,
+    activeRunRequestId: account?.activeRunRequestId || account?.active_run_request_id || null,
+    activeRunRequestStatus: account?.activeRunRequestStatus || account?.active_run_request_status || null,
+    activeRunId: account?.activeRunId || account?.active_run_id || null,
+    activeRunStatus: account?.activeRunStatus || account?.active_run_status || null,
   };
 }
 

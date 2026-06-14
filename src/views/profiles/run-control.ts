@@ -7,6 +7,8 @@ import type {
 
 const START_PENDING_REASONS = new Set(["already_requested"]);
 const STOPPABLE_REASONS = new Set(["already_running", "already_requested"]);
+const ACTIVE_RUN_REQUEST_STATUSES = new Set(["pending", "queued", "claimed", "running", "starting", "stopping", "canceling"]);
+const ACTIVE_RUN_STATUSES = new Set(["pending", "running", "stopping"]);
 
 export function projectRunEligibility(profile: BotProfile): RunControlEligibilityProjection {
   const okToStart = profile.eligibility === "can_start";
@@ -35,9 +37,43 @@ export function startDisabledReason(profile: BotProfile) {
   return eligibility.message || "Manual run eligibility is blocked.";
 }
 
+function readActiveRunRequestStatus(profile: BotProfile) {
+  return String(
+    profile.activeRunRequestStatus
+      || (profile as BotProfile & { active_run_request_status?: string }).active_run_request_status
+      || "",
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function readActiveRunStatus(profile: BotProfile) {
+  return String(
+    profile.activeRunStatus
+      || (profile as BotProfile & { active_run_status?: string }).active_run_status
+      || "",
+  )
+    .trim()
+    .toLowerCase();
+}
+
 export function isStopEnabled(profile: BotProfile) {
+  return shouldPollProfilesLiveCounters(profile);
+}
+
+export function shouldPollProfilesLiveCounters(profile: BotProfile) {
   const eligibility = projectRunEligibility(profile);
-  return profile.status === "running" || STOPPABLE_REASONS.has(eligibility.reason);
+  const eligibilityReason = String(profile.eligibilityReason || eligibility.reason || "").trim().toLowerCase();
+  const activeRequestStatus = readActiveRunRequestStatus(profile);
+  const activeRunStatus = readActiveRunStatus(profile);
+  return (
+    profile.status === "running"
+    || profile.runtimeLock !== "none"
+    || ACTIVE_RUN_REQUEST_STATUSES.has(activeRequestStatus)
+    || ACTIVE_RUN_STATUSES.has(activeRunStatus)
+    || STOPPABLE_REASONS.has(eligibility.reason)
+    || STOPPABLE_REASONS.has(eligibilityReason)
+  );
 }
 
 export function stopDisabledReason(profile: BotProfile) {
@@ -46,15 +82,28 @@ export function stopDisabledReason(profile: BotProfile) {
 }
 
 export function mockRunRequestId(profile: BotProfile) {
+  const activeRequestId = String(profile.activeRunRequestId || "").trim();
+  if (activeRequestId) return activeRequestId;
   const eligibility = projectRunEligibility(profile);
-  if (eligibility.reason === "already_requested" || profile.status === "running") {
+  const eligibilityReason = String(profile.eligibilityReason || eligibility.reason || "").trim().toLowerCase();
+  if (
+    STOPPABLE_REASONS.has(eligibility.reason)
+    || STOPPABLE_REASONS.has(eligibilityReason)
+    || profile.status === "running"
+    || ACTIVE_RUN_REQUEST_STATUSES.has(readActiveRunRequestStatus(profile))
+  ) {
     return `req_${profile.id}`;
   }
   return null;
 }
 
 export function mockCurrentRunId(profile: BotProfile) {
-  return profile.status === "running" ? `run_${profile.id}` : null;
+  const activeRunId = String(profile.activeRunId || "").trim();
+  if (activeRunId) return activeRunId;
+  if (profile.status === "running" || ACTIVE_RUN_STATUSES.has(readActiveRunStatus(profile))) {
+    return `run_${profile.id}`;
+  }
+  return null;
 }
 
 function idempotencyKey(prefix: "start" | "stop", profile: BotProfile) {
