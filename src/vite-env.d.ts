@@ -99,6 +99,15 @@ interface Window {
     relay?: {
       health: () => Promise<BotAppRelayHealth>;
     };
+    clientAccounts?: {
+      applyStatus: (input: {
+        accountId: string;
+        action: "pause" | "cancel" | "mark_needs_assistance" | "reactivate";
+        reason?: string;
+        metadata?: Record<string, string>;
+        dryRun?: boolean;
+      }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null; dryRun?: boolean; code?: string }>;
+    };
     devices?: {
       list: (input?: { format?: "raw" | "normalized" }) => Promise<{ ok: boolean; data?: Record<string, unknown>[]; error?: string | null }>;
     };

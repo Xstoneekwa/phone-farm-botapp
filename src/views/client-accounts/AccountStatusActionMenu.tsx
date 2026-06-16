@@ -1,0 +1,174 @@
+import { useEffect, useMemo, useState, type ReactElement } from "react";
+import type { BotAppClientAccount, BotAppRelayHealth, BotAppRuntimeIntegrationStatus } from "../../api/types";
+import {
+  applyClientAccountLifecycleAction,
+  buildLifecycleAvailability,
+  lifecycleActionLabel,
+  relayActionsAvailable,
+  type ClientAccountLifecycleAction,
+  type ClientAccountLifecycleAvailability,
+} from "../../data/client-accounts-actions";
+
+type AccountStatusActionMenuProps = {
+  account: BotAppClientAccount;
+  relayHealth: BotAppRelayHealth | null;
+  runtimeStatus: BotAppRuntimeIntegrationStatus | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onMessage: (message: string, tone?: "success" | "error") => void;
+  onRefresh: () => Promise<void> | void;
+};
+
+const lifecycleDescriptions: Record<ClientAccountLifecycleAction, string> = {
+  pause: "Blocks runs but keeps the assigned slot and app instance.",
+  cancel: "Releases the slot and app instance when no run is active.",
+  mark_needs_assistance: "Blocks runs but keeps assignment for support review.",
+  reactivate: "Requests reactivation; runtime gates still decide readiness.",
+};
+
+export function AccountStatusActionMenu({
+  account,
+  relayHealth,
+  runtimeStatus,
+  isOpen,
+  onClose,
+  onMessage,
+  onRefresh,
+}: AccountStatusActionMenuProps) {
+  const [isSaving, setIsSaving] = useState(false);
+  const [pendingCancel, setPendingCancel] = useState(false);
+  const relayAvailable = relayActionsAvailable(relayHealth, {
+    relayUrlConfigured: runtimeStatus?.compassAi?.relayUrlConfigured,
+    relayKeyConfigured: runtimeStatus?.compassAi?.relayKeyConfigured,
+  });
+  const availability = useMemo(
+    () => buildLifecycleAvailability(account, relayAvailable),
+    [account, relayAvailable],
+  );
+
+  useEffect(() => {
+    if (!isOpen) setPendingCancel(false);
+  }, [isOpen]);
+
+  async function runAction(action: ClientAccountLifecycleAction, confirmed = false) {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const result = await applyClientAccountLifecycleAction(
+        { account, action, confirmed },
+        {
+          relayAvailable,
+          send: async (payload: {
+            accountId: string;
+            action: ClientAccountLifecycleAction;
+            reason: string;
+            metadata: Record<string, string>;
+          }) => {
+            const response = await window.botappDesktop?.clientAccounts?.applyStatus?.(payload);
+            return { ok: Boolean(response?.ok), error: response?.error || null };
+          },
+        },
+      );
+
+      if ("needsConfirmation" in result && result.needsConfirmation) {
+        setPendingCancel(true);
+        return;
+      }
+
+      if (!result.ok) {
+        onMessage(result.error || "Could not update account status.", "error");
+        return;
+      }
+
+      onClose();
+      setPendingCancel(false);
+      onMessage(`${account.username}: ${result.label} updated.`, "success");
+      await onRefresh();
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      <span className="client-accounts-status-popover" role="menu">
+        {!relayAvailable ? (
+          <small className="client-accounts-status-menu-relay">
+            Secure relay not connected — action unavailable.
+          </small>
+        ) : null}
+        {availability.map((item: ClientAccountLifecycleAvailability) => {
+          const description = item.disabledReason || lifecycleDescriptions[item.action];
+          const danger = item.action === "cancel";
+          return (
+            <button
+              key={item.action}
+              type="button"
+              role="menuitem"
+              className={danger ? "danger" : ""}
+              disabled={isSaving || item.disabled}
+              title={description}
+              aria-label={`${lifecycleActionLabel(item.action)}: ${description}`}
+              onClick={() => void runAction(item.action)}
+            >
+              {lifecycleIcon(item.action)}
+              <span>
+                <strong>{lifecycleActionLabel(item.action)}</strong>
+                <small>{description}</small>
+              </span>
+            </button>
+          );
+        })}
+      </span>
+
+      {pendingCancel ? (
+        <div className="client-accounts-confirm-backdrop" role="presentation" onMouseDown={() => setPendingCancel(false)}>
+          <section
+            className="client-accounts-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Cancel account"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span>Cancel account</span>
+            <h3>Cancel @{account.username}?</h3>
+            <p>
+              Releases the slot and app instance only when no run is active. This action is audited on the backend.
+            </p>
+            <div className="client-accounts-confirm-actions">
+              <button type="button" onClick={() => setPendingCancel(false)} disabled={isSaving}>Keep account</button>
+              <button type="button" className="danger" disabled={isSaving} onClick={() => void runAction("cancel", true)}>
+                {isSaving ? "Cancelling…" : "Cancel account"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function lifecycleIcon(action: ClientAccountLifecycleAction): ReactElement {
+  if (action === "pause") return <PauseIcon />;
+  if (action === "cancel") return <CancelIcon />;
+  if (action === "mark_needs_assistance") return <LifeBuoyIcon />;
+  return <RefreshIcon />;
+}
+
+function PauseIcon() {
+  return <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M10 8v8" /><path d="M14 8v8" /></svg>;
+}
+
+function CancelIcon() {
+  return <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6" /><path d="M9 9l6 6" /></svg>;
+}
+
+function LifeBuoyIcon() {
+  return <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><path d="M4.9 4.9l4.2 4.2" /><path d="M14.9 14.9l4.2 4.2" /><path d="M14.9 9.1l4.2-4.2" /><path d="M4.9 19.1l4.2-4.2" /></svg>;
+}
+
+function RefreshIcon() {
+  return <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 3v6h-6" /></svg>;
+}

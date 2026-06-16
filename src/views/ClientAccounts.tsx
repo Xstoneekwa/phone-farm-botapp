@@ -1,19 +1,21 @@
-import { useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   BotAppClientAccount,
   BotAppClientAccountsFilters,
   BotAppClientAccountsOverview,
+  BotAppRelayHealth,
+  BotAppRuntimeIntegrationStatus,
   ClientAccountPasswordUpdatePayload,
 } from "../api/types";
+import { AccountStatusActionMenu } from "./client-accounts/AccountStatusActionMenu";
 import "./client-accounts.css";
 
 type ClientAccountsProps = {
   overview: BotAppClientAccountsOverview;
   onOpenProfile: (profileId: string) => void;
   onOpenCredentials: (account: BotAppClientAccount) => void;
+  onRefresh: () => Promise<void> | void;
 };
-
-type AccountStatusAction = "pause" | "cancel" | "mark_needs_assistance" | "reactivate";
 
 const filterOptions: Array<{ key: BotAppClientAccountsFilters["status"]; label: string }> = [
   { key: "all", label: "All" },
@@ -43,23 +45,6 @@ function matchesFilter(item: BotAppClientAccount, filters: BotAppClientAccountsF
   if (filters.status === "needs-assistance") return item.actionsNeeded.length > 0;
   if (filters.status === "all") return true;
   return item.accountStatus === filters.status;
-}
-
-function relayActionPayload(account: BotAppClientAccount, action: string) {
-  return {
-    action,
-    account_id: account.accountId,
-    source: "BotApp",
-    requested_by: null,
-    metadata_safe: {
-      username: account.username,
-      client_name: account.clientName,
-      current_status: account.accountStatus,
-      expected_effect: action === "view_account" || action === "refresh"
-        ? "read_only_client_account_projection"
-        : "future_secure_relay_action",
-    },
-  };
 }
 
 function passwordUpdatePayload(account: BotAppClientAccount): ClientAccountPasswordUpdatePayload {
@@ -92,16 +77,39 @@ function passwordUpdatePayload(account: BotAppClientAccount): ClientAccountPassw
   };
 }
 
-export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials }: ClientAccountsProps) {
+export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials, onRefresh }: ClientAccountsProps) {
   const [filters, setFilters] = useState<BotAppClientAccountsFilters>({ query: "", status: "all" });
   const [openMenuAccountId, setOpenMenuAccountId] = useState<string | null>(null);
   const [passwordRequestAccount, setPasswordRequestAccount] = useState<BotAppClientAccount | null>(null);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
+  const [relayHealth, setRelayHealth] = useState<BotAppRelayHealth | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<BotAppRuntimeIntegrationStatus | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      window.botappDesktop?.relay?.health?.(),
+      window.botappDesktop?.runtime?.status?.(),
+    ]).then(([relay, runtime]) => {
+      if (!active) return;
+      setRelayHealth(relay || null);
+      setRuntimeStatus(runtime || null);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const visibleItems = useMemo(
     () => overview.items.filter((item) => matchesFilter(item, filters)),
     [filters, overview.items],
   );
+
+  function pushMessage(nextMessage: string, tone: "success" | "error" = "success") {
+    setMessage(nextMessage);
+    setMessageTone(tone);
+  }
 
   function prepareAction(account: BotAppClientAccount, action: string) {
     if (action === "view_account") {
@@ -116,16 +124,13 @@ export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials }: C
       setPasswordRequestAccount(account);
       return;
     }
-    const payload = relayActionPayload(account, action);
-    void payload;
-    setMessage(`${account.username}: ${action.replaceAll("_", " ")} payload prepared for secure relay.`);
   }
 
   function confirmPasswordUpdateRequest(account: BotAppClientAccount) {
     const payload = passwordUpdatePayload(account);
     void payload;
     setPasswordRequestAccount(null);
-    setMessage(`${account.username}: password update request prepared. Client will receive a backend notification and email after secure relay approval.`);
+    pushMessage(`${account.username}: password update request prepared. Client will receive a backend notification and email after secure relay approval.`);
   }
 
   return (
@@ -219,9 +224,14 @@ export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials }: C
                   <td>
                     <ActionList
                       account={item}
+                      relayHealth={relayHealth}
+                      runtimeStatus={runtimeStatus}
                       isMenuOpen={openMenuAccountId === item.accountId}
                       onToggleMenu={() => setOpenMenuAccountId((current) => current === item.accountId ? null : item.accountId)}
+                      onCloseMenu={() => setOpenMenuAccountId(null)}
                       onAction={(action) => prepareAction(item, action)}
+                      onMessage={pushMessage}
+                      onRefresh={onRefresh}
                     />
                   </td>
                 </tr>
@@ -239,7 +249,7 @@ export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials }: C
         ) : null}
       </section>
 
-      {message ? <div className="client-accounts-message">{message}</div> : null}
+      {message ? <div className={`client-accounts-message ${messageTone}`}>{message}</div> : null}
 
       {passwordRequestAccount ? (
         <div className="client-accounts-confirm-backdrop" role="presentation" onMouseDown={() => setPasswordRequestAccount(null)}>
@@ -292,14 +302,24 @@ function AccountAvatar({ account }: { account: BotAppClientAccount }) {
 
 function ActionList({
   account,
+  relayHealth,
+  runtimeStatus,
   isMenuOpen,
   onToggleMenu,
+  onCloseMenu,
   onAction,
+  onMessage,
+  onRefresh,
 }: {
   account: BotAppClientAccount;
+  relayHealth: BotAppRelayHealth | null;
+  runtimeStatus: BotAppRuntimeIntegrationStatus | null;
   isMenuOpen: boolean;
   onToggleMenu: () => void;
+  onCloseMenu: () => void;
   onAction: (action: string) => void;
+  onMessage: (message: string, tone?: "success" | "error") => void;
+  onRefresh: () => Promise<void> | void;
 }) {
   return (
     <div className="client-accounts-actions">
@@ -316,43 +336,21 @@ function ActionList({
         <IconButton label={`Status actions for ${account.username}`} expanded={isMenuOpen} onClick={onToggleMenu}>
           <SlidersIcon />
         </IconButton>
-        {isMenuOpen ? <StatusPopover account={account} onAction={onAction} /> : null}
+        <AccountStatusActionMenu
+          account={account}
+          relayHealth={relayHealth}
+          runtimeStatus={runtimeStatus}
+          isOpen={isMenuOpen}
+          onClose={onCloseMenu}
+          onMessage={onMessage}
+          onRefresh={onRefresh}
+        />
       </span>
     </div>
   );
 }
 
-function StatusPopover({ account, onAction }: { account: BotAppClientAccount; onAction: (action: AccountStatusAction) => void }) {
-  const operationsStatus = account.actionsNeeded.length ? "needs-assistance" : account.accountStatus;
-  const items: Array<{ action: AccountStatusAction; label: string; description: string; danger?: boolean; disabled: boolean; icon: ReactElement }> = [
-    { action: "pause", label: "Pause account", description: "Blocks runs but keeps the assigned slot and app instance.", disabled: operationsStatus === "paused", icon: <PauseIcon /> },
-    { action: "cancel", label: "Cancel account", description: "Releases the slot and app instance when no run is active.", danger: true, disabled: operationsStatus === "cancelled", icon: <CancelIcon /> },
-    { action: "mark_needs_assistance", label: "Mark needs assistance", description: "Blocks runs but keeps assignment for support review.", disabled: operationsStatus === "needs-assistance", icon: <LifeBuoyIcon /> },
-    { action: "reactivate", label: "Reactivate account", description: "Requests reactivation; runtime gates still decide readiness.", disabled: operationsStatus === "active", icon: <RefreshIcon /> },
-  ];
-  return (
-    <span className="client-accounts-status-popover" role="menu">
-      {items.map((item) => (
-        <button
-          key={item.action}
-          type="button"
-          role="menuitem"
-          className={item.danger ? "danger" : ""}
-          disabled={item.disabled}
-          onClick={() => onAction(item.action)}
-        >
-          {item.icon}
-          <span>
-            <strong>{item.label}</strong>
-            <small>{item.description}</small>
-          </span>
-        </button>
-      ))}
-    </span>
-  );
-}
-
-function IconButton({ label, children, disabled = false, expanded, onClick }: { label: string; children: ReactElement; disabled?: boolean; expanded?: boolean; onClick: () => void }) {
+function IconButton({ label, children, disabled = false, expanded, onClick }: { label: string; children: React.ReactElement; disabled?: boolean; expanded?: boolean; onClick: () => void }) {
   return (
     <button type="button" className="client-accounts-icon-button" title={label} aria-label={label} disabled={disabled} aria-expanded={expanded} onClick={onClick}>
       {children}
@@ -394,16 +392,4 @@ function RefreshIcon() {
 
 function SlidersIcon() {
   return <svg viewBox="0 0 24 24"><path d="M4 21v-7" /><path d="M4 10V3" /><path d="M12 21v-9" /><path d="M12 8V3" /><path d="M20 21v-5" /><path d="M20 12V3" /><path d="M1 14h6" /><path d="M9 8h6" /><path d="M17 16h6" /></svg>;
-}
-
-function PauseIcon() {
-  return <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M10 8v8" /><path d="M14 8v8" /></svg>;
-}
-
-function CancelIcon() {
-  return <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6" /><path d="M9 9l6 6" /></svg>;
-}
-
-function LifeBuoyIcon() {
-  return <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><path d="M4.9 4.9l4.2 4.2" /><path d="M14.9 14.9l4.2 4.2" /><path d="M14.9 9.1l4.2-4.2" /><path d="M4.9 19.1l4.2-4.2" /></svg>;
 }

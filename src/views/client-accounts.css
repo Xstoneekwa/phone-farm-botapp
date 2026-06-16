@@ -405,6 +405,21 @@
   font-weight: 900;
 }
 
+.client-accounts-message.error {
+  border-color: rgba(170,54,90,.18);
+  background: #FCEEF2;
+  color: #AA365A;
+}
+
+.client-accounts-status-menu-relay {
+  display: block;
+  color: #AA365A;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+  padding: 4px 2px 8px;
+}
+
 .client-accounts-confirm-backdrop {
   position: fixed;
   inset: 0;
@@ -472,6 +487,12 @@
 .client-accounts-confirm-actions button.primary {
   border-color: #00A891;
   background: linear-gradient(135deg, #00B8A8, #009C8E);
+  color: #fff;
+}
+
+.client-accounts-confirm-actions button.danger {
+  border-color: #AA365A;
+  background: linear-gradient(135deg, #C4476D, #AA365A);
   color: #fff;
 }
 

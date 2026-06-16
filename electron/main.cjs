@@ -423,6 +423,7 @@ const runtimeIpcHandlers = [
   "botapp:profiles:credentials:submit",
   "botapp:profiles:settings:save",
   "botapp:profiles:action",
+  "botapp:client-accounts:status",
   "botapp:profiles:assign-now",
   "botapp:profiles:readiness-now",
   "botapp:profiles:auto-login",
@@ -636,7 +637,7 @@ const botappEndpointRegistry = [
     name: "Profile account status action",
     method: "PATCH",
     path: "/api/instagram-dashboard/accounts/status",
-    usedBy: ["Profiles"],
+    usedBy: ["Profiles", "Client Accounts"],
     purpose: "Pause or reactivate account admin status through secure relay without login/provisioning/run",
     authRequired: true,
     status: "active",
@@ -1728,6 +1729,55 @@ async function profileVerifyUsername(input) {
     return { ok: true, data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Username verification failed.") };
+  }
+}
+
+async function performClientAccountStatusAction(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const action = String(input?.action || "").trim().toLowerCase();
+  const reason = String(input?.reason || `client_accounts_${action}`).trim().slice(0, 160) || "client_accounts_action";
+  const dryRun = input?.dryRun === true;
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  if (!["pause", "cancel", "mark_needs_assistance", "reactivate"].includes(action)) {
+    return { ok: false, error: "Unsupported lifecycle action." };
+  }
+  const cfg = compassConfig();
+  if (!cfg.relayUrl || !cfg.relayKey) {
+    return { ok: false, error: "Secure relay not connected — action unavailable.", code: "relay_unavailable" };
+  }
+  if (dryRun) {
+    return {
+      ok: true,
+      dryRun: true,
+      data: {
+        account_id: accountId,
+        action,
+        reason,
+        expected_effect: "admin_status_write_only",
+      },
+    };
+  }
+  try {
+    const metadata = input?.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+      ? input.metadata
+      : {};
+    const data = await dashboardRequest("PATCH", "profiles_account_status", {
+      account_id: accountId,
+      action,
+      reason,
+      actor_type: "botapp",
+      start_run: false,
+      provisioning_enabled: false,
+      login_enabled: false,
+      metadata: {
+        source_surface: "client_accounts",
+        expected_effect: "admin_status_write_only",
+        ...metadata,
+      },
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Account status update failed.") };
   }
 }
 
@@ -3868,6 +3918,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:credentials:submit", (_event, input) => profileCredentialsSubmit(input));
   ipcMain.handle("botapp:profiles:settings:save", (_event, input) => profileSettingsSave(input));
   ipcMain.handle("botapp:profiles:action", (_event, input) => performProfileAction(input));
+  ipcMain.handle("botapp:client-accounts:status", (_event, input) => performClientAccountStatusAction(input));
   ipcMain.handle("botapp:profiles:assign-now", (_event, input) => assignProfileNow(input));
   ipcMain.handle("botapp:profiles:readiness-now", (_event, input) => profileReadinessNow(input));
   ipcMain.handle("botapp:profiles:auto-login", (_event, input) => profileAutoLoginStart(input));

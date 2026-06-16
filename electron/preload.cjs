@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   relay: {
     health: () => ipcRenderer.invoke("botapp:relay:health"),
   },
+  clientAccounts: {
+    applyStatus: (input) => ipcRenderer.invoke("botapp:client-accounts:status", input),
+  },
   devices: {
     list: (input) => ipcRenderer.invoke("botapp:devices:list", input),
   },
