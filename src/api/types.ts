@@ -2076,14 +2076,52 @@ export type TargetingAiRuntimeStatus = {
     provider: string;
     model: string;
     promptVersion: string;
-    maxGptCandidates: number | null;
-    maxDisplayedResults: number | null;
-    minFollowers: number | null;
+    promptSource: "code_default" | "db_custom";
+    systemPrompt: string;
+    userPromptTemplate: string;
+    maxGptCandidates: number;
+    maxDisplayedResults: number;
+    minFollowers: number;
+    maxFollowers: number;
+    minEligibleTarget: number;
     allowVerified: boolean;
-    promptPreview: string | null;
+    secondPassEnabled: boolean;
+    temperature: number;
+    searchapiConcurrency: number;
+    maxSearchapiChecks: number;
+    editable: boolean;
+    backendPending: boolean;
+    defaultSystemPrompt: string;
+    defaultUserPromptTemplate: string;
     lastUpdated: string | null;
+    updatedBy: string | null;
   } | null;
   lastCheckedAt: string;
+};
+
+export type TargetingAiSaveResult = {
+  ok: boolean;
+  runtime: TargetingAiRuntimeStatus;
+  error?: string;
+  field?: string | null;
+  data?: Record<string, unknown>;
+};
+
+export type TargetingAiTestResult = {
+  ok: boolean;
+  error?: string;
+  data?: {
+    dry_run?: boolean;
+    niche?: string;
+    location_label?: string | null;
+    prompt_version?: string;
+    prompt_source?: "code_default" | "db_custom";
+    model?: string;
+    provider?: string;
+    gpt_candidates_count?: number;
+    error_code?: string | null;
+    latency_ms?: number;
+  };
 };
 
 export type CompassAiRuntimeAnalyzeRequest = {

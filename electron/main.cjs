@@ -410,6 +410,9 @@ const runtimeIpcHandlers = [
   "botapp:compass:remove-relay-config",
   "botapp:compass:analyze",
   "botapp:targeting-ai:status",
+  "botapp:targeting-ai:save-config",
+  "botapp:targeting-ai:reset-config",
+  "botapp:targeting-ai:test-config",
   "botapp:auto-restart:overview",
   "botapp:auto-restart:dry-run",
   "botapp:auto-restart:action-preview",
@@ -815,10 +818,32 @@ const botappEndpointRegistry = [
     method: "GET",
     path: "/api/instagram-dashboard/targeting-ai/config",
     usedBy: ["API / Webhooks / Keys"],
-    purpose: "Read server-side targeting AI prompt/config without secrets",
+    purpose: "Read/write server-side targeting AI prompt/config without secrets",
     authRequired: true,
     status: "active",
     testStrategy: "fetch",
+  },
+  {
+    id: "targeting_ai_config_reset",
+    name: "Targeting AI config reset",
+    method: "POST",
+    path: "/api/instagram-dashboard/targeting-ai/config/reset",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Reset targeting AI config to code default prompt",
+    authRequired: true,
+    status: "active",
+    testStrategy: "safe_post",
+  },
+  {
+    id: "targeting_ai_test",
+    name: "Targeting AI test",
+    method: "POST",
+    path: "/api/instagram-dashboard/targeting-ai/test",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Dry-run targeting AI prompt against a sample niche",
+    authRequired: true,
+    status: "active",
+    testStrategy: "safe_post",
   },
   {
     id: "targeting_ai_health",
@@ -3575,34 +3600,8 @@ async function targetingAiStatus() {
   };
   if (!cfg.relayUrl) return base;
   try {
-    const endpoint = endpointById("targeting_ai_config");
-    const url = endpoint ? endpointUrl(endpoint) : dashboardApiUrl("targeting-ai/config");
-    if (!url) return base;
-    const response = await fetch(url, { method: "GET", headers: relayHeaders(cfg) });
-    const payload = await response.json().catch(() => null);
-    const data = payload?.data || payload;
-    return {
-      status: response.ok && payload?.ok !== false ? "ready" : "unavailable",
-      message: response.ok && payload?.ok !== false
-        ? "Targeting AI configuration loaded from relay."
-        : readRelayError(payload, "Targeting AI configuration unavailable."),
-      relayUrlConfigured: true,
-      openaiKeyConfigured: data?.openai_key_configured === true,
-      searchapiKeyConfigured: data?.searchapi_key_configured === true,
-      config: data && typeof data === "object" ? {
-        enabled: data.enabled === true,
-        provider: data.provider || "openai",
-        model: data.model || "gpt-4.1-mini",
-        promptVersion: data.prompt_version || data.promptVersion || "targeting_ai_v1",
-        maxGptCandidates: data.max_gpt_candidates ?? null,
-        maxDisplayedResults: data.max_displayed_results ?? null,
-        minFollowers: data.min_followers ?? null,
-        allowVerified: data.allow_verified === true,
-        promptPreview: data.prompt?.user_template_preview || data.prompt?.system_preview || null,
-        lastUpdated: data.last_updated || null,
-      } : null,
-      lastCheckedAt: new Date().toISOString(),
-    };
+    const data = await dashboardGet("targeting_ai_config");
+    return mapTargetingAiRuntimeFromPayload(data, cfg);
   } catch (error) {
     return {
       ...base,
@@ -3612,6 +3611,107 @@ async function targetingAiStatus() {
       lastCheckedAt: new Date().toISOString(),
     };
   }
+}
+
+function mapTargetingAiRuntimeFromPayload(data, cfg) {
+  const ready = data?.enabled === true
+    && data?.openai_key_configured === true
+    && data?.searchapi_key_configured === true;
+  return {
+    status: ready ? "ready" : "unavailable",
+    message: ready
+      ? `Targeting AI config loaded (${data?.prompt_source || "code_default"} · ${data?.prompt_version || "targeting_ai_v1"}).`
+      : "Targeting AI configuration unavailable or provider keys missing.",
+    relayUrlConfigured: Boolean(cfg?.relayUrl),
+    openaiKeyConfigured: data?.openai_key_configured === true,
+    searchapiKeyConfigured: data?.searchapi_key_configured === true,
+    config: data ? {
+      enabled: data.enabled === true,
+      provider: data.provider || "openai",
+      model: data.model || "gpt-4.1-mini",
+      promptVersion: data.prompt_version || "targeting_ai_v1",
+      promptSource: data.prompt_source || "code_default",
+      systemPrompt: data.system_prompt || data.default_system_prompt || "",
+      userPromptTemplate: data.user_prompt_template || data.default_user_prompt_template || "",
+      maxGptCandidates: data.max_gpt_candidates ?? 50,
+      maxDisplayedResults: data.max_displayed_results ?? 20,
+      minFollowers: data.min_followers ?? 500,
+      maxFollowers: data.max_followers ?? 50000,
+      minEligibleTarget: data.min_eligible_target ?? 8,
+      allowVerified: data.allow_verified === true,
+      secondPassEnabled: data.second_pass_enabled !== false,
+      temperature: typeof data.temperature === "number" ? data.temperature : 0.5,
+      searchapiConcurrency: data.searchapi_concurrency ?? 4,
+      maxSearchapiChecks: data.max_searchapi_checks ?? 55,
+      editable: data.prompt_editable !== false,
+      backendPending: data.backend_pending === true,
+      defaultSystemPrompt: data.default_system_prompt || "",
+      defaultUserPromptTemplate: data.default_user_prompt_template || "",
+      lastUpdated: data.updated_at || null,
+      updatedBy: data.updated_by || null,
+    } : null,
+    lastCheckedAt: new Date().toISOString(),
+  };
+}
+
+async function targetingAiSaveConfig(input) {
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) {
+    return { ok: false, runtime: await targetingAiStatus(), error: "Configure the relay URL before saving targeting AI config." };
+  }
+  const result = await dashboardRequestResult("PATCH", "targeting_ai_config", input || {});
+  if (!result.ok) {
+    return {
+      ok: false,
+      runtime: {
+        ...(await targetingAiStatus()),
+        message: result.error || "Targeting AI config could not be saved.",
+      },
+      error: result.error || "Targeting AI config could not be saved.",
+      field: result.data?.field || null,
+    };
+  }
+  return {
+    ok: true,
+    runtime: mapTargetingAiRuntimeFromPayload(result.data, cfg),
+    data: result.data,
+  };
+}
+
+async function targetingAiResetConfig() {
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) {
+    return { ok: false, runtime: await targetingAiStatus(), error: "Configure the relay URL before resetting targeting AI config." };
+  }
+  const result = await dashboardRequestResult("POST", "targeting_ai_config_reset", {});
+  if (!result.ok) {
+    return {
+      ok: false,
+      runtime: await targetingAiStatus(),
+      error: result.error || "Targeting AI config could not be reset.",
+    };
+  }
+  return {
+    ok: true,
+    runtime: mapTargetingAiRuntimeFromPayload(result.data, cfg),
+    data: result.data,
+  };
+}
+
+async function targetingAiTestConfig(input) {
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) {
+    return { ok: false, error: "Configure the relay URL before testing targeting AI config." };
+  }
+  const result = await dashboardRequestResult("POST", "targeting_ai_test", {
+    niche: input?.niche || "coffee shop",
+    location_label: input?.locationLabel || "Paris, France",
+    dry_run: true,
+  });
+  if (!result.ok) {
+    return { ok: false, error: result.error || "Targeting AI test failed." };
+  }
+  return { ok: true, data: result.data };
 }
 
 async function saveCompassRelayConfig(input) {
@@ -3977,6 +4077,9 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:compass:remove-relay-config", () => removeCompassRelayConfig());
   ipcMain.handle("botapp:compass:analyze", (_event, input) => compassAnalyze(input));
   ipcMain.handle("botapp:targeting-ai:status", () => targetingAiStatus());
+  ipcMain.handle("botapp:targeting-ai:save-config", (_event, input) => targetingAiSaveConfig(input));
+  ipcMain.handle("botapp:targeting-ai:reset-config", () => targetingAiResetConfig());
+  ipcMain.handle("botapp:targeting-ai:test-config", (_event, input) => targetingAiTestConfig(input));
   ipcMain.handle("botapp:auto-restart:overview", () => autoRestartOverview());
   ipcMain.handle("botapp:auto-restart:dry-run", () => autoRestartDryRun());
   ipcMain.handle("botapp:auto-restart:action-preview", (_event, input) => autoRestartActionPreview(input));

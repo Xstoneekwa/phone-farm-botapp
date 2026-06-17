@@ -61,6 +61,8 @@ type BotAppRelayHealth = import("./api/types").BotAppRelayHealth;
 type BotAppDispatcherHealthAction = "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
 type CompassAiRuntimeStatus = import("./api/types").CompassAiRuntimeStatus;
 type TargetingAiRuntimeStatus = import("./api/types").TargetingAiRuntimeStatus;
+type TargetingAiSaveResult = import("./api/types").TargetingAiSaveResult;
+type TargetingAiTestResult = import("./api/types").TargetingAiTestResult;
 type CompassAiRuntimeAnalyzeRequest = import("./api/types").CompassAiRuntimeAnalyzeRequest;
 type CompassAiRuntimeAnalyzeResult = import("./api/types").CompassAiRuntimeAnalyzeResult;
 type AutoRestartOverview = import("./api/types").AutoRestartOverview;
@@ -91,6 +93,9 @@ interface Window {
     };
     targetingAi?: {
       status: () => Promise<TargetingAiRuntimeStatus>;
+      saveConfig: (input: Record<string, unknown>) => Promise<TargetingAiSaveResult>;
+      resetConfig: () => Promise<TargetingAiSaveResult>;
+      testConfig: (input?: { niche?: string; locationLabel?: string }) => Promise<TargetingAiTestResult>;
     };
     autoRestart?: {
       overview: () => Promise<AutoRestartOverview>;

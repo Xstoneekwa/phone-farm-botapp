@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   },
   targetingAi: {
     status: () => ipcRenderer.invoke("botapp:targeting-ai:status"),
+    saveConfig: (input) => ipcRenderer.invoke("botapp:targeting-ai:save-config", input),
+    resetConfig: () => ipcRenderer.invoke("botapp:targeting-ai:reset-config"),
+    testConfig: (input) => ipcRenderer.invoke("botapp:targeting-ai:test-config", input),
   },
   autoRestart: {
     overview: () => ipcRenderer.invoke("botapp:auto-restart:overview"),

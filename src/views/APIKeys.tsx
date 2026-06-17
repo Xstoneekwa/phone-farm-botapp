@@ -117,6 +117,41 @@ const aiPromptServices: AiPromptService[] = [
   },
 ];
 
+type TargetingAiDraft = {
+  system_prompt: string;
+  user_prompt_template: string;
+  model: string;
+  max_gpt_candidates: number;
+  max_displayed_results: number;
+  min_followers: number;
+  max_followers: number;
+  min_eligible_target: number;
+  allow_verified: boolean;
+  second_pass_enabled: boolean;
+  temperature: number;
+  searchapi_concurrency: number;
+  max_searchapi_checks: number;
+};
+
+function targetingDraftFromRuntime(runtime: TargetingAiRuntimeStatus): TargetingAiDraft {
+  const config = runtime.config;
+  return {
+    system_prompt: config?.systemPrompt || config?.defaultSystemPrompt || targetingDefaultPrompt,
+    user_prompt_template: config?.userPromptTemplate || config?.defaultUserPromptTemplate || "",
+    model: config?.model || "gpt-4.1-mini",
+    max_gpt_candidates: config?.maxGptCandidates ?? 50,
+    max_displayed_results: config?.maxDisplayedResults ?? 20,
+    min_followers: config?.minFollowers ?? 500,
+    max_followers: config?.maxFollowers ?? 50000,
+    min_eligible_target: config?.minEligibleTarget ?? 8,
+    allow_verified: config?.allowVerified ?? false,
+    second_pass_enabled: config?.secondPassEnabled ?? true,
+    temperature: config?.temperature ?? 0.5,
+    searchapi_concurrency: config?.searchapiConcurrency ?? 4,
+    max_searchapi_checks: config?.maxSearchapiChecks ?? 55,
+  };
+}
+
 export function APIKeys({
   onAction,
 }: {
@@ -127,6 +162,9 @@ export function APIKeys({
   const [runtime, setRuntime] = useState<BotAppRuntimeIntegrationStatus>(() => fallbackRuntimeStatus());
   const [compassRuntime, setCompassRuntime] = useState<CompassAiRuntimeStatus>(() => fallbackCompassRuntimeStatus());
   const [targetingAiRuntime, setTargetingAiRuntime] = useState<TargetingAiRuntimeStatus>(() => fallbackTargetingAiRuntimeStatus());
+  const [targetingDraft, setTargetingDraft] = useState<TargetingAiDraft>(() => targetingDraftFromRuntime(fallbackTargetingAiRuntimeStatus()));
+  const [targetingTestNiche, setTargetingTestNiche] = useState("coffee shop");
+  const [targetingSaving, setTargetingSaving] = useState(false);
   const [relayUrlDraft, setRelayUrlDraft] = useState("");
   const [relayCredentialDraft, setRelayCredentialDraft] = useState("");
   const [webhookDraft, setWebhookDraft] = useState({ label: "Web app", url: "", secret: "" });
@@ -156,7 +194,10 @@ export function APIKeys({
         setCompassRuntime(compassStatus);
         setRelayUrlDraft(compassStatus.relayOrigin ?? "");
       }
-      if (!cancelled && targetingStatus) setTargetingAiRuntime(targetingStatus);
+      if (!cancelled && targetingStatus) {
+        setTargetingAiRuntime(targetingStatus);
+        setTargetingDraft(targetingDraftFromRuntime(targetingStatus));
+      }
       if (!cancelled && integrations?.webhooks) setSavedWebhooks(integrations.webhooks);
       const endpoints = await window.botappDesktop?.endpoints?.list?.();
       if (!cancelled && endpoints) setBackendEndpoints(endpoints);
@@ -216,8 +257,78 @@ export function APIKeys({
     const targetingStatus = await window.botappDesktop?.targetingAi?.status?.();
     if (targetingStatus) {
       setTargetingAiRuntime(targetingStatus);
+      setTargetingDraft(targetingDraftFromRuntime(targetingStatus));
       setMessage(targetingStatus.message);
     }
+  }
+
+  async function saveTargetingAiConfigNow() {
+    setTargetingSaving(true);
+    try {
+      const result = await window.botappDesktop?.targetingAi?.saveConfig?.(targetingDraft);
+      if (result?.runtime) {
+        setTargetingAiRuntime(result.runtime);
+        setTargetingDraft(targetingDraftFromRuntime(result.runtime));
+      }
+      setMessage(result?.ok
+        ? "Targeting AI config saved to backend. Client searches will use the active prompt."
+        : (result?.error ?? "Targeting AI config could not be saved."));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Targeting AI config could not be saved.");
+    } finally {
+      setTargetingSaving(false);
+    }
+  }
+
+  function saveTargetingAiConfig() {
+    if (!relayConfigured) {
+      setMessage("Configure the relay before saving targeting AI config.");
+      return;
+    }
+    void saveTargetingAiConfigNow();
+  }
+
+  async function resetTargetingAiConfigNow() {
+    setTargetingSaving(true);
+    try {
+      const result = await window.botappDesktop?.targetingAi?.resetConfig?.();
+      if (result?.runtime) {
+        setTargetingAiRuntime(result.runtime);
+        setTargetingDraft(targetingDraftFromRuntime(result.runtime));
+      }
+      setMessage(result?.ok
+        ? "Targeting AI config reset to code default."
+        : (result?.error ?? "Targeting AI config could not be reset."));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Targeting AI config could not be reset.");
+    } finally {
+      setTargetingSaving(false);
+    }
+  }
+
+  function resetTargetingAiConfig() {
+    requestDestructive({
+      title: "Reset Targeting AI config?",
+      message: "This removes the saved DB prompt/config and restores the code default targeting_ai_v1 prompt on the backend.",
+      confirmLabel: "Reset to default",
+      action: resetTargetingAiConfigNow,
+    });
+  }
+
+  async function testTargetingAiConfig() {
+    const result = await window.botappDesktop?.targetingAi?.testConfig?.({
+      niche: targetingTestNiche,
+      locationLabel: "Paris, France",
+    });
+    if (!result) {
+      setMessage("Targeting AI test is available only in the packaged app runtime.");
+      return;
+    }
+    if (!result.ok) {
+      setMessage(result.error ?? "Targeting AI test failed.");
+      return;
+    }
+    setMessage(`Dry-run OK · ${result.data?.gpt_candidates_count ?? 0} GPT seeds · ${result.data?.prompt_source ?? "unknown"} · ${result.data?.prompt_version ?? "unknown"}.`);
   }
 
   async function refreshEndpoints() {
@@ -512,35 +623,74 @@ export function APIKeys({
         </div>
       </Card>
 
-      <Card title="Targeting AI" subtitle="Client dashboard ciblage search. GPT proposes seeds; SearchAPI verifies account facts." id="targeting-ai">
-        <div className="relay-console">
+      <Card title="Targeting AI" subtitle="Editable server-side prompt for client dashboard ciblage. GPT proposes seeds; SearchAPI verifies account facts." id="targeting-ai">
+        <div className="relay-console targeting-ai-editor">
           <div className="relay-status-grid">
-            <StatusPill label="Service" value={targetingAiRuntime.config?.enabled ? "enabled" : "disabled"} tone={targetingAiRuntime.config?.enabled ? "success" : "warning"} />
+            <StatusPill label="Enabled" value={targetingAiRuntime.config?.enabled ? "yes" : "no"} tone={targetingAiRuntime.config?.enabled ? "success" : "warning"} />
             <StatusPill label="Provider" value={targetingAiRuntime.config?.provider ?? "openai"} tone="neutral" />
-            <StatusPill label="Model" value={targetingAiRuntime.config?.model ?? "gpt-4.1-mini"} tone="neutral" />
+            <StatusPill label="Model" value={targetingDraft.model} tone="neutral" />
             <StatusPill label="Prompt version" value={targetingAiRuntime.config?.promptVersion ?? "targeting_ai_v1"} tone="success" />
+            <StatusPill label="Prompt source" value={targetingAiRuntime.config?.promptSource ?? "code_default"} tone={targetingAiRuntime.config?.promptSource === "db_custom" ? "success" : "neutral"} />
             <StatusPill label="OpenAI key" value={targetingAiRuntime.openaiKeyConfigured ? "configured" : "missing"} tone={targetingAiRuntime.openaiKeyConfigured ? "success" : "error"} />
             <StatusPill label="SearchAPI key" value={targetingAiRuntime.searchapiKeyConfigured ? "configured" : "missing"} tone={targetingAiRuntime.searchapiKeyConfigured ? "success" : "error"} />
           </div>
+          <div className="prompt-notice">
+            <strong>GPT-4.1-mini</strong>
+            <span>generates strategy, search angles, and seed usernames only.</span>
+            <strong>SearchAPI</strong>
+            <span>verifies real accounts and provides followers, avatar, verified/private, and eligibility inputs.</span>
+          </div>
+          {targetingAiRuntime.config?.backendPending ? (
+            <EmptyState title="Backend migration pending." detail="Apply migration supabase/migrations/20260615_ig_system_settings.sql before saving custom prompts." />
+          ) : null}
+          <label>
+            <span>System prompt</span>
+            <textarea
+              value={targetingDraft.system_prompt}
+              onChange={(event) => setTargetingDraft((draft) => ({ ...draft, system_prompt: event.target.value }))}
+              rows={6}
+            />
+          </label>
+          <label>
+            <span>User prompt template</span>
+            <textarea
+              value={targetingDraft.user_prompt_template}
+              onChange={(event) => setTargetingDraft((draft) => ({ ...draft, user_prompt_template: event.target.value }))}
+              rows={14}
+            />
+            <small>Required placeholders: {"{{niche}}"}, {"{{max_candidates}}"}, {"{{min_followers}}"} · Optional: {"{{location_line}}"}, {"{{pass_instruction}}"}, {"{{max_followers}}"}, {"{{verified_rule}}"}</small>
+          </label>
+          <div className="targeting-limits-grid">
+            <label><span>Max GPT candidates</span><Input value={String(targetingDraft.max_gpt_candidates)} onChange={(value) => setTargetingDraft((draft) => ({ ...draft, max_gpt_candidates: Number(value) || draft.max_gpt_candidates }))} mono /></label>
+            <label><span>Max displayed results</span><Input value={String(targetingDraft.max_displayed_results)} onChange={(value) => setTargetingDraft((draft) => ({ ...draft, max_displayed_results: Number(value) || draft.max_displayed_results }))} mono /></label>
+            <label><span>Min followers</span><Input value={String(targetingDraft.min_followers)} onChange={(value) => setTargetingDraft((draft) => ({ ...draft, min_followers: Number(value) || draft.min_followers }))} mono /></label>
+            <label><span>Max followers</span><Input value={String(targetingDraft.max_followers)} onChange={(value) => setTargetingDraft((draft) => ({ ...draft, max_followers: Number(value) || draft.max_followers }))} mono /></label>
+            <label><span>Min eligible target</span><Input value={String(targetingDraft.min_eligible_target)} onChange={(value) => setTargetingDraft((draft) => ({ ...draft, min_eligible_target: Number(value) || draft.min_eligible_target }))} mono /></label>
+            <label><span>Temperature</span><Input value={String(targetingDraft.temperature)} onChange={(value) => setTargetingDraft((draft) => ({ ...draft, temperature: Number(value) || draft.temperature }))} mono /></label>
+            <label><span>SearchAPI concurrency</span><Input value={String(targetingDraft.searchapi_concurrency)} onChange={(value) => setTargetingDraft((draft) => ({ ...draft, searchapi_concurrency: Number(value) || draft.searchapi_concurrency }))} mono /></label>
+            <label><span>Max SearchAPI checks</span><Input value={String(targetingDraft.max_searchapi_checks)} onChange={(value) => setTargetingDraft((draft) => ({ ...draft, max_searchapi_checks: Number(value) || draft.max_searchapi_checks }))} mono /></label>
+          </div>
+          <div className="targeting-toggle-row">
+            <label><input type="checkbox" checked={targetingDraft.allow_verified} onChange={(event) => setTargetingDraft((draft) => ({ ...draft, allow_verified: event.target.checked }))} /> Allow verified accounts in prompt hints</label>
+            <label><input type="checkbox" checked={targetingDraft.second_pass_enabled} onChange={(event) => setTargetingDraft((draft) => ({ ...draft, second_pass_enabled: event.target.checked }))} /> Second pass enabled</label>
+          </div>
           <div className="relay-meta">
-            <span>Max GPT candidates: {targetingAiRuntime.config?.maxGptCandidates ?? "50"}</span>
-            <span>Max displayed results: {targetingAiRuntime.config?.maxDisplayedResults ?? "20"}</span>
-            <span>Min followers: {targetingAiRuntime.config?.minFollowers ?? "500"}</span>
-            <span>Allow verified: {targetingAiRuntime.config?.allowVerified ? "yes" : "no"}</span>
+            <span>Last updated: {targetingAiRuntime.config?.lastUpdated ?? "Default code prompt"}</span>
+            <span>Updated by: {targetingAiRuntime.config?.updatedBy ?? "n/a"}</span>
             <span>Last config check: {targetingAiRuntime.lastCheckedAt ?? "Not tested"}</span>
-            <span>Last updated: {targetingAiRuntime.config?.lastUpdated ?? "2026-06-15"}</span>
           </div>
           <label>
-            <span>Prompt preview (read-only, code-versioned)</span>
-            <pre>{targetingAiRuntime.config?.promptPreview ?? targetingDefaultPrompt}</pre>
+            <span>Dry-run test niche</span>
+            <Input value={targetingTestNiche} onChange={setTargetingTestNiche} placeholder="coffee shop" />
           </label>
-          <small>GPT role: niche/location strategy and seed usernames. SearchAPI role: existence, followers, avatar, verified/private, eligibility inputs. Keys are never shown here.</small>
           <div className="button-row">
-            <Button onClick={refreshTargetingAi} disabled={!relayConfigured}>Refresh targeting config</Button>
-            <Button onClick={() => testEndpoint("targeting_ai_health")} disabled={!relayConfigured}>Test health endpoint</Button>
-            <Button onClick={() => viewPrompt(aiPromptServices.find((service) => service.service === "targeting_ai")!)}>View full prompt</Button>
+            <Button variant="primary" onClick={saveTargetingAiConfig} disabled={!relayConfigured || targetingSaving || targetingAiRuntime.config?.backendPending}>Save active config</Button>
+            <Button onClick={resetTargetingAiConfig} disabled={!relayConfigured || targetingSaving}>Reset to default</Button>
+            <Button onClick={refreshTargetingAi} disabled={!relayConfigured || targetingSaving}>Refresh</Button>
+            <Button onClick={testTargetingAiConfig} disabled={!relayConfigured || targetingSaving}>Test config</Button>
+            <Button onClick={() => testEndpoint("targeting_ai_health")} disabled={!relayConfigured}>Test health</Button>
           </div>
-          {!relayConfigured ? <EmptyState title="Relay not configured." detail="Configure the Compass relay to load targeting AI configuration from the dashboard backend." /> : null}
+          {!relayConfigured ? <EmptyState title="Relay not configured." detail="Configure the Compass relay before editing targeting AI config." /> : null}
           {relayConfigured && !targetingReady ? <EmptyState title="Targeting AI not fully ready." detail={targetingAiRuntime.message} /> : null}
         </div>
       </Card>
@@ -771,12 +921,25 @@ function fallbackTargetingAiRuntimeStatus(): TargetingAiRuntimeStatus {
       provider: "openai",
       model: "gpt-4.1-mini",
       promptVersion: "targeting_ai_v1",
+      promptSource: "code_default",
+      systemPrompt: targetingDefaultPrompt,
+      userPromptTemplate: "",
       maxGptCandidates: 50,
       maxDisplayedResults: 20,
       minFollowers: 500,
+      maxFollowers: 50000,
+      minEligibleTarget: 8,
       allowVerified: false,
-      promptPreview: targetingDefaultPrompt,
-      lastUpdated: "2026-06-15",
+      secondPassEnabled: true,
+      temperature: 0.5,
+      searchapiConcurrency: 4,
+      maxSearchapiChecks: 55,
+      editable: false,
+      backendPending: true,
+      defaultSystemPrompt: targetingDefaultPrompt,
+      defaultUserPromptTemplate: "",
+      lastUpdated: null,
+      updatedBy: null,
     },
     lastCheckedAt: new Date(0).toISOString(),
   };
