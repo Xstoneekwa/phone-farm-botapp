@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     removeRelayConfig: () => ipcRenderer.invoke("botapp:compass:remove-relay-config"),
     analyze: (input) => ipcRenderer.invoke("botapp:compass:analyze", input),
   },
+  targetingAi: {
+    status: () => ipcRenderer.invoke("botapp:targeting-ai:status"),
+  },
   autoRestart: {
     overview: () => ipcRenderer.invoke("botapp:auto-restart:overview"),
     dryRun: () => ipcRenderer.invoke("botapp:auto-restart:dry-run"),

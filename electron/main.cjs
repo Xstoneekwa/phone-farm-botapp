@@ -409,6 +409,7 @@ const runtimeIpcHandlers = [
   "botapp:compass:save-relay-config",
   "botapp:compass:remove-relay-config",
   "botapp:compass:analyze",
+  "botapp:targeting-ai:status",
   "botapp:auto-restart:overview",
   "botapp:auto-restart:dry-run",
   "botapp:auto-restart:action-preview",
@@ -807,6 +808,28 @@ const botappEndpointRegistry = [
     authRequired: true,
     status: "active",
     testStrategy: "config_only",
+  },
+  {
+    id: "targeting_ai_config",
+    name: "Targeting AI config",
+    method: "GET",
+    path: "/api/instagram-dashboard/targeting-ai/config",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Read server-side targeting AI prompt/config without secrets",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "targeting_ai_health",
+    name: "Targeting AI health",
+    method: "GET",
+    path: "/api/instagram-dashboard/targeting-ai/health",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Check targeting AI provider and SearchAPI configuration",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
   },
   {
     id: "auto_restart_overview",
@@ -3539,6 +3562,58 @@ async function compassHealth() {
   }
 }
 
+async function targetingAiStatus() {
+  const cfg = compassConfig();
+  const base = {
+    status: "relay_missing",
+    message: "Configure the Compass relay to load targeting AI configuration.",
+    relayUrlConfigured: Boolean(cfg.relayUrl),
+    openaiKeyConfigured: false,
+    searchapiKeyConfigured: false,
+    config: null,
+    lastCheckedAt: new Date().toISOString(),
+  };
+  if (!cfg.relayUrl) return base;
+  try {
+    const endpoint = endpointById("targeting_ai_config");
+    const url = endpoint ? endpointUrl(endpoint) : dashboardApiUrl("targeting-ai/config");
+    if (!url) return base;
+    const response = await fetch(url, { method: "GET", headers: relayHeaders(cfg) });
+    const payload = await response.json().catch(() => null);
+    const data = payload?.data || payload;
+    return {
+      status: response.ok && payload?.ok !== false ? "ready" : "unavailable",
+      message: response.ok && payload?.ok !== false
+        ? "Targeting AI configuration loaded from relay."
+        : readRelayError(payload, "Targeting AI configuration unavailable."),
+      relayUrlConfigured: true,
+      openaiKeyConfigured: data?.openai_key_configured === true,
+      searchapiKeyConfigured: data?.searchapi_key_configured === true,
+      config: data && typeof data === "object" ? {
+        enabled: data.enabled === true,
+        provider: data.provider || "openai",
+        model: data.model || "gpt-4.1-mini",
+        promptVersion: data.prompt_version || data.promptVersion || "targeting_ai_v1",
+        maxGptCandidates: data.max_gpt_candidates ?? null,
+        maxDisplayedResults: data.max_displayed_results ?? null,
+        minFollowers: data.min_followers ?? null,
+        allowVerified: data.allow_verified === true,
+        promptPreview: data.prompt?.user_template_preview || data.prompt?.system_preview || null,
+        lastUpdated: data.last_updated || null,
+      } : null,
+      lastCheckedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      ...base,
+      status: "unavailable",
+      message: safeRuntimeError(error, "Targeting AI relay is unreachable."),
+      relayUrlConfigured: true,
+      lastCheckedAt: new Date().toISOString(),
+    };
+  }
+}
+
 async function saveCompassRelayConfig(input) {
   const relayUrl = normalizeRelayUrl(input?.relayUrl || "");
   if (!relayUrl) {
@@ -3901,6 +3976,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:compass:save-relay-config", (_event, input) => saveCompassRelayConfig(input));
   ipcMain.handle("botapp:compass:remove-relay-config", () => removeCompassRelayConfig());
   ipcMain.handle("botapp:compass:analyze", (_event, input) => compassAnalyze(input));
+  ipcMain.handle("botapp:targeting-ai:status", () => targetingAiStatus());
   ipcMain.handle("botapp:auto-restart:overview", () => autoRestartOverview());
   ipcMain.handle("botapp:auto-restart:dry-run", () => autoRestartDryRun());
   ipcMain.handle("botapp:auto-restart:action-preview", (_event, input) => autoRestartActionPreview(input));

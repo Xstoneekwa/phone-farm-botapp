@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Card, Input, Modal, type BadgeTone } from "../design/components";
-import type { ApiKeySummary, BotAppBackendEndpoint, BotAppRuntimeIntegrationStatus, CompassAiRuntimeStatus, IntegrationStatus, WebhookEvent, WebhookSummary } from "../api/types";
+import type { ApiKeySummary, BotAppBackendEndpoint, BotAppRuntimeIntegrationStatus, CompassAiRuntimeStatus, IntegrationStatus, TargetingAiRuntimeStatus, WebhookEvent, WebhookSummary } from "../api/types";
 import { redactText } from "../security/redaction";
 import "./api-keys.css";
 
@@ -41,6 +41,22 @@ const compassDefaultPrompt = [
   "Prioritize critical blockers first, then operational risks, then quality/pacing opportunities.",
 ].join(" ");
 
+const targetingDefaultPrompt = [
+  "Generate a broad Instagram target discovery strategy for follower-source accounts.",
+  "GPT proposes search angles, keywords, hashtag hints, and seed usernames only.",
+  "SearchAPI verifies existence and provides followers, avatar, verified, and private flags.",
+  "Prefer niche/local/micro-mid accounts; avoid celebrities, verified brands, and mega accounts.",
+  "Seed usernames are hypotheses to verify — not guaranteed to exist.",
+].join(" ");
+
+const targetingPromptGuardrails = [
+  "GPT must not invent follower counts, avatars, verification, privacy, or eligibility.",
+  "SearchAPI is the source of truth for account facts and eligibility inputs.",
+  "Only SearchAPI-verified accounts are displayed to clients.",
+  "Non-eligible verified accounts may appear with explicit reasons but block final validation.",
+  "Prompt is code-versioned (targeting_ai_v1) until DB-backed config is enabled.",
+];
+
 const lockedPromptGuardrails = [
   "No fact in input = no recommendation.",
   "Use only provided system facts; never invent accounts, CTs, devices, blockers, metrics, actions, causes, or evidence.",
@@ -78,14 +94,14 @@ const aiPromptServices: AiPromptService[] = [
   {
     service: "targeting_ai",
     name: "Targeting AI",
-    status: "planned",
+    status: "active",
     source: "default",
-    version: "draft",
-    lastUpdatedAt: null,
-    backendSyncStatus: "backend pending",
-    promptPreview: "Future CT discovery, CT quality, and audience source prompt. Not active in production.",
-    defaultPrompt: "Backend pending. This service has no active production prompt yet.",
-    guardrails: lockedPromptGuardrails,
+    version: "targeting_ai_v1",
+    lastUpdatedAt: "2026-06-15",
+    backendSyncStatus: "relay/server-side active",
+    promptPreview: "Client dashboard ciblage: GPT generates search strategy and seed usernames; SearchAPI verifies facts.",
+    defaultPrompt: targetingDefaultPrompt,
+    guardrails: targetingPromptGuardrails,
   },
   {
     service: "dm_ai",
@@ -110,6 +126,7 @@ export function APIKeys({
 }) {
   const [runtime, setRuntime] = useState<BotAppRuntimeIntegrationStatus>(() => fallbackRuntimeStatus());
   const [compassRuntime, setCompassRuntime] = useState<CompassAiRuntimeStatus>(() => fallbackCompassRuntimeStatus());
+  const [targetingAiRuntime, setTargetingAiRuntime] = useState<TargetingAiRuntimeStatus>(() => fallbackTargetingAiRuntimeStatus());
   const [relayUrlDraft, setRelayUrlDraft] = useState("");
   const [relayCredentialDraft, setRelayCredentialDraft] = useState("");
   const [webhookDraft, setWebhookDraft] = useState({ label: "Web app", url: "", secret: "" });
@@ -128,9 +145,10 @@ export function APIKeys({
   useEffect(() => {
     let cancelled = false;
     async function loadRuntime() {
-      const [status, compassStatus, integrations] = await Promise.all([
+      const [status, compassStatus, targetingStatus, integrations] = await Promise.all([
         window.botappDesktop?.runtime?.status?.(),
         window.botappDesktop?.compass?.status?.(),
+        window.botappDesktop?.targetingAi?.status?.(),
         window.botappDesktop?.integrations?.list?.(),
       ]);
       if (!cancelled && status) setRuntime(status);
@@ -138,6 +156,7 @@ export function APIKeys({
         setCompassRuntime(compassStatus);
         setRelayUrlDraft(compassStatus.relayOrigin ?? "");
       }
+      if (!cancelled && targetingStatus) setTargetingAiRuntime(targetingStatus);
       if (!cancelled && integrations?.webhooks) setSavedWebhooks(integrations.webhooks);
       const endpoints = await window.botappDesktop?.endpoints?.list?.();
       if (!cancelled && endpoints) setBackendEndpoints(endpoints);
@@ -149,6 +168,10 @@ export function APIKeys({
   const activeWebhooks = useMemo(() => savedWebhooks.filter((hook) => hook.status === "active").length, [savedWebhooks]);
   const relayConfigured = compassRuntime.relayUrlConfigured;
   const compassReady = compassRuntime.status === "ready" && compassRuntime.serverKeyStatus === "configured";
+  const targetingReady = targetingAiRuntime.status === "ready"
+    && targetingAiRuntime.openaiKeyConfigured
+    && targetingAiRuntime.searchapiKeyConfigured
+    && targetingAiRuntime.config?.enabled === true;
   const checklist = [
     { label: "Relay URL configured", ok: relayConfigured },
     { label: "Relay reachable", ok: compassRuntime.status === "ready" },
@@ -178,13 +201,23 @@ export function APIKeys({
   }
 
   async function refreshRuntime() {
-    const [status, compassStatus] = await Promise.all([
+    const [status, compassStatus, targetingStatus] = await Promise.all([
       window.botappDesktop?.runtime?.status?.(),
       window.botappDesktop?.compass?.status?.(),
+      window.botappDesktop?.targetingAi?.status?.(),
     ]);
     if (status) setRuntime(status);
     if (compassStatus) setCompassRuntime(compassStatus);
-    setMessage(compassStatus?.message ?? noRelayMessage);
+    if (targetingStatus) setTargetingAiRuntime(targetingStatus);
+    setMessage(targetingStatus?.message ?? compassStatus?.message ?? noRelayMessage);
+  }
+
+  async function refreshTargetingAi() {
+    const targetingStatus = await window.botappDesktop?.targetingAi?.status?.();
+    if (targetingStatus) {
+      setTargetingAiRuntime(targetingStatus);
+      setMessage(targetingStatus.message);
+    }
   }
 
   async function refreshEndpoints() {
@@ -479,11 +512,44 @@ export function APIKeys({
         </div>
       </Card>
 
-      <Card title="AI Modules" subtitle="Compass AI is relay-backed now. Other modules are visible as future architecture only.">
+      <Card title="Targeting AI" subtitle="Client dashboard ciblage search. GPT proposes seeds; SearchAPI verifies account facts." id="targeting-ai">
+        <div className="relay-console">
+          <div className="relay-status-grid">
+            <StatusPill label="Service" value={targetingAiRuntime.config?.enabled ? "enabled" : "disabled"} tone={targetingAiRuntime.config?.enabled ? "success" : "warning"} />
+            <StatusPill label="Provider" value={targetingAiRuntime.config?.provider ?? "openai"} tone="neutral" />
+            <StatusPill label="Model" value={targetingAiRuntime.config?.model ?? "gpt-4.1-mini"} tone="neutral" />
+            <StatusPill label="Prompt version" value={targetingAiRuntime.config?.promptVersion ?? "targeting_ai_v1"} tone="success" />
+            <StatusPill label="OpenAI key" value={targetingAiRuntime.openaiKeyConfigured ? "configured" : "missing"} tone={targetingAiRuntime.openaiKeyConfigured ? "success" : "error"} />
+            <StatusPill label="SearchAPI key" value={targetingAiRuntime.searchapiKeyConfigured ? "configured" : "missing"} tone={targetingAiRuntime.searchapiKeyConfigured ? "success" : "error"} />
+          </div>
+          <div className="relay-meta">
+            <span>Max GPT candidates: {targetingAiRuntime.config?.maxGptCandidates ?? "50"}</span>
+            <span>Max displayed results: {targetingAiRuntime.config?.maxDisplayedResults ?? "20"}</span>
+            <span>Min followers: {targetingAiRuntime.config?.minFollowers ?? "500"}</span>
+            <span>Allow verified: {targetingAiRuntime.config?.allowVerified ? "yes" : "no"}</span>
+            <span>Last config check: {targetingAiRuntime.lastCheckedAt ?? "Not tested"}</span>
+            <span>Last updated: {targetingAiRuntime.config?.lastUpdated ?? "2026-06-15"}</span>
+          </div>
+          <label>
+            <span>Prompt preview (read-only, code-versioned)</span>
+            <pre>{targetingAiRuntime.config?.promptPreview ?? targetingDefaultPrompt}</pre>
+          </label>
+          <small>GPT role: niche/location strategy and seed usernames. SearchAPI role: existence, followers, avatar, verified/private, eligibility inputs. Keys are never shown here.</small>
+          <div className="button-row">
+            <Button onClick={refreshTargetingAi} disabled={!relayConfigured}>Refresh targeting config</Button>
+            <Button onClick={() => testEndpoint("targeting_ai_health")} disabled={!relayConfigured}>Test health endpoint</Button>
+            <Button onClick={() => viewPrompt(aiPromptServices.find((service) => service.service === "targeting_ai")!)}>View full prompt</Button>
+          </div>
+          {!relayConfigured ? <EmptyState title="Relay not configured." detail="Configure the Compass relay to load targeting AI configuration from the dashboard backend." /> : null}
+          {relayConfigured && !targetingReady ? <EmptyState title="Targeting AI not fully ready." detail={targetingAiRuntime.message} /> : null}
+        </div>
+      </Card>
+
+      <Card title="AI Modules" subtitle="Compass AI is relay-backed now. Targeting AI config is visible when relay health succeeds.">
         <div className="module-grid">
           <AiModuleCard title="Compass AI" badge={compassReady ? "Active" : relayConfigured ? "Configured" : "Not configured"} tone={compassReady ? "success" : relayConfigured ? "warning" : "neutral"} detail="Account health analysis and operator recommendations through the secure relay." meta={`${compassRuntime.provider} through relay · ${compassRuntime.model} · Last analysis ${compassRuntime.lastAnalysisAt ?? "not available"}`} actions={<><Button onClick={scrollToRelay}>Configure</Button><Button onClick={analyzeSampleSafely}>Test</Button><Button onClick={() => prepare("Open Compass", "compass")}>Open Compass</Button></>} />
           <AiModuleCard title="Comment AI" badge="Planned" tone="neutral" detail="Future comment generation and moderation support." meta="Backend pending" actions={<Button disabled>Setup later</Button>} />
-          <AiModuleCard title="Targeting AI" badge="Planned" tone="neutral" detail="Future CT discovery, CT quality scoring, and audience suggestions." meta="Backend pending" actions={<Button disabled>Setup later</Button>} />
+          <AiModuleCard title="Targeting AI" badge={targetingReady ? "Active" : relayConfigured ? "Configured" : "Not configured"} tone={targetingReady ? "success" : relayConfigured ? "warning" : "neutral"} detail="Client dashboard ciblage: GPT search strategy + SearchAPI verification." meta={`${targetingAiRuntime.config?.provider ?? "openai"} · ${targetingAiRuntime.config?.model ?? "gpt-4.1-mini"} · ${targetingAiRuntime.config?.promptVersion ?? "targeting_ai_v1"}`} actions={<><Button onClick={() => document.getElementById("targeting-ai")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Configure</Button><Button onClick={refreshTargetingAi}>Test</Button></>} />
           <AiModuleCard title="DM AI" badge="Planned" tone="neutral" detail="Future DM drafting and response classification." meta="Backend pending" actions={<Button disabled>Setup later</Button>} />
         </div>
       </Card>
@@ -512,6 +578,8 @@ export function APIKeys({
               </div>
               {service.service === "compass_ai" ? (
                 <small>Relay/server-side prompt. The facts-only validator still filters every recommendation after AI output.</small>
+              ) : service.service === "targeting_ai" ? (
+                <small>Relay/server-side prompt targeting_ai_v1. GPT proposes seeds only; SearchAPI verifies followers, avatar, and eligibility inputs.</small>
               ) : (
                 <small>Planned module. UI contract is prepared, but no prompt is active in production.</small>
               )}
@@ -688,6 +756,29 @@ function fallbackCompassRuntimeStatus(): CompassAiRuntimeStatus {
     lastSafeError: null,
     lastProviderErrorCode: null,
     message: noRelayMessage,
+  };
+}
+
+function fallbackTargetingAiRuntimeStatus(): TargetingAiRuntimeStatus {
+  return {
+    status: "relay_missing",
+    message: "Configure the Compass relay to load targeting AI configuration.",
+    relayUrlConfigured: false,
+    openaiKeyConfigured: false,
+    searchapiKeyConfigured: false,
+    config: {
+      enabled: false,
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      promptVersion: "targeting_ai_v1",
+      maxGptCandidates: 50,
+      maxDisplayedResults: 20,
+      minFollowers: 500,
+      allowVerified: false,
+      promptPreview: targetingDefaultPrompt,
+      lastUpdated: "2026-06-15",
+    },
+    lastCheckedAt: new Date(0).toISOString(),
   };
 }
 

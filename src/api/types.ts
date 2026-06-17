@@ -2065,6 +2065,27 @@ export type CompassAiRuntimeStatus = {
   message: string;
 };
 
+export type TargetingAiRuntimeStatus = {
+  status: "ready" | "relay_missing" | "unavailable";
+  message: string;
+  relayUrlConfigured: boolean;
+  openaiKeyConfigured: boolean;
+  searchapiKeyConfigured: boolean;
+  config: {
+    enabled: boolean;
+    provider: string;
+    model: string;
+    promptVersion: string;
+    maxGptCandidates: number | null;
+    maxDisplayedResults: number | null;
+    minFollowers: number | null;
+    allowVerified: boolean;
+    promptPreview: string | null;
+    lastUpdated: string | null;
+  } | null;
+  lastCheckedAt: string;
+};
+
 export type CompassAiRuntimeAnalyzeRequest = {
   period: "24h" | "7d" | "30d";
   snapshot: CompassAiAnalysisPayload;
