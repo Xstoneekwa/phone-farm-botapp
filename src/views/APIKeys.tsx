@@ -29,7 +29,7 @@ type AiPromptService = {
   source: "default" | "custom";
   version: string;
   lastUpdatedAt: string | null;
-  backendSyncStatus: "relay/server-side active" | "backend pending";
+  backendSyncStatus: "relay/server-side active" | "backend pending" | "relay reachable";
   promptPreview: string;
   defaultPrompt: string;
   guardrails: string[];
@@ -116,6 +116,30 @@ const aiPromptServices: AiPromptService[] = [
     guardrails: lockedPromptGuardrails,
   },
 ];
+
+function buildTargetingPromptService(runtime: TargetingAiRuntimeStatus): AiPromptService {
+  const config = runtime.config;
+  const backendPending = config?.backendPending === true;
+  const relayReachable = runtime.relayUrlConfigured && runtime.status !== "relay_missing";
+  return {
+    service: "targeting_ai",
+    name: "Targeting AI",
+    status: backendPending || !relayReachable ? "planned" : "active",
+    source: config?.promptSource === "db_custom" ? "custom" : "default",
+    version: config?.promptVersion ?? "targeting_ai_v1",
+    lastUpdatedAt: config?.lastUpdated ?? null,
+    backendSyncStatus: backendPending
+      ? "backend pending"
+      : runtime.status === "ready"
+        ? "relay/server-side active"
+        : relayReachable
+          ? "relay reachable"
+          : "backend pending",
+    promptPreview: config?.userPromptTemplate?.slice(0, 160) || config?.systemPrompt?.slice(0, 160) || targetingDefaultPrompt,
+    defaultPrompt: config?.userPromptTemplate || config?.systemPrompt || targetingDefaultPrompt,
+    guardrails: targetingPromptGuardrails,
+  };
+}
 
 type TargetingAiDraft = {
   system_prompt: string;
@@ -213,6 +237,12 @@ export function APIKeys({
     && targetingAiRuntime.openaiKeyConfigured
     && targetingAiRuntime.searchapiKeyConfigured
     && targetingAiRuntime.config?.enabled === true;
+  const targetingConfigReady = Boolean(
+    relayConfigured
+    && targetingAiRuntime.config
+    && targetingAiRuntime.config.backendPending !== true
+    && targetingAiRuntime.config.editable !== false,
+  );
   const checklist = [
     { label: "Relay URL configured", ok: relayConfigured },
     { label: "Relay reachable", ok: compassRuntime.status === "ready" },
@@ -251,6 +281,26 @@ export function APIKeys({
     if (compassStatus) setCompassRuntime(compassStatus);
     if (targetingStatus) setTargetingAiRuntime(targetingStatus);
     setMessage(targetingStatus?.message ?? compassStatus?.message ?? noRelayMessage);
+  }
+
+  async function useLocalRelayForTargetingAi() {
+    const localRelay = "http://localhost:3000/api/instagram-dashboard/compass/analyze";
+    setRelayUrlDraft(localRelay);
+    try {
+      const status = await window.botappDesktop?.compass?.saveRelayConfig?.({
+        relayUrl: localRelay,
+        relayCredential: relayCredentialDraft || undefined,
+      });
+      if (status) {
+        setCompassRuntime(status);
+        setMessage("Relay URL switched to local backend for Targeting AI validation.");
+        await refreshTargetingAi();
+        return;
+      }
+      setMessage("Switch relay URL in the packaged BotApp runtime to validate Targeting AI locally.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not switch relay URL.");
+    }
   }
 
   async function refreshTargetingAi() {
@@ -643,6 +693,15 @@ export function APIKeys({
           {targetingAiRuntime.config?.backendPending ? (
             <EmptyState title="Backend migration pending." detail="Apply migration supabase/migrations/20260615_ig_system_settings.sql before saving custom prompts." />
           ) : null}
+          {!targetingConfigReady && relayConfigured && targetingAiRuntime.status === "unavailable" ? (
+            <EmptyState
+              title="Targeting AI routes unavailable on current relay."
+              detail={`${targetingAiRuntime.message} Use the local backend while frontend changes are not deployed to production.`}
+            />
+          ) : null}
+          {!relayConfigured ? (
+            <EmptyState title="Relay not configured." detail="Configure the Compass relay before editing targeting AI config." />
+          ) : null}
           <label>
             <span>System prompt</span>
             <textarea
@@ -684,13 +743,13 @@ export function APIKeys({
             <Input value={targetingTestNiche} onChange={setTargetingTestNiche} placeholder="coffee shop" />
           </label>
           <div className="button-row">
-            <Button variant="primary" onClick={saveTargetingAiConfig} disabled={!relayConfigured || targetingSaving || targetingAiRuntime.config?.backendPending}>Save active config</Button>
-            <Button onClick={resetTargetingAiConfig} disabled={!relayConfigured || targetingSaving}>Reset to default</Button>
+            <Button variant="primary" onClick={saveTargetingAiConfig} disabled={!targetingConfigReady || targetingSaving}>Save active config</Button>
+            <Button onClick={resetTargetingAiConfig} disabled={!targetingConfigReady || targetingSaving}>Reset to default</Button>
             <Button onClick={refreshTargetingAi} disabled={!relayConfigured || targetingSaving}>Refresh</Button>
-            <Button onClick={testTargetingAiConfig} disabled={!relayConfigured || targetingSaving}>Test config</Button>
+            <Button onClick={testTargetingAiConfig} disabled={!targetingConfigReady || targetingSaving}>Test config</Button>
+            <Button onClick={useLocalRelayForTargetingAi} disabled={targetingSaving}>Use local relay</Button>
             <Button onClick={() => testEndpoint("targeting_ai_health")} disabled={!relayConfigured}>Test health</Button>
           </div>
-          {!relayConfigured ? <EmptyState title="Relay not configured." detail="Configure the Compass relay before editing targeting AI config." /> : null}
           {relayConfigured && !targetingReady ? <EmptyState title="Targeting AI not fully ready." detail={targetingAiRuntime.message} /> : null}
         </div>
       </Card>
@@ -710,38 +769,53 @@ export function APIKeys({
           <span>Facts-only grounding, category allowlists, schema validation, destructive-action blocks, and client-safe/internal split cannot be disabled.</span>
         </div>
         <div className="prompt-grid">
-          {aiPromptServices.map((service) => (
-            <article key={service.service} className={`prompt-card ${service.status === "active" ? "active" : "planned"}`}>
+          {aiPromptServices.map((service) => {
+            const card = service.service === "targeting_ai"
+              ? buildTargetingPromptService(targetingAiRuntime)
+              : service;
+            const isTargeting = card.service === "targeting_ai";
+            return (
+            <article key={card.service} className={`prompt-card ${card.status === "active" ? "active" : "planned"}`}>
               <div className="prompt-card-header">
                 <div>
-                  <span>{service.service}</span>
-                  <h3>{service.name}</h3>
+                  <span>{card.service}</span>
+                  <h3>{card.name}</h3>
                 </div>
-                <Badge tone={service.status === "active" ? "success" : "neutral"}>{service.status}</Badge>
+                <Badge tone={card.status === "active" ? "success" : "neutral"}>{card.status}</Badge>
               </div>
-              <p>{service.promptPreview}</p>
+              <p>{isTargeting ? (targetingAiRuntime.config?.promptSource === "db_custom" ? "Custom prompt active on relay backend." : card.promptPreview) : card.promptPreview}</p>
               <div className="prompt-meta">
-                <StatusPill label="Prompt source" value={service.source} tone={service.source === "default" ? "neutral" : "success"} />
-                <StatusPill label="Active version" value={service.version} tone={service.status === "active" ? "success" : "neutral"} />
-                <StatusPill label="Last updated" value={service.lastUpdatedAt ?? "Default"} tone="neutral" />
-                <StatusPill label="Backend sync" value={service.backendSyncStatus} tone={service.status === "active" ? "success" : "warning"} />
+                <StatusPill label="Prompt source" value={card.source} tone={card.source === "default" ? "neutral" : "success"} />
+                <StatusPill label="Active version" value={card.version} tone={card.status === "active" ? "success" : "neutral"} />
+                <StatusPill label="Last updated" value={card.lastUpdatedAt ?? "Default"} tone="neutral" />
+                <StatusPill label="Backend sync" value={card.backendSyncStatus} tone={card.backendSyncStatus === "backend pending" ? "warning" : "success"} />
               </div>
-              {service.service === "compass_ai" ? (
+              {card.service === "compass_ai" ? (
                 <small>Relay/server-side prompt. The facts-only validator still filters every recommendation after AI output.</small>
-              ) : service.service === "targeting_ai" ? (
-                <small>Relay/server-side prompt targeting_ai_v1. GPT proposes seeds only; SearchAPI verifies followers, avatar, and eligibility inputs.</small>
+              ) : isTargeting ? (
+                <small>Edit the live prompt in the Targeting AI card above. GPT proposes seeds only; SearchAPI verifies followers, avatar, and eligibility inputs.</small>
               ) : (
                 <small>Planned module. UI contract is prepared, but no prompt is active in production.</small>
               )}
               <div className="button-row compact">
-                <Button onClick={() => viewPrompt(service)}>View prompt</Button>
-                <Button onClick={() => editPrompt(service)}>Edit prompt</Button>
-                <Button onClick={() => restorePromptDefault(service)}>Restore default</Button>
-                <Button disabled>Activate prompt · Backend pending</Button>
-                <Button disabled>Test prompt · Backend pending</Button>
+                {isTargeting ? (
+                  <>
+                    <Button onClick={() => document.getElementById("targeting-ai")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Open editor</Button>
+                    <Button onClick={refreshTargetingAi}>Refresh</Button>
+                    <Button onClick={testTargetingAiConfig} disabled={!targetingConfigReady}>Test config</Button>
+                  </>
+                ) : (
+                  <>
+                    <Button onClick={() => viewPrompt(card)}>View prompt</Button>
+                    <Button onClick={() => editPrompt(card)}>Edit prompt</Button>
+                    <Button onClick={() => restorePromptDefault(card)}>Restore default</Button>
+                    <Button disabled>Activate prompt · Backend pending</Button>
+                    <Button disabled>Test prompt · Backend pending</Button>
+                  </>
+                )}
               </div>
             </article>
-          ))}
+          )})}
         </div>
       </Card>
 
@@ -935,7 +1009,7 @@ function fallbackTargetingAiRuntimeStatus(): TargetingAiRuntimeStatus {
       searchapiConcurrency: 4,
       maxSearchapiChecks: 55,
       editable: false,
-      backendPending: true,
+      backendPending: false,
       defaultSystemPrompt: targetingDefaultPrompt,
       defaultUserPromptTemplate: "",
       lastUpdated: null,

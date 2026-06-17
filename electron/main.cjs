@@ -3599,29 +3599,60 @@ async function targetingAiStatus() {
     lastCheckedAt: new Date().toISOString(),
   };
   if (!cfg.relayUrl) return base;
-  try {
-    const data = await dashboardGet("targeting_ai_config");
-    return mapTargetingAiRuntimeFromPayload(data, cfg);
-  } catch (error) {
+  const result = await dashboardRequestResult("GET", "targeting_ai_config");
+  if (!result.ok) {
+    const routeMissing = result.status === 404;
     return {
       ...base,
       status: "unavailable",
-      message: safeRuntimeError(error, "Targeting AI relay is unreachable."),
       relayUrlConfigured: true,
+      message: routeMissing
+        ? "Targeting AI routes are not deployed on this relay host. Use http://localhost:3000/api/instagram-dashboard/compass/analyze for local validation."
+        : (result.error || "Targeting AI configuration unavailable."),
+      config: {
+        enabled: false,
+        provider: "openai",
+        model: "gpt-4.1-mini",
+        promptVersion: "targeting_ai_v1",
+        promptSource: "code_default",
+        systemPrompt: "",
+        userPromptTemplate: "",
+        maxGptCandidates: 50,
+        maxDisplayedResults: 20,
+        minFollowers: 500,
+        maxFollowers: 50000,
+        minEligibleTarget: 8,
+        allowVerified: false,
+        secondPassEnabled: true,
+        temperature: 0.5,
+        searchapiConcurrency: 4,
+        maxSearchapiChecks: 55,
+        editable: false,
+        backendPending: routeMissing ? false : true,
+        defaultSystemPrompt: "",
+        defaultUserPromptTemplate: "",
+        lastUpdated: null,
+        updatedBy: null,
+      },
       lastCheckedAt: new Date().toISOString(),
     };
   }
+  return mapTargetingAiRuntimeFromPayload(result.data, cfg);
 }
 
 function mapTargetingAiRuntimeFromPayload(data, cfg) {
-  const ready = data?.enabled === true
-    && data?.openai_key_configured === true
-    && data?.searchapi_key_configured === true;
+  const configLoaded = Boolean(data && data.backend_pending !== true);
+  const fullyReady = configLoaded
+    && data.enabled === true
+    && data.openai_key_configured === true
+    && data.searchapi_key_configured === true;
   return {
-    status: ready ? "ready" : "unavailable",
-    message: ready
-      ? `Targeting AI config loaded (${data?.prompt_source || "code_default"} · ${data?.prompt_version || "targeting_ai_v1"}).`
-      : "Targeting AI configuration unavailable or provider keys missing.",
+    status: configLoaded ? "ready" : "unavailable",
+    message: configLoaded
+      ? (fullyReady
+        ? `Targeting AI config loaded (${data.prompt_source || "code_default"} · ${data.prompt_version || "targeting_ai_v1"}).`
+        : "Targeting AI config loaded. Provider keys or feature flag may still need attention.")
+      : "Targeting AI configuration unavailable or migration pending.",
     relayUrlConfigured: Boolean(cfg?.relayUrl),
     openaiKeyConfigured: data?.openai_key_configured === true,
     searchapiKeyConfigured: data?.searchapi_key_configured === true,
