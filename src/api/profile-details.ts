@@ -1,4 +1,5 @@
 import type { ProfileLogEntry, ProfileTarget } from "./types";
+import { resolveTargetFbrFromApiRow } from "./target-fbr-display";
 
 export type ProfileDetailsSourceStatus = "connected" | "backend_pending" | "not_available";
 
@@ -57,8 +58,7 @@ function targetPerformance(value: unknown): ProfileTarget["performance"] {
 }
 
 export function mapApiTargetRow(profileId: string, row: Record<string, unknown>): ProfileTarget {
-  const followsSent = typeof row.follows_sent_count === "number" ? row.follows_sent_count : null;
-  const followbacks = typeof row.followbacks_count === "number" ? row.followbacks_count : null;
+  const fbr = resolveTargetFbrFromApiRow(row);
   const followersCount = typeof row.followers_count === "number" ? row.followers_count : null;
   const statusRaw = String(row.status || "unknown");
   const status: ProfileTarget["status"] = statusRaw === "pending_verification" || statusRaw === "valid" || statusRaw === "rejected" || statusRaw === "review" || statusRaw === "duplicate" || statusRaw === "active" || statusRaw === "archived" || statusRaw === "deleted"
@@ -84,9 +84,13 @@ export function mapApiTargetRow(profileId: string, row: Record<string, unknown>)
     jobNextAttemptAt: String(row.job_next_attempt_at || "") || null,
     jobLastErrorCode: String(row.job_last_error_code || "") || null,
     performance: targetPerformance(row.performance_status),
-    followbackRatio: followsSent && followbacks ? Number((followbacks / followsSent).toFixed(2)) : null,
-    followsSent,
-    followbacks,
+    followbackRatio: fbr.fbrMetricsReliable ? fbr.fbrPercent : null,
+    fbrMetricsReliable: fbr.fbrMetricsReliable,
+    fbrPercent: fbr.fbrPercent,
+    fbrLabel: fbr.fbrLabel,
+    followbacksMetricsReliableAt: fbr.followbacksMetricsReliableAt,
+    followsSent: fbr.followsSent,
+    followbacks: fbr.followbacks,
     lastUsedAt: String(row.last_used_at || "") || null,
     lastSelectedAt: String(row.last_selected_at || "") || null,
     addedAt: String(row.updated_at || row.created_at || "") || "",

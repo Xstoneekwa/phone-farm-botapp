@@ -915,6 +915,10 @@ export type ProfileTarget = {
   jobLastErrorCode?: string | null;
   performance: ProfileTargetPerformance;
   followbackRatio: number | null;
+  fbrMetricsReliable?: boolean;
+  fbrPercent?: number | null;
+  fbrLabel?: string | null;
+  followbacksMetricsReliableAt?: string | null;
   followsSent: number | null;
   followbacks: number | null;
   lastUsedAt: string | null;

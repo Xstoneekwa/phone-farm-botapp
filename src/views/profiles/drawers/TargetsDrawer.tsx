@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockClient } from "../../../api/mock-client";
 import { loadProfileDetails, mapApiTargetRow, type ProfileDetailsPayload } from "../../../api/profile-details";
+import { formatTargetFbrDisplay } from "../../../api/target-fbr-display";
 import type {
   BotProfile,
   ProfileTarget,
@@ -305,13 +306,13 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
     const content = format === "json"
       ? JSON.stringify(rows, null, 2)
       : [
-        "target_username,eligibility,performance,followers_count,followback_ratio,added_at",
+        "target_username,eligibility,performance,followers_count,fbr,added_at",
         ...rows.map((row) => [
           row.target_username,
           row.eligibility,
           row.performance,
           row.followers_count ?? "",
-          row.followback_ratio ?? "",
+          row.fbr ?? "",
           row.added_at,
         ].map(csvEscape).join(",")),
       ].join("\n");
@@ -417,7 +418,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
                     <td><EligibilityBadge status={target.eligibility} /><small>{target.providerCheckedAt ? `checked ${formatShortDate(target.providerCheckedAt)}` : pendingReasonLabel(target)}</small></td>
                     <td className="mono">{metricText(target.followersCount)}</td>
                     <td><PerformanceBadge status={target.performance} /></td>
-                    <td className="mono" title="Followback Ratio: followers gained / follows sent from this CT">{fbrText(target)}</td>
+                    <td className="mono" title={target.fbrMetricsReliable ? "Followback ratio (measured)" : "Followback ratio not yet measured"}>{formatTargetFbrDisplay(target)}</td>
                     <td className="mono" title={target.followbacks !== null ? `${metricText(target.followbacks)} followbacks attributed` : "Followbacks pending attribution"}>{metricText(target.followsSent)}</td>
                     <td><span className="mono">{formatShortDate(target.lastUsedAt)}</span><small>{target.lastExhaustedAt ? "exhausted" : target.cooldownUntil ? "cooldown set" : target.metricsUpdatedAt ? "metrics" : "pending"}</small></td>
                     <td><span className="mono">{formatShortDate(target.addedAt)}</span><small title={target.batchId ?? target.source}>{compactSourceLabel(target.source)}{target.batchId ? ` · ${shortId(target.batchId)}` : ""}</small></td>
@@ -557,12 +558,6 @@ function metricText(value: number | null | undefined) {
   return typeof value === "number" ? new Intl.NumberFormat("en").format(value) : "—";
 }
 
-function fbrText(target: ProfileTarget) {
-  if (target.followbackRatio === null) return "—";
-  if (typeof target.followsSent === "number" && target.followsSent > 0 && target.followsSent < 100) return "Insufficient";
-  return `${new Intl.NumberFormat("en", { maximumFractionDigits: 1 }).format(target.followbackRatio)}%`;
-}
-
 function formatShortDate(value: string | null | undefined) {
   if (!value) return "—";
   const date = new Date(value);
@@ -604,7 +599,7 @@ function safeExportRow(target: ProfileTarget) {
     eligibility: eligibilityLabel(target.eligibility),
     performance: performanceLabel(target.performance),
     followers_count: target.followersCount,
-    followback_ratio: target.followbackRatio,
+    fbr: formatTargetFbrDisplay(target),
     added_at: target.addedAt,
   };
 }
