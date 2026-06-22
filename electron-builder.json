@@ -29,6 +29,24 @@
   "mac": {
     "category": "public.app-category.productivity",
     "identity": null,
+    "protocols": [
+      {
+        "name": "BotApp Deep Link",
+        "schemes": [
+          "botapp"
+        ]
+      }
+    ],
+    "extendInfo": {
+      "CFBundleURLTypes": [
+        {
+          "CFBundleURLName": "BotApp Deep Link",
+          "CFBundleURLSchemes": [
+            "botapp"
+          ]
+        }
+      ]
+    },
     "target": [
       {
         "target": "dir"

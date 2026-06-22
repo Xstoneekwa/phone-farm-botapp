@@ -387,6 +387,10 @@ Each toolbar action must be inspected first in `boost-ai-frontend` before implem
 
 Auto Login mirrors the admin dashboard's `Connect`/`login_provisioning` contract as a desktop-prepared request: account id, action type, source, idempotency key, device assignment context, and safe metadata. Verification-code payloads are modeled separately and must be sent only through the future secure relay; BotApp must not log codes, passwords, token material, Vault identifiers, raw XML, screenshot paths, Supabase service credentials, worker invocations, or direct device login actions.
 
+### Client Connect — open phone via BotApp only
+
+When the client dashboard shows `verification_required`, the browser never opens scrcpy. It creates a bounded `open_device_view` intent and hands off `botapp://open-device-view?intent=…`. BotApp (relay-authenticated) redeems the intent through `POST /api/instagram-dashboard/botapp/open-device-view`, receives the **already assigned** phone serial, and opens/focuses the local scrcpy view. No run start, assignment, or arbitrary device selection is allowed on this path. IPC: `botapp:connect:open-device-view`.
+
 Assign Now mirrors the admin dashboard's `assignments/now` contract as a desktop-prepared request: account id, target device label, safe serial label, candidate slot, schedule gate, runtime profile, idempotency key, and safe metadata. The real relay must keep `assign_account_slot`, app instance identifiers, phone device identifiers, and Supabase credentials server-side.
 
 Archive/Delete mirror the admin dashboard's account lifecycle contract as desktop-prepared requests. Archive maps to `action: "archive"` with `status = archived` and `scheduled_trash_at = now + 30 days`; Delete maps to `action: "trash"` with `status = trashed` and `scheduled_delete_at = now + 30 days`. Restore and permanent delete are modeled in types for future relay work, but BotApp does not call Supabase directly and the current admin permanent-delete action remains disabled/pending.

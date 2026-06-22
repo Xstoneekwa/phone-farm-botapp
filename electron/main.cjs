@@ -6,7 +6,11 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const { spawnSync } = require("node:child_process");
-const { closeAllDeviceViews, registerDeviceViewIpc, runDeviceViewSelfTest } = require("./device-view-manager.cjs");
+const { closeAllDeviceViews, registerDeviceViewIpc, runDeviceViewSelfTest, openDeviceView } = require("./device-view-manager.cjs");
+const {
+  parseOpenDeviceViewDeepLink,
+  findOpenDeviceViewDeepLink,
+} = require("./open-device-view-protocol.cjs");
 const { localToolDiagnostics, resolveAdbPath } = require("./local-tools.cjs");
 const {
   clearRelayKeyFromSecureStore,
@@ -517,6 +521,7 @@ const runtimeIpcHandlers = [
   "botapp:data:overview",
   "botapp:relay:health",
   "botapp:relay:repair",
+  "botapp:connect:open-device-view",
   "botapp:dispatcher:ensure",
   "botapp:devices:list",
   "botapp:profiles:details",
@@ -570,6 +575,17 @@ const botappEndpointRegistry = [
     authRequired: true,
     status: "active",
     testStrategy: "fetch",
+  },
+  {
+    id: "botapp_open_device_view",
+    name: "BotApp open assigned device view",
+    method: "POST",
+    path: "/api/instagram-dashboard/botapp/open-device-view",
+    usedBy: ["Client Connect verification", "Profiles Auto Login"],
+    purpose: "Redeem a bounded client open_device_view intent and return the assigned phone serial for scrcpy focus only",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
   },
   {
     id: "devices_overview",
@@ -4282,6 +4298,37 @@ async function dispatcherAction(action) {
   }
 }
 
+async function openDeviceViewFromClientIntent(intentToken) {
+  const token = String(intentToken || "").trim();
+  if (!token) return { ok: false, error: "Missing open device intent." };
+  const result = await dashboardRequestResult("POST", "botapp_open_device_view", { intent_token: token });
+  if (!result.ok || !result.data) {
+    return { ok: false, error: result.error || "Open device intent could not be redeemed." };
+  }
+  const deviceSerial = String(result.data.device_serial || "").trim();
+  const deviceLabel = String(result.data.device_label || deviceSerial || "Assigned phone").trim();
+  if (!deviceSerial) return { ok: false, error: "Assigned phone is unavailable." };
+  const viewResult = await openDeviceView({ deviceSerial, deviceLabel });
+  return {
+    ok: Boolean(viewResult?.ok),
+    data: {
+      action: "open_device_view",
+      account_id: result.data.account_id || null,
+      focus_only: true,
+      device_label: deviceLabel,
+    },
+    error: viewResult?.ok ? null : (viewResult?.error || "Could not open assigned phone view."),
+  };
+}
+
+async function handleOpenDeviceViewDeepLink(rawUrl) {
+  const parsed = parseOpenDeviceViewDeepLink(rawUrl);
+  if (!parsed.ok) {
+    return { ok: false, error: "Unsupported BotApp link.", reason: parsed.reason };
+  }
+  return openDeviceViewFromClientIntent(parsed.intent);
+}
+
 function registerRuntimeIpc() {
   ipcMain.handle("botapp:runtime:status", () => runtimeIntegrationStatus());
   ipcMain.handle("botapp:dispatcher:status", () => dispatcherStatus());
@@ -4306,6 +4353,7 @@ function registerRuntimeIpc() {
     profilesReloaded: false,
     accountsCount: 0,
   })));
+  ipcMain.handle("botapp:connect:open-device-view", (_event, input) => openDeviceViewFromClientIntent(input?.intent_token || input?.intentToken || input));
   ipcMain.handle("botapp:dispatcher:ensure", () => ensureDispatcherAutostart().catch((error) => dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed."))));
   ipcMain.handle("botapp:devices:list", (_event, input) => botappDevicesList(input));
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
@@ -4403,6 +4451,19 @@ function createMainWindow() {
   }
 }
 
+let pendingOpenDeviceDeepLink = findOpenDeviceViewDeepLink(process.argv);
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv) => {
+    const deepLink = findOpenDeviceViewDeepLink(argv);
+    if (deepLink) {
+      void handleOpenDeviceViewDeepLink(deepLink);
+    }
+  });
+
 app.whenReady().then(async () => {
   writeStartupTrace("when_ready", `packaged=${String(app.isPackaged)} userData=${app.getPath("userData")}`);
   try {
@@ -4412,6 +4473,13 @@ app.whenReady().then(async () => {
     attachRelayHeadersForDashboardAvatars();
     registerRuntimeIpc();
     registerDeviceViewIpc();
+    if (!app.isDefaultProtocolClient("botapp")) {
+      app.setAsDefaultProtocolClient("botapp");
+    }
+    app.on("open-url", (event, url) => {
+      event.preventDefault();
+      void handleOpenDeviceViewDeepLink(url);
+    });
     logBuildMarker();
 
     const relay = await botappRelayHealth();
@@ -4429,6 +4497,12 @@ app.whenReady().then(async () => {
       dispatcherRunning: Boolean(dispatcher?.processRunning),
       checkedAt: new Date().toISOString(),
     });
+
+    if (pendingOpenDeviceDeepLink) {
+      const deepLink = pendingOpenDeviceDeepLink;
+      pendingOpenDeviceDeepLink = null;
+      void handleOpenDeviceViewDeepLink(deepLink);
+    }
 
     createMainWindow();
 
@@ -4515,6 +4589,7 @@ app.whenReady().then(async () => {
     }
   });
 });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

@@ -122,6 +122,7 @@ test("Emoji renderer parser detects full DM emoji matrix", () => {
 });
 
 test("Stop account run and dispatcher stop are separated", () => {
+  const mainSource = readFileSync(new URL("../../../electron/main.cjs", import.meta.url), "utf8");
   assert.match(mainSource, /profiles_run_start/);
   assert.match(mainSource, /botapp:profiles:run-start/);
   assert.match(mainSource, /requested_run_type: "account_session"/);
@@ -140,6 +141,5 @@ test("Stop account run and dispatcher stop are separated", () => {
   assert.doesNotMatch(profilesViewSource, /It writes account admin status only/);
   assert.match(mainSource, /profiles_account_status/);
   assert.match(mainSource, /path: "\/api\/instagram-dashboard\/accounts\/status"/);
-  const mainSource = readFileSync(new URL("../../../electron/main.cjs", import.meta.url), "utf8");
   assert.match(mainSource, /dispatcherAllowedActions = new Set\(\["status", "install", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"\]\)/);
 });
