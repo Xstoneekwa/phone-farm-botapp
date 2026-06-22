@@ -140,5 +140,6 @@ test("Stop account run and dispatcher stop are separated", () => {
   assert.doesNotMatch(profilesViewSource, /It writes account admin status only/);
   assert.match(mainSource, /profiles_account_status/);
   assert.match(mainSource, /path: "\/api\/instagram-dashboard\/accounts\/status"/);
-  assert.match(mainSource, /dispatcherAllowedActions = new Set\(\["status", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"\]\)/);
+  const mainSource = readFileSync(new URL("../../../electron/main.cjs", import.meta.url), "utf8");
+  assert.match(mainSource, /dispatcherAllowedActions = new Set\(\["status", "install", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"\]\)/);
 });

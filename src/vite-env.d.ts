@@ -84,6 +84,7 @@ interface Window {
     dispatcher?: {
       status: () => Promise<BotAppDispatcherHealth>;
       action: (action: BotAppDispatcherHealthAction) => Promise<BotAppDispatcherHealth>;
+      ensure: () => Promise<BotAppDispatcherHealth>;
     };
     compass?: {
       status: () => Promise<CompassAiRuntimeStatus>;
@@ -107,6 +108,13 @@ interface Window {
     };
     relay?: {
       health: () => Promise<BotAppRelayHealth>;
+      repair: () => Promise<{
+        ok: boolean;
+        message: string;
+        profilesReloaded?: boolean;
+        accountsCount?: number;
+        relay?: BotAppRelayHealth | null;
+      }>;
     };
     clientAccounts?: {
       applyStatus: (input: {

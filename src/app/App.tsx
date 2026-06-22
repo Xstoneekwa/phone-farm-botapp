@@ -51,6 +51,8 @@ export function App() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [dispatcherHealth, setDispatcherHealth] = useState<BotAppDispatcherHealth | null>(null);
   const [relayHealth, setRelayHealth] = useState<BotAppRelayHealth | null>(null);
+  const [repairBusy, setRepairBusy] = useState(false);
+  const [dispatcherEnsureBusy, setDispatcherEnsureBusy] = useState(false);
 
   async function loadOverviewData() {
     if (window.botappDesktop?.data?.overview) {
@@ -94,6 +96,35 @@ export function App() {
   async function loadRelayHealth() {
     const result = await window.botappDesktop?.relay?.health?.();
     if (result) setRelayHealth(result);
+  }
+
+  async function repairConnection() {
+    if (repairBusy) return;
+    setRepairBusy(true);
+    try {
+      const result = await window.botappDesktop?.relay?.repair?.();
+      if (result?.relay) setRelayHealth(result.relay);
+      await loadOverviewData();
+      await loadDispatcherHealth();
+      pushToast(result?.message || (result?.ok ? "Connexion BotApp opérationnelle." : "Réparation indisponible."), result?.ok ? "success" : "error");
+    } finally {
+      setRepairBusy(false);
+    }
+  }
+
+  async function ensureDispatcher() {
+    if (dispatcherEnsureBusy) return;
+    setDispatcherEnsureBusy(true);
+    try {
+      const result = await window.botappDesktop?.dispatcher?.ensure?.();
+      if (result) setDispatcherHealth(result);
+      pushToast(
+        result?.status === "running" ? "Dispatcher : actif." : (result?.message || "Dispatcher indisponible."),
+        result?.status === "running" ? "success" : "error",
+      );
+    } finally {
+      setDispatcherEnsureBusy(false);
+    }
   }
 
   function copyRelayDiagnostics() {
@@ -282,24 +313,53 @@ export function App() {
   else if (active === "api") view = <APIKeys apiKeys={data.apiKeys} webhooks={data.webhooks} onAction={requestAction} />;
   else view = data.settings ? <Settings settings={data.settings} onAction={requestAction} /> : null;
 
-  const relayBannerVisible = relayHealth && !relayHealth.ok;
+  const relayOperational = Boolean(relayHealth?.ok && relayHealth.relay_authenticated);
+  const dispatcherOperational = dispatcherHealth?.status === "running" && Boolean(dispatcherHealth.processRunning);
+  const connectionBlocked = !relayOperational || !dispatcherOperational;
 
   return <div className="app-shell">
     <Sidebar active={active} onNavigate={navigate} counts={counts} />
     <main className="main">
       <TopBar active={active} onCommand={() => setCommandOpen(true)} />
-      {relayBannerVisible ? (
-        <div className="relay-auth-banner">
-          <div>
-            <strong>BotApp relay auth is not configured. Backend cannot accept local BotApp requests.</strong>
-            <span>{relayHealth.message}</span>
-          </div>
-          <div className="relay-auth-actions">
-            <button type="button" onClick={() => void loadRelayHealth()}>Retry</button>
-            <button type="button" onClick={copyRelayDiagnostics}>Copy diagnostics</button>
-          </div>
+      <div className={`relay-auth-banner${connectionBlocked ? " relay-auth-banner-blocked" : " relay-auth-banner-ok"}`}>
+        <div>
+          {connectionBlocked ? (
+            <>
+              <strong>
+                {!relayOperational
+                  ? "Connexion BotApp indisponible."
+                  : "Dispatcher arrêté."}
+              </strong>
+              <span>
+                {!relayOperational
+                  ? (relayHealth?.message || "Le relay local n'est pas authentifié.")
+                  : (dispatcherHealth?.message || "Le dispatcher n'est pas actif.")}
+              </span>
+            </>
+          ) : (
+            <>
+              <strong>Connexion BotApp : opérationnelle</strong>
+              <span>Dispatcher : actif</span>
+            </>
+          )}
         </div>
-      ) : null}
+        <div className="relay-auth-actions">
+          {!relayOperational ? (
+            <button type="button" disabled={repairBusy} onClick={() => void repairConnection()}>
+              {repairBusy ? "Réparation…" : "Réparer la connexion"}
+            </button>
+          ) : null}
+          {relayOperational && !dispatcherOperational ? (
+            <button type="button" disabled={dispatcherEnsureBusy} onClick={() => void ensureDispatcher()}>
+              {dispatcherEnsureBusy ? "Démarrage…" : "Démarrer le dispatcher"}
+            </button>
+          ) : null}
+          {connectionBlocked ? (
+            <button type="button" onClick={() => void loadRelayHealth()}>Retry</button>
+          ) : null}
+          <button type="button" onClick={copyRelayDiagnostics}>Copy diagnostics</button>
+        </div>
+      </div>
       <div className="content">{view}</div>
     </main>
     {commandOpen ? <div className="command-overlay" onClick={() => setCommandOpen(false)}><div className="command-box" onClick={(event) => event.stopPropagation()}><input className="input" placeholder="Jump to screen..." autoFocus />{routes.map((route) => <button key={route.id} onClick={() => navigate(route.id)}><span>{route.label}</span><span className="mono">{route.shortcut}</span></button>)}</div></div> : null}

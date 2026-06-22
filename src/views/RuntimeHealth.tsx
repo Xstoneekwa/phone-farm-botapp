@@ -198,7 +198,17 @@ export function RuntimeHealth() {
       <Card
         title="BotApp relay auth"
         subtitle="This checks the secure BotApp relay without creating account_run_requests, ig_runs, accounts, or social actions."
-        actions={<Button variant="ghost" onClick={() => void refresh()} disabled={Boolean(busyAction)}>Retry</Button>}
+        actions={
+          <div className="runtime-actions">
+            <Button variant="primary" onClick={() => void window.botappDesktop?.relay?.repair?.().then((result) => {
+              if (result?.relay) setRelayHealth(result.relay);
+              setMessage(result?.message || "Réparation relay terminée.");
+            })} disabled={Boolean(busyAction)}>
+              Réparer la connexion
+            </Button>
+            <Button variant="ghost" onClick={() => void refresh()} disabled={Boolean(busyAction)}>Retry</Button>
+          </div>
+        }
       >
         <div className={relayHealth.ok ? "runtime-relay-banner ok" : "runtime-relay-banner error"}>
           <div>

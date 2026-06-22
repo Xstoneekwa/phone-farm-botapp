@@ -81,7 +81,14 @@ All write paths remain **preview-only** until the secure relay is connected.
 └── electron-builder.json
 ```
 
-## Core commands
+## Operator vs developer
+
+| Audience | Application | Documentation |
+|----------|-------------|---------------|
+| **Liam (opérateur)** | `release/mac-arm64/BotApp.app` only | [docs/guide-operateur-liam.md](./docs/guide-operateur-liam.md) |
+| **Developer** | `npm run dev` / `package:mac` | This README + [relay/dispatcher ops](./docs/botapp-relay-dispatcher-operations.md) |
+
+Never use `npm run electron:start` for operator workflows.
 
 ```bash
 npm install
@@ -99,7 +106,10 @@ npm run package:mac  # release/mac-arm64/BotApp.app
 2. Run the dev server: `npm run dev`
 3. Work in `src/`; treat `assets/`, `preview/`, and `ui_kits/` as design references
 4. Read `docs/botapp-architecture.md` before structural changes
-5. Validate before checkpoint commits: lint, build, package, `git diff --check`, no-leak scans
+5. For relay/dispatcher runtime: read `docs/botapp-relay-dispatcher-architecture.md` and `docs/botapp-relay-dispatcher-operations.md`
+6. Validate before checkpoint commits: lint, build, package, `git diff --check`, no-leak scans
+
+**Operator (Liam):** use only the packaged app — see `docs/guide-operateur-liam.md`. Do not use `npm run electron:start` for operations.
 
 ## Safety rules
 
@@ -138,11 +148,15 @@ BotApp renderer
 
 | Document | Topic |
 |----------|--------|
+| `docs/guide-operateur-liam.md` | **Opérateur** — procédure BotApp sans terminal (Liam) |
+| `docs/botapp-relay-dispatcher-architecture.md` | Relay, dispatcher, bootstrap, sécurité main/preload |
+| `docs/botapp-relay-dispatcher-operations.md` | Runbook dev — validation, diagnostic, dépannage |
 | `docs/botapp-architecture.md` | Full developer guide (start here) |
 | `docs/architecture.md` | Short technical summary |
 | `docs/profile-drawers.md` | Profiles toolbar drawers |
 | `docs/security.md` | No-leak rules and validation |
 | `docs/roadmap.md` | Checkpoint status and roadmap |
+| `docs/new-mac-setup.md` | New Mac install and smoke checklist |
 | `src/desktop/README.md` | macOS packaging and phone-view notes |
 | `HANDOFF.md` | Current state for the next agent |
 | `SKILL.md` | Agent operating instructions |

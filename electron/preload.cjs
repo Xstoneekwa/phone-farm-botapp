@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   dispatcher: {
     status: () => ipcRenderer.invoke("botapp:dispatcher:status"),
     action: (action) => ipcRenderer.invoke("botapp:dispatcher:action", action),
+    ensure: () => ipcRenderer.invoke("botapp:dispatcher:ensure"),
   },
   compass: {
     status: () => ipcRenderer.invoke("botapp:compass:ai-status"),
@@ -34,6 +35,7 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   },
   relay: {
     health: () => ipcRenderer.invoke("botapp:relay:health"),
+    repair: () => ipcRenderer.invoke("botapp:relay:repair"),
   },
   clientAccounts: {
     applyStatus: (input) => ipcRenderer.invoke("botapp:client-accounts:status", input),

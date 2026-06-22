@@ -8,6 +8,40 @@ const { URL } = require("node:url");
 const { spawnSync } = require("node:child_process");
 const { closeAllDeviceViews, registerDeviceViewIpc, runDeviceViewSelfTest } = require("./device-view-manager.cjs");
 const { localToolDiagnostics, resolveAdbPath } = require("./local-tools.cjs");
+const {
+  clearRelayKeyFromSecureStore,
+  isEncryptionAvailable,
+  loadRelayKeyFromSecureStore,
+  readDisabledRuntimeConfigBackup,
+  saveRelayKeyToSecureStore,
+} = require("./relay-credential-store.cjs");
+const {
+  bootstrapRelayRuntime,
+  canonicalUserDataDir,
+  resolveRepairState,
+  writeBootstrapStatus,
+} = require("./relay-runtime-bootstrap.cjs");
+
+// Electron default userData follows package.json name (botapp-mac-foundation).
+// macOS requires overriding userData before the ready event.
+app.setPath("userData", canonicalUserDataDir());
+
+function writeStartupTrace(phase, detail = "") {
+  try {
+    const tracePath = path.join(app.getPath("userData"), "botapp-startup.trace.log");
+    fs.mkdirSync(path.dirname(tracePath), { recursive: true });
+    fs.appendFileSync(tracePath, `${new Date().toISOString()} ${phase}${detail ? ` ${detail}` : ""}\n`);
+    try {
+      fs.chmodSync(tracePath, 0o600);
+    } catch {
+      // Ignore chmod on append.
+    }
+  } catch {
+    // Non-blocking startup tracing only.
+  }
+}
+
+writeStartupTrace("main_loaded", `packaged=${String(app.isPackaged)} userData=${app.getPath("userData")}`);
 
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.BOTAPP_DEV_SERVER_URL || "http://127.0.0.1:5173";
@@ -102,10 +136,67 @@ function inferWebhookProvider(value) {
   return "custom";
 }
 
+function userDataDir() {
+  return app.getPath("userData");
+}
+
+function readRelayKeyFromSources(stored = readRuntimeConfig()) {
+  const envKey = process.env[["BOTAPP", "RELAY", "API", "KEY"].join("_")] || "";
+  if (envKey) return envKey.trim();
+  const secureKey = loadRelayKeyFromSecureStore(userDataDir());
+  if (secureKey) return secureKey;
+  return typeof stored.botappRelayKey === "string" ? stored.botappRelayKey.trim() : "";
+}
+
+function persistRelayCredential(relayUrl, relayKey) {
+  const nextConfig = {};
+  if (relayUrl) nextConfig.compassAiRelayUrl = relayUrl;
+  if (relayKey) {
+    if (saveRelayKeyToSecureStore(userDataDir(), relayKey)) {
+      removeRuntimeConfig(["botappRelayKey"]);
+    } else {
+      nextConfig.botappRelayKey = relayKey;
+    }
+  }
+  if (Object.keys(nextConfig).length) writeRuntimeConfig(nextConfig);
+}
+
+function bootstrapRelayConfig(options = {}) {
+  runtimeConfigCache = null;
+  const status = bootstrapRelayRuntime({
+    forceRestore: options.forceRestore === true,
+    userDataDir: userDataDir(),
+    envRelayUrl: process.env.BOTAPP_COMPASS_AI_RELAY_URL || "",
+    envRelayKey: process.env[["BOTAPP", "RELAY", "API", "KEY"].join("_")] || "",
+    normalizeRelayUrl,
+  });
+  writeBootstrapStatus(userDataDir(), status);
+  return status;
+}
+
+function repairRelayClientMessage(bootstrap, relay, overview) {
+  if (bootstrap.repairState === "keychain_unavailable") {
+    return "Keychain indisponible sur ce Mac. Relancez BotApp ou utilisez Copy diagnostics.";
+  }
+  if (bootstrap.repairState === "initial_association_required") {
+    return "Association initiale requise pour ce Mac. Contactez l'équipe technique avec Copy diagnostics.";
+  }
+  if (!relay?.ok || !relay?.relay_authenticated) {
+    if (bootstrap.repairState === "backend_unavailable") {
+      return "Backend relay indisponible pour le moment.";
+    }
+    return relay?.message || "Connexion BotApp indisponible.";
+  }
+  if (overview?.ok) {
+    return `Connexion BotApp opérationnelle (${Number(overview?.profilesMeta?.accountsCount || 0)} comptes).`;
+  }
+  return overview?.error || "Backend joignable mais Profiles indisponibles.";
+}
+
 function compassConfig() {
   const stored = readRuntimeConfig();
   const relayUrl = normalizeRelayUrl(process.env.BOTAPP_COMPASS_AI_RELAY_URL || stored.compassAiRelayUrl || "");
-  const relayKey = process.env[["BOTAPP", "RELAY", "API", "KEY"].join("_")] || stored.botappRelayKey || "";
+  const relayKey = readRelayKeyFromSources(stored);
   return {
     relayUrl,
     relayKey,
@@ -355,6 +446,13 @@ function safeSha256Prefix(value) {
   return crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 8);
 }
 
+function relayCredentialSource() {
+  if (process.env[["BOTAPP", "RELAY", "API", "KEY"].join("_")]) return "env";
+  if (loadRelayKeyFromSecureStore(userDataDir())) return "secure_storage";
+  if (readRuntimeConfig().botappRelayKey) return "runtime_config";
+  return "missing";
+}
+
 function localRelayDiagnostics(cfg = compassConfig()) {
   return {
     present: Boolean(cfg.relayKey),
@@ -362,7 +460,7 @@ function localRelayDiagnostics(cfg = compassConfig()) {
     sha256_prefix: safeSha256Prefix(cfg.relayKey),
     relayUrlConfigured: Boolean(cfg.relayUrl),
     relayOrigin: dashboardOrigin(cfg) || null,
-    loadedFrom: process.env[["BOTAPP", "RELAY", "API", "KEY"].join("_")] ? "env" : readRuntimeConfig().botappRelayKey ? "runtime_config" : "missing",
+    loadedFrom: relayCredentialSource(),
   };
 }
 
@@ -418,6 +516,8 @@ const runtimeIpcHandlers = [
   "botapp:auto-restart:action-preview",
   "botapp:data:overview",
   "botapp:relay:health",
+  "botapp:relay:repair",
+  "botapp:dispatcher:ensure",
   "botapp:devices:list",
   "botapp:profiles:details",
   "botapp:profiles:create-dry-run",
@@ -447,7 +547,7 @@ const runtimeIpcHandlers = [
   "botapp:integrations:remove-webhook",
 ];
 const dispatcherWrapperPath = process.env.BOTAPP_DISPATCHER_WRAPPER_PATH || "/Users/admin/instagram-worker-python/scripts/run_control_dispatcher_service.sh";
-const dispatcherAllowedActions = new Set(["status", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"]);
+const dispatcherAllowedActions = new Set(["status", "install", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"]);
 const botappEndpointRegistry = [
   {
     id: "botapp_overview",
@@ -3750,21 +3850,56 @@ async function saveCompassRelayConfig(input) {
   if (!relayUrl) {
     throw new Error("Relay URL must be HTTPS, localhost, or 127.0.0.1.");
   }
-  const nextConfig = { compassAiRelayUrl: relayUrl };
-  if (typeof input?.relayCredential === "string" && input.relayCredential.trim()) {
-    nextConfig.botappRelayKey = input.relayCredential.trim();
-  }
-  writeRuntimeConfig(nextConfig);
+  const relayCredential = typeof input?.relayCredential === "string" ? input.relayCredential.trim() : "";
+  persistRelayCredential(relayUrl, relayCredential);
   return compassRuntimeStatus("Compass AI relay URL saved.", compassConfig());
 }
 
 async function removeCompassRelayConfig() {
   removeRuntimeConfig(["compassAiRelayUrl", "botappRelayKey"]);
+  clearRelayKeyFromSecureStore(userDataDir());
+  runtimeConfigCache = null;
   compassLastConnectionTestAt = null;
   compassLastAnalysisAt = null;
   compassLastSafeError = null;
   compassServerKeyStatus = "unknown";
   return compassRuntimeStatus("Compass AI relay config removed.", compassConfig());
+}
+
+async function repairRelayConnection() {
+  const bootstrap = bootstrapRelayConfig({ forceRestore: true });
+  runtimeConfigCache = null;
+  const relay = await botappRelayHealth();
+  let overview = null;
+  if (relay.ok && relay.relay_authenticated) {
+    overview = await botappOverviewData();
+    await ensureDispatcherAutostart();
+  }
+  const ok = Boolean(relay.ok && relay.relay_authenticated && overview?.ok);
+  const result = {
+    ok,
+    bootstrap,
+    relay,
+    repairState: bootstrap.repairState || resolveRepairState({
+      relayUrlConfigured: bootstrap.relayUrlConfigured,
+      relayKeyConfigured: bootstrap.relayKeyConfigured,
+      secureStorageAvailable: bootstrap.secureStorageAvailable,
+      importedFrom: bootstrap.importedFrom,
+      lastError: bootstrap.lastError,
+    }),
+    profilesReloaded: Boolean(overview?.ok),
+    accountsCount: Number(overview?.profilesMeta?.accountsCount || 0),
+    message: repairRelayClientMessage(bootstrap, relay, overview),
+  };
+  writeBootstrapStatus(userDataDir(), {
+    ...bootstrap,
+    relayOk: Boolean(relay.ok && relay.relay_authenticated),
+    profilesOk: Boolean(overview?.ok),
+    accountsCount: result.accountsCount,
+    repairState: result.repairState,
+    checkedAt: new Date().toISOString(),
+  });
+  return result;
 }
 
 function safeWebhook(record) {
@@ -4054,6 +4189,54 @@ async function dispatcherStatus() {
   return mergeRunControlProjection(normalizeDispatcherStatus(parsed, "status"), await readRunControlProjection());
 }
 
+async function ensureDispatcherAutostart() {
+  const relay = await botappRelayHealth();
+  if (!relay.ok || !relay.relay_authenticated) {
+    const current = await dispatcherStatus();
+    return {
+      ...current,
+      ok: false,
+      status: current.status === "unknown" ? "stopped" : current.status,
+      message: "Dispatcher autostart deferred until relay is healthy.",
+    };
+  }
+
+  let status = await dispatcherStatus();
+  const queueActiveCount = Number.isFinite(Number(status.queueActiveCount)) ? Number(status.queueActiveCount) : 0;
+  if (queueActiveCount > 0) {
+    return {
+      ...status,
+      ok: false,
+      message: "Dispatcher autostart deferred while queue activity is present.",
+    };
+  }
+
+  if (status.status === "running" && status.processRunning) return status;
+
+  if (!status.launchdLoaded) {
+    const install = runDispatcherWrapper("install", [], 30000);
+    if (!install.ok) {
+      return {
+        ...status,
+        message: "Dispatcher LaunchAgent install failed. Open Runtime Health to retry.",
+        lastError: install.error || install.stderr || status.lastError,
+      };
+    }
+  }
+
+  const resume = runDispatcherWrapper("resume", [], 45000);
+  status = await dispatcherStatus();
+  if (status.status === "running" && status.processRunning) return status;
+
+  return {
+    ...status,
+    ok: status.status === "running" && status.processRunning,
+    message: resume.ok
+      ? (status.message || "Dispatcher is starting.")
+      : `Dispatcher autostart attempted: ${safeDispatcherText(resume.error || resume.stderr || status.lastError || "unknown")}`,
+  };
+}
+
 async function dispatcherAction(action) {
   const normalized = String(action || "").trim();
   if (!dispatcherAllowedActions.has(normalized) || normalized === "status") {
@@ -4116,6 +4299,14 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:auto-restart:action-preview", (_event, input) => autoRestartActionPreview(input));
   ipcMain.handle("botapp:data:overview", () => botappOverviewData());
   ipcMain.handle("botapp:relay:health", () => botappRelayHealth());
+  ipcMain.handle("botapp:relay:repair", () => repairRelayConnection().catch((error) => ({
+    ok: false,
+    message: safeRuntimeError(error, "Connexion BotApp repair failed."),
+    relay: null,
+    profilesReloaded: false,
+    accountsCount: 0,
+  })));
+  ipcMain.handle("botapp:dispatcher:ensure", () => ensureDispatcherAutostart().catch((error) => dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed."))));
   ipcMain.handle("botapp:devices:list", (_event, input) => botappDevicesList(input));
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
   ipcMain.handle("botapp:profiles:stats-history", (_event, input) => profileStatsHistoryData(input?.accountId || input?.account_id || input, input?.days));
@@ -4212,12 +4403,53 @@ function createMainWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  attachRelayHeadersForDashboardAvatars();
-  registerRuntimeIpc();
-  registerDeviceViewIpc();
-  logBuildMarker();
-  createMainWindow();
+app.whenReady().then(async () => {
+  writeStartupTrace("when_ready", `packaged=${String(app.isPackaged)} userData=${app.getPath("userData")}`);
+  try {
+    const bootstrapStatus = bootstrapRelayConfig();
+    writeStartupTrace("bootstrap_done", `url=${bootstrapStatus.relayUrlConfigured} key=${bootstrapStatus.relayKeyConfigured}`);
+    runtimeConfigCache = null;
+    attachRelayHeadersForDashboardAvatars();
+    registerRuntimeIpc();
+    registerDeviceViewIpc();
+    logBuildMarker();
+
+    const relay = await botappRelayHealth();
+    let dispatcher = null;
+    if (relay.ok && relay.relay_authenticated) {
+      dispatcher = await ensureDispatcherAutostart().catch((error) => ({
+        ...dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed.")),
+      }));
+    }
+
+    writeBootstrapStatus(userDataDir(), {
+      ...bootstrapStatus,
+      relayOk: Boolean(relay.ok && relay.relay_authenticated),
+      dispatcherStatus: dispatcher?.status || "deferred",
+      dispatcherRunning: Boolean(dispatcher?.processRunning),
+      checkedAt: new Date().toISOString(),
+    });
+
+    createMainWindow();
+
+    if (process.env.BOTAPP_STARTUP_DIAGNOSTICS) {
+      setTimeout(() => app.quit(), 2500);
+    }
+  } catch (error) {
+    writeBootstrapStatus(userDataDir(), {
+      userDataDir: userDataDir(),
+      relayUrlConfigured: false,
+      relayKeyConfigured: false,
+      secureStorageAvailable: isEncryptionAvailable(),
+      repairState: "backend_unavailable",
+      lastError: safeRuntimeError(error, "startup_bootstrap_failed"),
+      checkedAt: new Date().toISOString(),
+    });
+    createMainWindow();
+    if (process.env.BOTAPP_STARTUP_DIAGNOSTICS) {
+      setTimeout(() => app.quit(), 2500);
+    }
+  }
 
   if (process.env.BOTAPP_DEVICE_VIEW_SELF_TEST) {
     setTimeout(() => {

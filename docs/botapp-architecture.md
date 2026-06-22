@@ -4,6 +4,16 @@ BotApp is the macOS operator application for the Phone Farm Instagram system. It
 
 This document is the primary developer onboarding reference. It complements `README.md`, `HANDOFF.md`, and `SKILL.md`.
 
+**Relay / dispatcher (runtime packagé) :**
+
+| Document | Usage |
+|----------|--------|
+| [guide-operateur-liam.md](./guide-operateur-liam.md) | Procédure opérateur sans terminal |
+| [botapp-relay-dispatcher-architecture.md](./botapp-relay-dispatcher-architecture.md) | Architecture bootstrap, Keychain, dispatcher |
+| [botapp-relay-dispatcher-operations.md](./botapp-relay-dispatcher-operations.md) | Validation, diagnostic, dépannage dev |
+
+L’application opérateur normale est **`release/mac-arm64/BotApp.app`** — pas `npm run electron:start`.
+
 ---
 
 ## 1. Product vision

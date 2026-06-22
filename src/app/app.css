@@ -28,10 +28,13 @@
 .topbar h1 { margin: 2px 0 0; font-size: 20px; letter-spacing: -.02em; }
 .crumb { color: var(--fg-tertiary); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
-.relay-auth-banner { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin: 10px 12px 0; padding: 12px 14px; border: 1px solid rgba(248,113,113,.34); border-radius: var(--radius-lg); background: #FEF2F2; color: #7F1D1D; }
+.relay-auth-banner { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin: 10px 12px 0; padding: 12px 14px; border-radius: var(--radius-lg); }
+.relay-auth-banner-blocked { border: 1px solid rgba(248,113,113,.34); background: #FEF2F2; color: #7F1D1D; }
+.relay-auth-banner-ok { border: 1px solid rgba(34,197,94,.28); background: #F0FDF4; color: #14532D; }
 .relay-auth-banner div:first-child { display: grid; gap: 4px; }
 .relay-auth-banner strong { font-size: 13px; }
-.relay-auth-banner span { color: #991B1B; font-size: 12px; line-height: 1.4; }
+.relay-auth-banner-blocked span { color: #991B1B; font-size: 12px; line-height: 1.4; }
+.relay-auth-banner-ok span { color: #166534; font-size: 12px; line-height: 1.4; }
 .relay-auth-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .relay-auth-actions button { border: 1px solid rgba(127,29,29,.24); border-radius: var(--radius-md); background: white; color: #7F1D1D; padding: 6px 10px; font-size: 12px; font-weight: 800; }
 .mock-pill { border: 1px solid var(--border-default); background: #fff; border-radius: var(--radius-full); padding: 5px 10px; font-size: 12px; color: var(--fg-secondary); }

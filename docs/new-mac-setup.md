@@ -630,3 +630,12 @@ Current packager target:
 
 - `/Users/admin/Projects/BotApp/release/mac-arm64/BotApp.app`
 
+Operator procedure (no terminal): `docs/guide-operateur-liam.md`
+
+Relay / dispatcher architecture and runbook:
+
+- `docs/botapp-relay-dispatcher-architecture.md`
+- `docs/botapp-relay-dispatcher-operations.md`
+
+Packaged BotApp is the only normal operator application. Do not use `npm run electron:start` for Liam or production operator validation.
+
