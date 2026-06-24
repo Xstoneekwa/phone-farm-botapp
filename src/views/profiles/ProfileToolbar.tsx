@@ -7,6 +7,7 @@ const toolbarActions: Array<{ id: ProfileToolbarAction; label: string; danger?: 
   { id: "targets", label: "Targets" },
   { id: "play", label: "Start run" },
   { id: "auto_login", label: "Auto Login" },
+  { id: "restore_login_screen", label: "Restore login screen" },
   { id: "check_readiness", label: "Refresh readiness" },
   { id: "stop", label: "Stop", danger: true },
   { id: "settings", label: "Settings" },
@@ -24,6 +25,7 @@ function Icon({ action }: { action: ProfileToolbarAction }) {
   if (action === "targets") return <svg {...common}><circle cx="8" cy="8" r="5.2" /><circle cx="8" cy="8" r="2" /><path d="M8 1.4v2M8 12.6v2M1.4 8h2M12.6 8h2" strokeLinecap="round" /></svg>;
   if (action === "play") return <svg {...common}><path d="M6 4l7 4-7 4V4z" fill="currentColor" stroke="none" /></svg>;
   if (action === "auto_login") return <svg {...common}><path d="M4 5a4 4 0 1 1 0 6" /><path d="M1.5 8h7M6 5.5 8.5 8 6 10.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  if (action === "restore_login_screen") return <svg {...common}><path d="M3.5 8.5 6.5 5.5 9.5 8.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M6.5 5.5V12.5" strokeLinecap="round" /><path d="M3 12.5h7" strokeLinecap="round" /></svg>;
   if (action === "check_readiness") return <svg {...common}><path d="M3 8.5 6.2 12 13 4" strokeLinecap="round" strokeLinejoin="round" /><path d="M2.5 4.5h4M2.5 12.5h3" strokeLinecap="round" /></svg>;
   if (action === "stop") return <svg {...common}><rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.2" fill="currentColor" stroke="none" /></svg>;
   if (action === "settings") return <svg {...common} strokeLinejoin="round"><path d="M8 2.1 9.1 3l1.4-.3.9 1.5-.5 1.3.9 1.1v1.8l-.9 1.1.5 1.3-.9 1.5-1.4-.3-1.1.9-1.1-.9-1.4.3-.9-1.5.5-1.3-.9-1.1V6.6l.9-1.1-.5-1.3.9-1.5 1.4.3L8 2.1z" /><circle cx="8" cy="8" r="2.1" /></svg>;
@@ -46,6 +48,7 @@ function actionVisible(profile: BotProfile, action: ProfileToolbarAction) {
 
 function disabledReason(profile: BotProfile, action: ProfileToolbarAction): ProfileRequirementState | null {
   if (action === "auto_login" && !profile.autoLoginRequirement.enabled) return profile.autoLoginRequirement;
+  if (action === "restore_login_screen" && !profile.restoreLoginScreenRequirement.enabled) return profile.restoreLoginScreenRequirement;
   if (action === "check_readiness" && !profile.refreshReadinessRequirement.enabled) return profile.refreshReadinessRequirement;
   if (action === "assign_now" && !profile.assignNowRequirement.enabled) return profile.assignNowRequirement;
   return null;
@@ -64,6 +67,7 @@ function tooltipText(profile: BotProfile, action: ProfileToolbarAction, label: s
   if (requirementReason) return `${label} · ${requirementReason.label}: ${requirementReason.detail}`;
   if (action === "auto_login") return `${label} · ${profile.autoLoginRequirement.label}: ${profile.autoLoginRequirement.detail}`;
   if (action === "check_readiness") return `${label} · ${profile.refreshReadinessRequirement.label}: ${profile.refreshReadinessRequirement.detail}`;
+  if (action === "restore_login_screen") return "Restore the assigned clone to a safe login surface with one bounded back action. No credentials or codes are sent.";
   if (action === "play") return "Start account run through the secure BotApp runtime relay.";
   if (action === "stop") return "Stop or cancel the active account run through the secure BotApp runtime relay.";
   if (action === "restore") return "Restore account lifecycle through secure BotApp relay. Does not start a run.";

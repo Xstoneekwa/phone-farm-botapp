@@ -16,11 +16,12 @@ import { buildAssignNowPayload, createAssignNowState } from "./assign-now-flow";
 import { autoLoginLogEntry, autoLoginStateFromStartResult, buildAutoLoginPayload, createAutoLoginStartingState, mergeAutoLoginProgressSnapshot } from "./auto-login-flow";
 import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifecycle-flow";
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
+import { buildRestoreLoginScreenPayload } from "./restore-login-screen-flow";
 import { buildStartPayload, buildStopPayload, displayCounterMetrics, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
-type ConfirmKind = "play" | "auto_login" | "check_readiness" | "assign_now" | "archive" | "delete" | "restore" | "stop";
+type ConfirmKind = "play" | "auto_login" | "restore_login_screen" | "check_readiness" | "assign_now" | "archive" | "delete" | "restore" | "stop";
 type LifecycleFilter = "active" | "archived" | "bin";
 
 function PlatformLogo({ platform }: { platform: BotProfile["platform"] }) {
@@ -549,7 +550,7 @@ export function ProfilesView({
   }`;
 
   function handleToolbar(profile: BotProfile, action: ProfileToolbarAction) {
-    if (action === "play" || action === "auto_login" || action === "check_readiness" || action === "assign_now" || action === "archive" || action === "delete" || action === "restore" || action === "stop") {
+    if (action === "play" || action === "auto_login" || action === "restore_login_screen" || action === "check_readiness" || action === "assign_now" || action === "archive" || action === "delete" || action === "restore" || action === "stop") {
       if (action === "stop") setStopReason("");
       setConfirmAction({ kind: action, profile });
       return;
@@ -706,6 +707,23 @@ export function ProfilesView({
     onRefresh();
   }
 
+  async function startRestoreLoginScreen(profile: BotProfile) {
+    const start = window.botappDesktop?.profiles?.restoreLoginScreen;
+    if (!start) {
+      onMockSubmit("Restore login screen relay unavailable in this runtime.", "error");
+      return;
+    }
+    const payload = buildRestoreLoginScreenPayload(profile);
+    const result = await start({ accountId: profile.id, username: profile.username, ...payload });
+    if (!result.ok) {
+      onMockSubmit(`Restore login screen failed: ${String(result.error || "request_failed")}`, "error");
+      return;
+    }
+    const data = (result.data ?? {}) as Record<string, unknown>;
+    onMockSubmit(`Restore login screen queued: request ${String(data.request_id || "").slice(0, 8) || "created"}.`, "success");
+    onRefresh();
+  }
+
   async function startAutoLogin(profile: BotProfile) {
     const start = window.botappDesktop?.profiles?.autoLogin;
     const startingState = createAutoLoginStartingState(profile);
@@ -785,6 +803,16 @@ export function ProfilesView({
       void startAutoLogin(action.profile);
       return;
     }
+    if (action.kind === "restore_login_screen") {
+      if (dispatcherBlocksAutoLogin) {
+        onMockSubmit(`Restore login screen unavailable: dispatcher is ${dispatcherHealth?.status ?? "unknown"}. Open Runtime Health and resume it first.`, "error");
+        setConfirmAction(null);
+        return;
+      }
+      setConfirmAction(null);
+      void startRestoreLoginScreen(action.profile);
+      return;
+    }
     if (action.kind === "check_readiness") {
       setConfirmAction(null);
       void checkReadinessNow(action.profile);
@@ -813,6 +841,7 @@ export function ProfilesView({
     const labels: Record<ConfirmKind, string> = {
       play: "Start profile",
       auto_login: "Auto Login",
+      restore_login_screen: "Restore login screen",
       check_readiness: "Refresh readiness",
       assign_now: "Assign Now",
       archive: "Archive profile",
@@ -1019,7 +1048,7 @@ export function ProfilesView({
         <Modal
           title={confirmTitle(confirmAction.kind, confirmAction.profile)}
           danger={confirmAction.kind === "delete" || confirmAction.kind === "archive" || confirmAction.kind === "stop" || (confirmAction.kind === "play" && confirmAction.profile.eligibility !== "can_start")}
-          confirmLabel={confirmAction.kind === "play" ? "Start" : confirmAction.kind === "stop" ? "Stop" : confirmAction.kind === "auto_login" ? "Confirm Auto Login" : confirmAction.kind === "check_readiness" ? "Refresh" : confirmAction.kind === "assign_now" ? "Assign now" : confirmAction.kind === "archive" ? "Confirm archive" : confirmAction.kind === "delete" ? "Move to Bin" : confirmAction.kind === "restore" ? "Restore" : "Confirm"}
+          confirmLabel={confirmAction.kind === "play" ? "Start" : confirmAction.kind === "stop" ? "Stop" : confirmAction.kind === "auto_login" ? "Confirm Auto Login" : confirmAction.kind === "restore_login_screen" ? "Restore login screen" : confirmAction.kind === "check_readiness" ? "Refresh" : confirmAction.kind === "assign_now" ? "Assign now" : confirmAction.kind === "archive" ? "Confirm archive" : confirmAction.kind === "delete" ? "Move to Bin" : confirmAction.kind === "restore" ? "Restore" : "Confirm"}
           onClose={() => setConfirmAction(null)}
           onConfirm={() => executeConfirm(confirmAction)}
         >
@@ -1028,12 +1057,13 @@ export function ProfilesView({
             <StopConfirmation profile={confirmAction.profile} stopReason={stopReason} onStopReasonChange={setStopReason} />
           ) : null}
           {confirmAction.kind === "auto_login" ? <AutoLoginConfirmation profile={confirmAction.profile} dispatcherHealth={dispatcherHealth} /> : null}
+          {confirmAction.kind === "restore_login_screen" ? <RestoreLoginScreenConfirmation profile={confirmAction.profile} /> : null}
           {confirmAction.kind === "check_readiness" ? <ReadinessNowConfirmation profile={confirmAction.profile} /> : null}
           {confirmAction.kind === "assign_now" ? <AssignNowConfirmation profile={confirmAction.profile} /> : null}
           {confirmAction.kind === "archive" ? <ArchiveConfirmation profile={confirmAction.profile} /> : null}
           {confirmAction.kind === "delete" ? <DeleteConfirmation profile={confirmAction.profile} /> : null}
           {confirmAction.kind === "restore" ? <RestoreConfirmation profile={confirmAction.profile} /> : null}
-          {confirmAction.kind !== "play" && confirmAction.kind !== "stop" && confirmAction.kind !== "auto_login" && confirmAction.kind !== "check_readiness" && confirmAction.kind !== "assign_now" && confirmAction.kind !== "archive" && confirmAction.kind !== "delete" && confirmAction.kind !== "restore" ? <GenericConfirmation profile={confirmAction.profile} /> : null}
+          {confirmAction.kind !== "play" && confirmAction.kind !== "stop" && confirmAction.kind !== "auto_login" && confirmAction.kind !== "restore_login_screen" && confirmAction.kind !== "check_readiness" && confirmAction.kind !== "assign_now" && confirmAction.kind !== "archive" && confirmAction.kind !== "delete" && confirmAction.kind !== "restore" ? <GenericConfirmation profile={confirmAction.profile} /> : null}
         </Modal>
       ) : null}
 
@@ -1056,6 +1086,7 @@ function confirmTitle(kind: ConfirmKind, profile: BotProfile) {
   if (kind === "play") return `Start account run for ${profile.username}?`;
   if (kind === "stop") return `Stop account run for ${profile.username}?`;
   if (kind === "auto_login") return `Auto Login ${profile.username}?`;
+  if (kind === "restore_login_screen") return `Restore login screen for ${profile.username}?`;
   if (kind === "check_readiness") return "Refresh login readiness?";
   if (kind === "assign_now") return "Assign phone slot now?";
   if (kind === "archive") return "Archive account?";
@@ -1140,6 +1171,25 @@ function AutoLoginConfirmation({ profile, dispatcherHealth }: { profile: BotProf
         <span>launch_enabled</span><code>{dispatcherHealth ? String(dispatcherHealth.launchEnabled) : "unknown"}</code>
         <span>Endpoint</span><code>/api/instagram-dashboard/runs/start</code>
         <span>Contract</span><code>secure BotApp relay · login_provisioning · manual trigger</code>
+      </div>
+      <pre className="payload-preview">{JSON.stringify(payload, null, 2)}</pre>
+    </div>
+  );
+}
+
+function RestoreLoginScreenConfirmation({ profile }: { profile: BotProfile }) {
+  const payload = buildRestoreLoginScreenPayload(profile);
+  return (
+    <div className="run-confirmation">
+      <p><strong>Bounded orphan recovery on the assigned clone.</strong></p>
+      {!profile.restoreLoginScreenRequirement.enabled ? <p className="run-control-warning">{profile.restoreLoginScreenRequirement.detail}</p> : null}
+      <p className="assign-now-copy">This queues one internal recovery request. It performs a single controlled Back action, never sends credentials or codes, and stops immediately if the screen stays ambiguous.</p>
+      <div className="detail-list play-eligibility">
+        <span>Account</span><code>@{profile.username}</code>
+        <span>Device</span><code>{profile.deviceName}</code>
+        <span>Clone</span><code>{profile.appInstanceLabel || profile.appInstanceId || "assigned clone"}</code>
+        <span>Endpoint</span><code>/api/instagram-dashboard/accounts/:account_id/restore-login-screen</code>
+        <span>Contract</span><code>secure BotApp relay · login_orphan_challenge_recovery</code>
       </div>
       <pre className="payload-preview">{JSON.stringify(payload, null, 2)}</pre>
     </div>

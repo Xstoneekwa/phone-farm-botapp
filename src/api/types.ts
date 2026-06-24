@@ -58,6 +58,7 @@ export type ProfileToolbarAction =
   | "targets"
   | "play"
   | "auto_login"
+  | "restore_login_screen"
   | "check_readiness"
   | "stop"
   | "settings"
@@ -179,6 +180,12 @@ export type ProfileAutoLoginPayload = {
   account_id: string;
   requested_run_type: "login_provisioning";
   trigger: "manual";
+  source: "BotApp";
+  idempotency_key: string;
+};
+
+export type ProfileRestoreLoginScreenPayload = {
+  account_id: string;
   source: "BotApp";
   idempotency_key: string;
 };
@@ -586,6 +593,7 @@ export type BotProfile = {
   scheduleMode?: string | null;
   slotKind: string;
   autoLoginRequirement: ProfileRequirementState;
+  restoreLoginScreenRequirement: ProfileRequirementState;
   refreshReadinessRequirement: ProfileRequirementState;
   assignNowRequirement: ProfileRequirementState;
   lastSessionAt: string | null;

@@ -536,6 +536,7 @@ const runtimeIpcHandlers = [
   "botapp:profiles:assign-now",
   "botapp:profiles:readiness-now",
   "botapp:profiles:auto-login",
+  "botapp:profiles:restore-login-screen",
   "botapp:profiles:run-start",
   "botapp:profiles:run-stop",
   "botapp:profiles:run-progress",
@@ -814,6 +815,17 @@ const botappEndpointRegistry = [
     path: "/api/instagram-dashboard/runs/start",
     usedBy: ["Profiles"],
     purpose: "Create a real login_provisioning account_run_request through the secure BotApp relay",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_restore_login_screen",
+    name: "Profile restore login screen",
+    method: "POST",
+    path: "/api/instagram-dashboard/accounts/:account_id/restore-login-screen",
+    usedBy: ["Profiles"],
+    purpose: "Queue bounded orphan login-challenge recovery on the assigned clone without credentials or codes",
     authRequired: true,
     status: "active",
     testStrategy: "none",
@@ -2042,6 +2054,22 @@ async function profileRunStart(input) {
   }
 }
 
+async function profileRestoreLoginScreenStart(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const username = safeIdempotencyPart(input?.username || input?.account_username || accountId);
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  try {
+    const data = await dashboardPost("profiles_restore_login_screen", {
+      account_id: accountId,
+      source: "BotApp",
+      idempotency_key: `botapp:${username}:restore-login-screen:${Date.now()}`,
+    }, { account_id: accountId });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Restore login screen request failed.") };
+  }
+}
+
 async function profileAutoLoginStart(input) {
   const accountId = String(input?.accountId || input?.account_id || "").trim();
   const username = safeIdempotencyPart(input?.username || input?.account_username || accountId);
@@ -2816,6 +2844,34 @@ function requirementState(enabled, reason, label, detail) {
   return { enabled, reason, label, detail };
 }
 
+function readRestoreLoginScreenRequirement({
+  account,
+  device,
+  appInstanceId,
+  assignmentState,
+  deviceAvailability,
+  runtimeLock,
+  profileStatus,
+}) {
+  const lifecycle = normalizeMatchText(`${account?.adminStatus || account?.admin_status || ""} ${account?.customerStatus || account?.customer_status || ""} ${account?.subscriptionStatus || account?.subscription_status || ""} ${account?.status || ""}`);
+  if (lifecycle.includes("cancel") || lifecycle.includes("delete") || lifecycle.includes("trashed") || lifecycle.includes("archived") || profileStatus === "archived" || profileStatus === "paused") {
+    return requirementState(false, "status_blocked", "Account unavailable", "Archived, deleted, cancelled, or paused accounts cannot run login screen recovery.");
+  }
+  if (!account?.orphanRecoveryBotappActionAvailable) {
+    return requirementState(false, "runtime_blocked", "Orphan challenge not confirmed", "Restore login screen is only available when an orphan email-code challenge is confirmed for this assigned clone.");
+  }
+  if (!device?.id || !appInstanceId || assignmentState === "missing_slot") {
+    return requirementState(false, "assignment_missing", "Device not assigned", "Assign the account to the target phone and clone before recovery.");
+  }
+  if (assignmentState === "blocked" || deviceAvailability === "offline" || deviceAvailability === "maintenance") {
+    return requirementState(false, "device_unavailable", "Device unavailable", "The assigned phone or Instagram app instance is not available.");
+  }
+  if (runtimeLock !== "none" || profileStatus === "running") {
+    return requirementState(false, "login_already_running", "Active run in progress", "Wait for the active run/request to finish before recovery.");
+  }
+  return requirementState(true, "ready", "Restore login screen", "Run one bounded back action on the assigned clone to return to a safe login surface.");
+}
+
 function readAutoLoginRequirement({
   account,
   credentialStatus,
@@ -3005,6 +3061,15 @@ function profileFromManageAccount(account, index, devices) {
       account,
       credentialStatus,
       loginStatus,
+      device,
+      appInstanceId,
+      assignmentState,
+      deviceAvailability,
+      runtimeLock,
+      profileStatus,
+    }),
+    restoreLoginScreenRequirement: readRestoreLoginScreenRequirement({
+      account,
       device,
       appInstanceId,
       assignmentState,
@@ -4371,6 +4436,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:assign-now", (_event, input) => assignProfileNow(input));
   ipcMain.handle("botapp:profiles:readiness-now", (_event, input) => profileReadinessNow(input));
   ipcMain.handle("botapp:profiles:auto-login", (_event, input) => profileAutoLoginStart(input));
+  ipcMain.handle("botapp:profiles:restore-login-screen", (_event, input) => profileRestoreLoginScreenStart(input));
   ipcMain.handle("botapp:profiles:run-start", (_event, input) => profileRunStart(input));
   ipcMain.handle("botapp:profiles:run-stop", (_event, input) => profileRunStop(input));
   ipcMain.handle("botapp:profiles:run-progress", (_event, input) => profileRunProgress(input));
