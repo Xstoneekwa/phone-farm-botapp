@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   },
   clientAccounts: {
     applyStatus: (input) => ipcRenderer.invoke("botapp:client-accounts:status", input),
+    applyNeedsMoreTargets: (input) => ipcRenderer.invoke("botapp:client-accounts:needs-more-targets", input),
   },
   devices: {
     list: (input) => ipcRenderer.invoke("botapp:devices:list", input),
@@ -85,6 +86,13 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     list: () => ipcRenderer.invoke("botapp:integrations:list"),
     saveWebhook: (input) => ipcRenderer.invoke("botapp:integrations:save-webhook", input),
     removeWebhook: (input) => ipcRenderer.invoke("botapp:integrations:remove-webhook", input),
+  },
+  email: {
+    listTemplates: () => ipcRenderer.invoke("botapp:email:list-templates"),
+    saveTemplate: (input) => ipcRenderer.invoke("botapp:email:save-template", input),
+    previewTemplate: (input) => ipcRenderer.invoke("botapp:email:preview-template", input),
+    listHistory: (input) => ipcRenderer.invoke("botapp:email:list-history", input),
+    historyDetail: (intentId) => ipcRenderer.invoke("botapp:email:history-detail", intentId),
   },
   deviceViews: {
     list: () => ipcRenderer.invoke("botapp:device-views:list"),

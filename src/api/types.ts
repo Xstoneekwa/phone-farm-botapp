@@ -672,7 +672,12 @@ export type BotAppClientAccount = {
   assignment: BotAppClientAccountAssignment;
   lastActivityAt: string | null;
   targetsCount: number;
+  needsMoreTargets: boolean;
+  eligibleTargetCount: number;
   actionsNeeded: string[];
+  clientContactEmailDisplay: string;
+  clientContactEmailSource: string;
+  clientContactEmailAvailable: boolean;
   safeEmailDisplay: string;
   sourceLabel: "supabase_projection:manage_overview" | "local projection";
   profileImageUrl: string | null;
@@ -2553,6 +2558,83 @@ export type ActionPreview = {
   target: string;
   dry_run: true;
   message: string;
+};
+
+export type BotAppEmailTemplateCategory =
+  | "account_paused"
+  | "account_canceled"
+  | "needs_assistance"
+  | "needs_more_target_accounts";
+
+export type BotAppEmailTemplateRow = {
+  id: string;
+  category: BotAppEmailTemplateCategory;
+  categoryLabel: string;
+  version: number;
+  status: "active" | "retired";
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
+  allowedVariables: string[];
+  configured: boolean;
+  fromEmail: "growth@boostmybusinesses.com";
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+};
+
+export type BotAppEmailTemplatesProjection = {
+  featureAvailable: boolean;
+  fromEmail: "growth@boostmybusinesses.com";
+  categories: BotAppEmailTemplateCategory[];
+  templates: BotAppEmailTemplateRow[];
+};
+
+export type BotAppEmailHistoryListItem = {
+  id: string;
+  createdAt: string;
+  clientName: string | null;
+  instagramUsername: string | null;
+  category: BotAppEmailTemplateCategory;
+  categoryLabel: string;
+  recipientEmail: string;
+  fromEmail: "growth@boostmybusinesses.com";
+  trigger: "manual" | "automatic" | "reminder";
+  reminderIndex: number | null;
+  intentStatus: string;
+  deliveryStatus: string | null;
+  templateVersion: number | null;
+};
+
+export type BotAppEmailHistoryProjection = {
+  featureAvailable: boolean;
+  fromEmail: "growth@boostmybusinesses.com";
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  items: BotAppEmailHistoryListItem[];
+};
+
+export type BotAppEmailHistoryDetail = BotAppEmailHistoryListItem & {
+  scheduledFor: string | null;
+  sentAt: string | null;
+  resolvedAt: string | null;
+  snapshotSubject: string;
+  snapshotBodyText: string;
+  snapshotBodyHtml: string;
+  sourceNotificationId: string | null;
+  sourceActionId: string | null;
+  providerMessageId: string | null;
+  lastErrorRedacted: string | null;
+  timeline: Array<{
+    status: string;
+    occurredAt: string;
+    provider: string | null;
+    providerMessageId: string | null;
+    lastErrorRedacted: string | null;
+  }>;
 };
 
 export type BotAppClient = {

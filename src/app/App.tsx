@@ -13,6 +13,7 @@ import { ActivityLog } from "../views/ActivityLog";
 import { RuntimeHealth } from "../views/RuntimeHealth";
 import { Compass } from "../views/Compass";
 import { AutoRestart } from "../views/AutoRestart";
+import { EmailHistory } from "../views/EmailHistory";
 import { APIKeys } from "../views/APIKeys";
 import { Settings } from "../views/Settings";
 import { routes, type RouteId } from "./routes";
@@ -307,6 +308,7 @@ export function App() {
   else if (active === "credentials") view = data.credentials ? <Credentials overview={data.credentials} selectedAccountId={selectedCredentialsAccountId} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} onRefresh={() => loadOverviewData()} />;
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
+  else if (active === "email-history") view = <EmailHistory />;
   else if (active === "runtime") view = <RuntimeHealth />;
   else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
   else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onPreviewControl={previewAutoRestartControl} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;

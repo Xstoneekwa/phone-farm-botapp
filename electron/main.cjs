@@ -515,6 +515,11 @@ const runtimeIpcHandlers = [
   "botapp:targeting-ai:save-config",
   "botapp:targeting-ai:reset-config",
   "botapp:targeting-ai:test-config",
+  "botapp:email:list-templates",
+  "botapp:email:save-template",
+  "botapp:email:preview-template",
+  "botapp:email:list-history",
+  "botapp:email:history-detail",
   "botapp:auto-restart:overview",
   "botapp:auto-restart:dry-run",
   "botapp:auto-restart:action-preview",
@@ -533,6 +538,7 @@ const runtimeIpcHandlers = [
   "botapp:profiles:settings:save",
   "botapp:profiles:action",
   "botapp:client-accounts:status",
+  "botapp:client-accounts:needs-more-targets",
   "botapp:profiles:assign-now",
   "botapp:profiles:readiness-now",
   "botapp:profiles:auto-login",
@@ -886,6 +892,17 @@ const botappEndpointRegistry = [
     testStrategy: "fetch",
   },
   {
+    id: "client_accounts_needs_more_targets",
+    name: "Client accounts needs more targets",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/client-accounts/needs-more-targets",
+    usedBy: ["Client Accounts"],
+    purpose: "Mark or clear the non-blocking needs-more-target-accounts signal for one account without login, run, or phone actions",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
     id: "credentials_actions",
     name: "Credentials actions",
     method: "GET",
@@ -906,6 +923,50 @@ const botappEndpointRegistry = [
     authRequired: true,
     status: "active",
     testStrategy: "fetch",
+  },
+  {
+    id: "email_templates",
+    name: "Email templates",
+    method: "GET",
+    path: "/api/instagram-dashboard/email-templates",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Load versioned transactional email templates from canonical backend",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "email_templates_save",
+    name: "Email templates save",
+    method: "POST",
+    path: "/api/instagram-dashboard/email-templates",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Create a new active transactional email template version without sending email",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "email_history",
+    name: "Email history",
+    method: "GET",
+    path: "/api/instagram-dashboard/email-history",
+    usedBy: ["Email History"],
+    purpose: "Read paginated canonical email send intents and delivery status",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "email_history_detail",
+    name: "Email history detail",
+    method: "GET",
+    path: "/api/instagram-dashboard/email-history/:intent_id",
+    usedBy: ["Email History"],
+    purpose: "Read one email intent detail with redacted delivery timeline",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
   },
   {
     id: "settings_overview",
@@ -1905,6 +1966,51 @@ async function profileVerifyUsername(input) {
     return { ok: true, data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Username verification failed.") };
+  }
+}
+
+async function performClientAccountNeedsMoreTargetsAction(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const action = String(input?.action || "mark").trim().toLowerCase();
+  const reason = String(input?.reason || `client_accounts_needs_more_targets_${action}`).trim().slice(0, 160) || "client_accounts_needs_more_targets";
+  const dryRun = input?.dryRun === true;
+  if (!accountId) return { ok: false, error: "Missing account id." };
+  if (!["mark", "clear"].includes(action)) {
+    return { ok: false, error: "Unsupported needs more targets action." };
+  }
+  const cfg = compassConfig();
+  if (!cfg.relayUrl || !cfg.relayKey) {
+    return { ok: false, error: "Secure relay not connected — action unavailable.", code: "relay_unavailable" };
+  }
+  if (dryRun) {
+    return {
+      ok: true,
+      dryRun: true,
+      data: {
+        account_id: accountId,
+        action,
+        reason,
+        expected_effect: "needs_more_target_accounts_signal_only",
+      },
+    };
+  }
+  try {
+    const metadata = input?.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+      ? input.metadata
+      : {};
+    const data = await dashboardRequest("PATCH", "client_accounts_needs_more_targets", {
+      account_id: accountId,
+      action,
+      reason,
+      metadata: {
+        source_surface: "client_accounts",
+        expected_effect: "needs_more_target_accounts_signal_only",
+        ...metadata,
+      },
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Needs more targets update failed.") };
   }
 }
 
@@ -3107,6 +3213,21 @@ function profileFromManageAccount(account, index, devices) {
   };
 }
 
+function overlayClientAccountNeedsMoreTargets(items, clientAccountsPayload) {
+  const relayAccounts = Array.isArray(clientAccountsPayload?.accounts) ? clientAccountsPayload.accounts : [];
+  if (!relayAccounts.length) return items;
+  const byId = new Map(relayAccounts.map((row, index) => [accountRowId(row, index), row]));
+  return items.map((item) => {
+    const relay = byId.get(item.accountId);
+    if (!relay) return item;
+    return {
+      ...item,
+      needsMoreTargets: Boolean(relay.needsMoreTargets ?? relay.needs_more_targets),
+      eligibleTargetCount: Number(relay.eligibleTargetCount ?? relay.eligible_target_count ?? 0),
+    };
+  });
+}
+
 function clientAccountFromManage(account, profile, devices) {
   const device = devices.find((item) => item.id === profile.deviceId);
   const status = accountStatus(account?.adminStatus || account?.customerStatus || account?.subscriptionStatus);
@@ -3152,8 +3273,13 @@ function clientAccountFromManage(account, profile, devices) {
     },
     lastActivityAt: account?.lastSafeUpdate || null,
     targetsCount: 0,
+    needsMoreTargets: Boolean(account?.needsMoreTargets ?? account?.needs_more_targets),
+    eligibleTargetCount: Number(account?.eligibleTargetCount ?? account?.eligible_target_count ?? 0),
     actionsNeeded,
-    safeEmailDisplay: String(account?.emailDisplay || "hidden"),
+    safeEmailDisplay: String(account?.clientContactEmail || account?.clientContactEmailDisplay || "Contact email missing"),
+    clientContactEmailDisplay: String(account?.clientContactEmail || account?.clientContactEmailDisplay || "Contact email missing"),
+    clientContactEmailSource: String(account?.clientContactEmailSource || "missing"),
+    clientContactEmailAvailable: Boolean(account?.clientContactEmailAvailable),
     sourceLabel: "supabase_projection:manage_overview",
     profileImageUrl: account?.profileImageUrl || null,
     instagramVerificationStatus: account?.instagramVerificationStatus === "verified" ? "verified" : account?.instagramVerificationStatus === "pending" ? "pending" : "unknown",
@@ -3578,7 +3704,10 @@ async function botappOverviewData() {
   };
   console.info("[botapp] profiles_patch_active manage-sync-v1");
   console.info("[botapp] profiles_source_counts", profilesSourceCounts);
-  const clientItems = accounts.map((account, index) => clientAccountFromManage(account, profiles[index], enrichedDevices));
+  const clientItems = overlayClientAccountNeedsMoreTargets(
+    accounts.map((account, index) => clientAccountFromManage(account, profiles[index], enrichedDevices)),
+    clientAccountsPayload,
+  );
   const clientAccounts = {
     items: clientItems,
     summary: summarizeClientAccounts(clientItems),
@@ -3924,6 +4053,79 @@ async function targetingAiTestConfig(input) {
     return { ok: false, error: result.error || "Targeting AI test failed." };
   }
   return { ok: true, data: result.data };
+}
+
+function normalizeEmailTemplatesRelay(result) {
+  if (!result?.ok) {
+    return {
+      ok: false,
+      data: null,
+      error: result?.error || "Email templates unavailable.",
+    };
+  }
+  const projection = result.data;
+  if (!projection || typeof projection.featureAvailable !== "boolean" || !Array.isArray(projection.templates)) {
+    return {
+      ok: false,
+      data: null,
+      error: "Email templates response was invalid.",
+    };
+  }
+  return { ok: true, data: projection, error: null };
+}
+
+function normalizeEmailHistoryRelay(projection, errorMessage) {
+  if (!projection || typeof projection.featureAvailable !== "boolean" || !Array.isArray(projection.items)) {
+    return { ok: false, data: null, error: errorMessage || "Email history unavailable." };
+  }
+  return { ok: true, data: projection, error: null };
+}
+
+async function emailTemplatesList() {
+  const result = await dashboardRequestResult("GET", "email_templates");
+  return normalizeEmailTemplatesRelay(result);
+}
+
+async function emailTemplatesSave(input) {
+  const result = await dashboardRequestResult("POST", "email_templates_save", {
+    category: input?.category,
+    subject: input?.subject,
+    body_text: input?.bodyText,
+  });
+  return { ok: result.ok, data: result.data, error: result.error };
+}
+
+async function emailTemplatesPreview(input) {
+  const result = await dashboardRequestResult("POST", "email_templates_save", {
+    action: "preview",
+    subject: input?.subject,
+    body_text: input?.bodyText,
+  });
+  return { ok: result.ok, data: result.data, error: result.error };
+}
+
+async function emailHistoryList(query = {}) {
+  try {
+    const projection = await dashboardGetWithQuery("email_history", query);
+    return normalizeEmailHistoryRelay(projection);
+  } catch (error) {
+    return {
+      ok: false,
+      data: null,
+      error: safeRuntimeError(error, "Email history unavailable."),
+    };
+  }
+}
+
+async function emailHistoryDetail(intentId) {
+  const normalized = String(intentId || "").trim();
+  if (!normalized) return { ok: false, error: "Missing email intent id." };
+  try {
+    const data = await dashboardGet("email_history_detail", { intent_id: normalized });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Email history detail unavailable.") };
+  }
 }
 
 async function saveCompassRelayConfig(input) {
@@ -4406,6 +4608,11 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:targeting-ai:save-config", (_event, input) => targetingAiSaveConfig(input));
   ipcMain.handle("botapp:targeting-ai:reset-config", () => targetingAiResetConfig());
   ipcMain.handle("botapp:targeting-ai:test-config", (_event, input) => targetingAiTestConfig(input));
+  ipcMain.handle("botapp:email:list-templates", () => emailTemplatesList());
+  ipcMain.handle("botapp:email:save-template", (_event, input) => emailTemplatesSave(input));
+  ipcMain.handle("botapp:email:preview-template", (_event, input) => emailTemplatesPreview(input));
+  ipcMain.handle("botapp:email:list-history", (_event, input) => emailHistoryList(input || {}));
+  ipcMain.handle("botapp:email:history-detail", (_event, intentId) => emailHistoryDetail(intentId));
   ipcMain.handle("botapp:auto-restart:overview", () => autoRestartOverview());
   ipcMain.handle("botapp:auto-restart:dry-run", () => autoRestartDryRun());
   ipcMain.handle("botapp:auto-restart:action-preview", (_event, input) => autoRestartActionPreview(input));
@@ -4433,6 +4640,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:settings:save", (_event, input) => profileSettingsSave(input));
   ipcMain.handle("botapp:profiles:action", (_event, input) => performProfileAction(input));
   ipcMain.handle("botapp:client-accounts:status", (_event, input) => performClientAccountStatusAction(input));
+  ipcMain.handle("botapp:client-accounts:needs-more-targets", (_event, input) => performClientAccountNeedsMoreTargetsAction(input));
   ipcMain.handle("botapp:profiles:assign-now", (_event, input) => assignProfileNow(input));
   ipcMain.handle("botapp:profiles:readiness-now", (_event, input) => profileReadinessNow(input));
   ipcMain.handle("botapp:profiles:auto-login", (_event, input) => profileAutoLoginStart(input));

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Card, Input, Modal, type BadgeTone } from "../design/components";
 import type { ApiKeySummary, BotAppBackendEndpoint, BotAppRuntimeIntegrationStatus, CompassAiRuntimeStatus, IntegrationStatus, TargetingAiRuntimeStatus, WebhookEvent, WebhookSummary } from "../api/types";
 import { redactText } from "../security/redaction";
+import { EmailTemplatesSection } from "./EmailTemplatesSection";
 import "./api-keys.css";
 
 const noRelayMessage = "Compass AI relay not configured. Add a relay URL to enable AI recommendations.";
@@ -842,6 +843,8 @@ export function APIKeys({
           </div>
         </div>
       </Card>
+
+      <EmailTemplatesSection />
 
       <Card title="External Webhooks" subtitle="Local configuration is available. Real delivery, testing, and retries remain backend pending.">
         <div className="webhook-form">

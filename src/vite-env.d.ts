@@ -73,6 +73,9 @@ type BotAppEndpointTestResult = import("./api/types").BotAppEndpointTestResult;
 type BotAppConnectionProfile = import("./api/types").BotAppConnectionProfile;
 type WebhookEvent = import("./api/types").WebhookEvent;
 type WebhookSummary = import("./api/types").WebhookSummary;
+type BotAppEmailTemplatesProjection = import("./api/types").BotAppEmailTemplatesProjection;
+type BotAppEmailHistoryProjection = import("./api/types").BotAppEmailHistoryProjection;
+type BotAppEmailHistoryDetail = import("./api/types").BotAppEmailHistoryDetail;
 
 interface Window {
   botappDesktop?: {
@@ -124,6 +127,13 @@ interface Window {
         metadata?: Record<string, string>;
         dryRun?: boolean;
       }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null; dryRun?: boolean; code?: string }>;
+      applyNeedsMoreTargets?: (input: {
+        accountId: string;
+        action: "mark" | "clear";
+        reason?: string;
+        metadata?: Record<string, string>;
+        dryRun?: boolean;
+      }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null; dryRun?: boolean; code?: string }>;
     };
     devices?: {
       list: (input?: { format?: "raw" | "normalized" }) => Promise<{ ok: boolean; data?: Record<string, unknown>[]; error?: string | null }>;
@@ -170,6 +180,13 @@ interface Window {
       list: () => Promise<{ webhooks: WebhookSummary[] }>;
       saveWebhook: (input: { label: string; url: string; secret?: string; events: WebhookEvent[] }) => Promise<{ webhooks: WebhookSummary[] }>;
       removeWebhook: (input: { id: string }) => Promise<{ webhooks: WebhookSummary[] }>;
+    };
+    email?: {
+      listTemplates: () => Promise<{ ok: boolean; data?: BotAppEmailTemplatesProjection; error?: string | null }>;
+      saveTemplate: (input: { category: string; subject: string; bodyText: string }) => Promise<{ ok: boolean; data?: { template?: BotAppEmailTemplatesProjection["templates"][number]; created_new_version?: boolean }; error?: string | null }>;
+      previewTemplate: (input: { subject: string; bodyText: string }) => Promise<{ ok: boolean; data?: { preview?: { subject: string; bodyText: string; bodyHtml: string } }; error?: string | null }>;
+      listHistory: (input?: Record<string, string | number | undefined>) => Promise<{ ok: boolean; data?: BotAppEmailHistoryProjection; error?: string | null }>;
+      historyDetail: (intentId: string) => Promise<{ ok: boolean; data?: { detail?: BotAppEmailHistoryDetail }; error?: string | null }>;
     };
     deviceViews?: {
       list: () => Promise<BotAppDeviceViewResult>;

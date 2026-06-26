@@ -420,6 +420,13 @@
   padding: 4px 2px 8px;
 }
 
+.client-accounts-status-menu-divider {
+  display: block;
+  height: 1px;
+  margin: 6px 0;
+  background: rgba(12, 20, 30, 0.08);
+}
+
 .client-accounts-confirm-backdrop {
   position: fixed;
   inset: 0;

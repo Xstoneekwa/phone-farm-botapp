@@ -8,6 +8,11 @@ import {
   type ClientAccountLifecycleAction,
   type ClientAccountLifecycleAvailability,
 } from "../../data/client-accounts-actions";
+import {
+  applyNeedsMoreTargetsAction,
+  needsMoreTargetsActionAvailability,
+  type NeedsMoreTargetsAvailability,
+} from "../../data/needs-more-targets-actions";
 
 type AccountStatusActionMenuProps = {
   account: BotAppClientAccount;
@@ -37,6 +42,7 @@ export function AccountStatusActionMenu({
 }: AccountStatusActionMenuProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [pendingCancel, setPendingCancel] = useState(false);
+  const [pendingNeedsMoreTargets, setPendingNeedsMoreTargets] = useState<NeedsMoreTargetsAvailability | null>(null);
   const relayAvailable = relayActionsAvailable(relayHealth, {
     relayUrlConfigured: runtimeStatus?.compassAi?.relayUrlConfigured,
     relayKeyConfigured: runtimeStatus?.compassAi?.relayKeyConfigured,
@@ -45,9 +51,16 @@ export function AccountStatusActionMenu({
     () => buildLifecycleAvailability(account, relayAvailable),
     [account, relayAvailable],
   );
+  const needsMoreTargetsAvailability = useMemo(
+    () => needsMoreTargetsActionAvailability(account, relayAvailable),
+    [account, relayAvailable],
+  );
 
   useEffect(() => {
-    if (!isOpen) setPendingCancel(false);
+    if (!isOpen) {
+      setPendingCancel(false);
+      setPendingNeedsMoreTargets(null);
+    }
   }, [isOpen]);
 
   async function runAction(action: ClientAccountLifecycleAction, confirmed = false) {
@@ -89,6 +102,40 @@ export function AccountStatusActionMenu({
     }
   }
 
+  async function runNeedsMoreTargetsAction(confirmed = false) {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const result = await applyNeedsMoreTargetsAction(
+        { account, confirmed },
+        {
+          relayAvailable,
+          send: async (payload) => {
+            const response = await window.botappDesktop?.clientAccounts?.applyNeedsMoreTargets?.(payload);
+            return { ok: Boolean(response?.ok), error: response?.error || null };
+          },
+        },
+      );
+
+      if ("needsConfirmation" in result && result.needsConfirmation) {
+        setPendingNeedsMoreTargets(result.availability);
+        return;
+      }
+
+      if (!result.ok) {
+        onMessage(result.error || "Could not update needs more targets signal.", "error");
+        return;
+      }
+
+      onClose();
+      setPendingNeedsMoreTargets(null);
+      onMessage(`${account.username}: ${result.label} updated.`, "success");
+      await onRefresh();
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   if (!isOpen) return null;
 
   return (
@@ -121,7 +168,44 @@ export function AccountStatusActionMenu({
             </button>
           );
         })}
+        <span className="client-accounts-status-menu-divider" aria-hidden="true" />
+        <button
+          type="button"
+          role="menuitem"
+          disabled={isSaving || needsMoreTargetsAvailability.disabled}
+          title={needsMoreTargetsAvailability.disabledReason || needsMoreTargetsAvailability.description}
+          aria-label={`${needsMoreTargetsAvailability.label}: ${needsMoreTargetsAvailability.description}`}
+          onClick={() => void runNeedsMoreTargetsAction()}
+        >
+          <TargetsIcon />
+          <span>
+            <strong>{needsMoreTargetsAvailability.label}</strong>
+            <small>{needsMoreTargetsAvailability.disabledReason || needsMoreTargetsAvailability.description}</small>
+          </span>
+        </button>
       </span>
+
+      {pendingNeedsMoreTargets ? (
+        <div className="client-accounts-confirm-backdrop" role="presentation" onMouseDown={() => setPendingNeedsMoreTargets(null)}>
+          <section
+            className="client-accounts-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-label={pendingNeedsMoreTargets.label}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span>{pendingNeedsMoreTargets.label}</span>
+            <h3>{pendingNeedsMoreTargets.action === "clear" ? `Clear signal for @${account.username}?` : `Signal needs more targets for @${account.username}?`}</h3>
+            <p>{pendingNeedsMoreTargets.description} This is audited on the backend and does not start runs, login, or phone actions.</p>
+            <div className="client-accounts-confirm-actions">
+              <button type="button" onClick={() => setPendingNeedsMoreTargets(null)} disabled={isSaving}>Keep current state</button>
+              <button type="button" disabled={isSaving} onClick={() => void runNeedsMoreTargetsAction(true)}>
+                {isSaving ? "Saving…" : pendingNeedsMoreTargets.label}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {pendingCancel ? (
         <div className="client-accounts-confirm-backdrop" role="presentation" onMouseDown={() => setPendingCancel(false)}>
@@ -171,4 +255,8 @@ function LifeBuoyIcon() {
 
 function RefreshIcon() {
   return <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 3v6h-6" /></svg>;
+}
+
+function TargetsIcon() {
+  return <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 2v3" /><path d="M12 19v3" /><path d="M2 12h3" /><path d="M19 12h3" /></svg>;
 }

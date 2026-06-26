@@ -187,7 +187,7 @@ export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials, onR
             <thead>
               <tr>
                 <th>Account</th>
-                <th>Email</th>
+                <th>Client email</th>
                 <th>Password</th>
                 <th>2FA</th>
                 <th>Created At</th>
@@ -210,7 +210,7 @@ export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials, onR
                       </div>
                     </div>
                   </td>
-                  <td>{item.safeEmailDisplay}</td>
+                  <td>{item.clientContactEmailDisplay}</td>
                   <td><Badge value={passwordLabel(item.passwordStatus)} tone={passwordTone(item.passwordStatus)} /></td>
                   <td><Badge value={item.twoFactorDisplay} tone={twoFactorTone(item.twoFactorDisplay)} /></td>
                   <td>{item.createdAtLabel}</td>

@@ -1,0 +1,86 @@
+.email-history-screen {
+  display: grid;
+  gap: 16px;
+}
+
+.email-history-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+
+.email-history-header h2,
+.email-history-header p,
+.email-history-message,
+.email-history-empty p {
+  margin: 0;
+}
+
+.email-history-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.email-history-filter {
+  display: grid;
+  gap: 6px;
+}
+
+.email-history-filter input,
+.email-history-filter select {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  padding: 10px 12px;
+}
+
+.email-history-table-wrap {
+  overflow: auto;
+}
+
+.email-history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.email-history-table th,
+.email-history-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.email-history-empty {
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 24px;
+  display: grid;
+  gap: 8px;
+}
+
+.email-history-pagination {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.email-history-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.email-history-detail pre {
+  white-space: pre-wrap;
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.email-history-detail ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}

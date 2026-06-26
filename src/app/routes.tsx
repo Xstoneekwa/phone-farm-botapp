@@ -1,4 +1,4 @@
-export type RouteId = "overview" | "profiles" | "account" | "credentials" | "devices" | "activity" | "runtime" | "compass" | "auto-restart" | "api" | "settings";
+export type RouteId = "overview" | "profiles" | "account" | "credentials" | "devices" | "activity" | "email-history" | "runtime" | "compass" | "auto-restart" | "api" | "settings";
 
 export const routes: Array<{ id: RouteId; label: string; group: string; shortcut: string }> = [
   { id: "overview", label: "Overview", group: "Ops", shortcut: "O" },
@@ -7,6 +7,7 @@ export const routes: Array<{ id: RouteId; label: string; group: string; shortcut
   { id: "credentials", label: "Credentials", group: "Ops", shortcut: "K" },
   { id: "devices", label: "Devices", group: "Ops", shortcut: "V" },
   { id: "activity", label: "Activity Log", group: "Monitoring", shortcut: "L" },
+  { id: "email-history", label: "Email History", group: "Monitoring", shortcut: "E" },
   { id: "runtime", label: "Runtime Health", group: "Monitoring", shortcut: "H" },
   { id: "compass", label: "Compass", group: "Monitoring", shortcut: "X" },
   { id: "auto-restart", label: "Auto Restart", group: "Automation", shortcut: "R" },
