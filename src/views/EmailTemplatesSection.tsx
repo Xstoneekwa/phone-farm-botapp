@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Card, Drawer, Input } from "../design/components";
-import type { BotAppEmailTemplateRow, BotAppEmailTemplatesProjection } from "../api/types";
+import type { BotAppEmailTemplateRow, BotAppEmailTemplatesProjection, BotAppEmailTestDeliveryStatus } from "../api/types";
 import {
   canEditEmailTemplates,
   readEmailFeatureProjection,
@@ -58,6 +58,10 @@ export function EmailTemplatesSection() {
   const [previewSubject, setPreviewSubject] = useState("");
   const [previewBody, setPreviewBody] = useState("");
   const [saving, setSaving] = useState(false);
+  const [testStatus, setTestStatus] = useState<BotAppEmailTestDeliveryStatus | null>(null);
+  const [testStatusLoading, setTestStatusLoading] = useState(false);
+  const [testConfirmOpen, setTestConfirmOpen] = useState(false);
+  const [testSending, setTestSending] = useState(false);
 
   const projection = readEmailFeatureProjection(loadState, fallbackProjection);
   const canEdit = canEditEmailTemplates(loadState);
@@ -87,9 +91,47 @@ export function EmailTemplatesSection() {
     }
   }
 
+  async function loadTestDeliveryStatus() {
+    setTestStatusLoading(true);
+    try {
+      const result = await window.botappDesktop?.email?.testDeliveryStatus?.();
+      if (result?.ok && result.data) setTestStatus(result.data);
+      else setTestStatus(null);
+    } finally {
+      setTestStatusLoading(false);
+    }
+  }
+
+  async function sendTestDelivery() {
+    if (!editing || !testStatus?.canSendTest) return;
+    setTestSending(true);
+    try {
+      const result = await window.botappDesktop?.email?.sendTestDelivery?.({ category: editing.category });
+      if (!result?.ok) {
+        setMessage(result?.error ?? "Test delivery could not be sent.");
+        return;
+      }
+      setMessage(result.data?.action === "already_sent"
+        ? "Test delivery was already sent for this template key."
+        : "Test delivery accepted by Postmark.");
+      setTestConfirmOpen(false);
+    } finally {
+      setTestSending(false);
+    }
+  }
+
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (!editing) {
+      setTestConfirmOpen(false);
+      setTestStatus(null);
+      return;
+    }
+    void loadTestDeliveryStatus();
+  }, [editing?.category]);
 
   async function runPreview() {
     if (!editing) return;
@@ -155,6 +197,14 @@ export function EmailTemplatesSection() {
     : loadState.status === "infrastructure_pending"
       ? "Infrastructure pending"
       : "Relay unavailable";
+
+  const testDeliveryDisabled = !editing?.configured
+    || testStatusLoading
+    || !testStatus?.canSendTest;
+
+  const testDeliveryDisabledReason = editing && !editing.configured
+    ? "Configure an active template before sending a test delivery."
+    : testStatus?.disabledReason ?? "Test delivery gates are closed.";
 
   return (
     <Card title="Transactional Email Templates" subtitle="Edit subject and plain-text body from BotApp. Sender is locked server-side.">
@@ -244,6 +294,42 @@ export function EmailTemplatesSection() {
                 <pre>{previewBody}</pre>
               </div>
             ) : null}
+            <section className="email-template-test-delivery" aria-label="Internal test delivery">
+              <strong>Send test delivery</strong>
+              <p className="email-template-test-note">
+                This sends one real test email to the configured test recipient.
+              </p>
+              <dl className="email-template-test-gates">
+                <div><dt>Template</dt><dd>{editing.categoryLabel}</dd></div>
+                <div><dt>Locked sender</dt><dd><code>{LOCKED_FROM}</code></dd></div>
+                <div><dt>Test recipient</dt><dd>{testStatus?.testRecipientMasked ?? "Not configured"}</dd></div>
+                <div><dt>Test gate</dt><dd>{testStatus?.testSendingEnabled ? "Enabled" : "Disabled"}</dd></div>
+                <div><dt>Provider</dt><dd>{testStatus?.providerReady ? "Postmark ready" : "Not ready"}</dd></div>
+                <div><dt>Schema</dt><dd>{testStatus?.testSchemaReady ? "Ready" : "Migration pending"}</dd></div>
+              </dl>
+              {!testStatus?.canSendTest ? (
+                <p className="email-template-test-disabled">{testDeliveryDisabledReason}</p>
+              ) : null}
+              {testConfirmOpen ? (
+                <div className="email-template-test-confirm">
+                  <p>Confirm one internal test delivery to {testStatus?.testRecipientMasked ?? "the configured recipient"}?</p>
+                  <div className="email-template-test-actions">
+                    <Button variant="ghost" onClick={() => setTestConfirmOpen(false)} disabled={testSending}>Cancel</Button>
+                    <Button variant="primary" disabled={testSending} onClick={() => void sendTestDelivery()}>
+                      {testSending ? "Sending…" : "Confirm test delivery"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  disabled={testDeliveryDisabled}
+                  onClick={() => setTestConfirmOpen(true)}
+                >
+                  Send test delivery
+                </Button>
+              )}
+            </section>
           </div>
         </Drawer>
       ) : null}

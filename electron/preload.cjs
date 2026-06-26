@@ -93,6 +93,8 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     previewTemplate: (input) => ipcRenderer.invoke("botapp:email:preview-template", input),
     listHistory: (input) => ipcRenderer.invoke("botapp:email:list-history", input),
     historyDetail: (intentId) => ipcRenderer.invoke("botapp:email:history-detail", intentId),
+    testDeliveryStatus: () => ipcRenderer.invoke("botapp:email:test-delivery-status"),
+    sendTestDelivery: (input) => ipcRenderer.invoke("botapp:email:send-test-delivery", input),
   },
   deviceViews: {
     list: () => ipcRenderer.invoke("botapp:device-views:list"),

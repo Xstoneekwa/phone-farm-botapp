@@ -145,6 +145,7 @@ export function EmailHistory() {
           { value: "manual", label: "Manual" },
           { value: "automatic", label: "Automatic" },
           { value: "reminder", label: "Reminder" },
+          { value: "manual_test", label: "Test delivery" },
         ]} />
         <FilterSelect label="Status" value={status} onChange={setStatus} options={[
           { value: "", label: "All" },
@@ -182,6 +183,7 @@ export function EmailHistory() {
                 <th>Client</th>
                 <th>Instagram</th>
                 <th>Category</th>
+                <th>Type</th>
                 <th>Client email</th>
                 <th>Sender</th>
                 <th>Trigger</th>
@@ -196,6 +198,11 @@ export function EmailHistory() {
                   <td>{item.clientName || "—"}</td>
                   <td>{item.instagramUsername ? `@${item.instagramUsername}` : "—"}</td>
                   <td>{item.categoryLabel}</td>
+                  <td>
+                    {item.isTestDelivery && item.deliveryBadgeLabel ? (
+                      <Badge tone="warning">{item.deliveryBadgeLabel}</Badge>
+                    ) : "Client"}
+                  </td>
                   <td>{item.recipientEmail}</td>
                   <td>{item.fromEmail}</td>
                   <td>{item.trigger}{item.reminderIndex != null ? ` #${item.reminderIndex}` : ""}</td>
@@ -226,6 +233,9 @@ export function EmailHistory() {
           onClose={() => { setSelectedId(null); setDetail(null); }}
         >
           <div className="email-history-detail">
+            {detail.isTestDelivery ? (
+              <p><Badge tone="warning">{detail.deliveryBadgeLabel ?? "Test delivery"}</Badge></p>
+            ) : null}
             <p><strong>Client</strong> {detail.clientName || "—"}</p>
             <p><strong>Instagram</strong> {detail.instagramUsername ? `@${detail.instagramUsername}` : "—"}</p>
             <p><strong>Reason</strong> {detail.trigger} · reminder {detail.reminderIndex ?? "—"}</p>

@@ -520,6 +520,8 @@ const runtimeIpcHandlers = [
   "botapp:email:preview-template",
   "botapp:email:list-history",
   "botapp:email:history-detail",
+  "botapp:email:test-delivery-status",
+  "botapp:email:send-test-delivery",
   "botapp:auto-restart:overview",
   "botapp:auto-restart:dry-run",
   "botapp:auto-restart:action-preview",
@@ -967,6 +969,28 @@ const botappEndpointRegistry = [
     authRequired: true,
     status: "active",
     testStrategy: "none",
+  },
+  {
+    id: "email_test_delivery",
+    name: "Email test delivery",
+    method: "POST",
+    path: "/api/instagram-dashboard/email-test-delivery",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Send one allowlisted internal Postmark test delivery when test gates are enabled",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "email_test_delivery_status",
+    name: "Email test delivery status",
+    method: "GET",
+    path: "/api/instagram-dashboard/email-test-delivery",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Read masked test delivery gate status for BotApp",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
   },
   {
     id: "settings_overview",
@@ -4128,6 +4152,19 @@ async function emailHistoryDetail(intentId) {
   }
 }
 
+async function emailTestDeliveryStatus() {
+  const result = await dashboardRequestResult("GET", "email_test_delivery_status");
+  return { ok: result.ok, data: result.data, error: result.error };
+}
+
+async function emailSendTestDelivery(input) {
+  const result = await dashboardRequestResult("POST", "email_test_delivery", {
+    category: input?.category,
+    confirm: true,
+  });
+  return { ok: result.ok, data: result.data, error: result.error, reason: result.data?.reason ?? result.reason ?? null };
+}
+
 async function saveCompassRelayConfig(input) {
   const relayUrl = normalizeRelayUrl(input?.relayUrl || "");
   if (!relayUrl) {
@@ -4613,6 +4650,8 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:email:preview-template", (_event, input) => emailTemplatesPreview(input));
   ipcMain.handle("botapp:email:list-history", (_event, input) => emailHistoryList(input || {}));
   ipcMain.handle("botapp:email:history-detail", (_event, intentId) => emailHistoryDetail(intentId));
+  ipcMain.handle("botapp:email:test-delivery-status", () => emailTestDeliveryStatus());
+  ipcMain.handle("botapp:email:send-test-delivery", (_event, input) => emailSendTestDelivery(input));
   ipcMain.handle("botapp:auto-restart:overview", () => autoRestartOverview());
   ipcMain.handle("botapp:auto-restart:dry-run", () => autoRestartDryRun());
   ipcMain.handle("botapp:auto-restart:action-preview", (_event, input) => autoRestartActionPreview(input));

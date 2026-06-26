@@ -76,6 +76,7 @@ type WebhookSummary = import("./api/types").WebhookSummary;
 type BotAppEmailTemplatesProjection = import("./api/types").BotAppEmailTemplatesProjection;
 type BotAppEmailHistoryProjection = import("./api/types").BotAppEmailHistoryProjection;
 type BotAppEmailHistoryDetail = import("./api/types").BotAppEmailHistoryDetail;
+type BotAppEmailTestDeliveryStatus = import("./api/types").BotAppEmailTestDeliveryStatus;
 
 interface Window {
   botappDesktop?: {
@@ -187,6 +188,8 @@ interface Window {
       previewTemplate: (input: { subject: string; bodyText: string }) => Promise<{ ok: boolean; data?: { preview?: { subject: string; bodyText: string; bodyHtml: string } }; error?: string | null }>;
       listHistory: (input?: Record<string, string | number | undefined>) => Promise<{ ok: boolean; data?: BotAppEmailHistoryProjection; error?: string | null }>;
       historyDetail: (intentId: string) => Promise<{ ok: boolean; data?: { detail?: BotAppEmailHistoryDetail }; error?: string | null }>;
+      testDeliveryStatus: () => Promise<{ ok: boolean; data?: BotAppEmailTestDeliveryStatus; error?: string | null }>;
+      sendTestDelivery: (input: { category: string }) => Promise<{ ok: boolean; data?: { action?: string; intentId?: string; providerMessageId?: string | null }; error?: string | null; reason?: string | null }>;
     };
     deviceViews?: {
       list: () => Promise<BotAppDeviceViewResult>;

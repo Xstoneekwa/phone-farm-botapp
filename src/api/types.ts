@@ -2600,11 +2600,14 @@ export type BotAppEmailHistoryListItem = {
   categoryLabel: string;
   recipientEmail: string;
   fromEmail: "growth@boostmybusinesses.com";
-  trigger: "manual" | "automatic" | "reminder";
+  trigger: "manual" | "automatic" | "reminder" | "manual_test";
   reminderIndex: number | null;
   intentStatus: string;
   deliveryStatus: string | null;
   templateVersion: number | null;
+  intentKind?: "client" | "test";
+  isTestDelivery?: boolean;
+  deliveryBadgeLabel?: string | null;
 };
 
 export type BotAppEmailHistoryProjection = {
@@ -2615,6 +2618,17 @@ export type BotAppEmailHistoryProjection = {
   totalCount: number;
   totalPages: number;
   items: BotAppEmailHistoryListItem[];
+};
+
+export type BotAppEmailTestDeliveryStatus = {
+  clientSendingEnabled: boolean;
+  testSendingEnabled: boolean;
+  testRecipientMasked: string | null;
+  providerReady: boolean;
+  testSchemaReady: boolean;
+  canSendTest: boolean;
+  disabledReason: string | null;
+  lockedFromEmail: "growth@boostmybusinesses.com";
 };
 
 export type BotAppEmailHistoryDetail = BotAppEmailHistoryListItem & {
