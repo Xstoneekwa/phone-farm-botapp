@@ -5,6 +5,7 @@ import type {
   BotAppEmailDeliverySettingsProjection,
 } from "../api/types";
 import {
+  deliverySettingsBadgeTone,
   formatDeliverySettingsSaveError,
   formatDeliverySettingsUxState,
 } from "../email/delivery-settings-labels";
@@ -28,6 +29,7 @@ const fallbackProjection = (): BotAppEmailDeliverySettingsProjection => ({
   uxState: "schema_migration_pending",
   supportEmailEditable: false,
   senderChangeAllowed: false,
+  senderRefreshAllowed: false,
   accountTokenConfigured: false,
 });
 
@@ -67,11 +69,15 @@ export function EmailDeliverySettingsSection() {
     setRefreshingSenders(true);
     try {
       const result = await window.botappDesktop?.email?.refreshDeliverySenders?.();
-      if (!result?.ok || !result.data?.projection) {
+      const projectionFromResponse = result?.data?.projection;
+      if (projectionFromResponse) {
+        setProjection(projectionFromResponse);
+        setSelectedSender(projectionFromResponse.settings.activeFromEmail);
+      }
+      if (!result?.ok) {
         setMessage(result?.error ?? "Sender identities could not be refreshed.");
         return;
       }
-      setProjection(result.data.projection);
       setMessage("Sender identities refreshed.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Sender identities could not be refreshed.");
@@ -143,6 +149,11 @@ export function EmailDeliverySettingsSection() {
     [projection.uxState],
   );
 
+  const badgeTone = useMemo(
+    () => deliverySettingsBadgeTone(projection.uxState),
+    [projection.uxState],
+  );
+
   const confirmedSenders = projection.senderSync.confirmedSenders;
 
   return (
@@ -152,7 +163,7 @@ export function EmailDeliverySettingsSection() {
     >
       <div className="email-delivery-settings-section">
         <div className="email-delivery-settings-toolbar">
-          <Badge tone={projection.uxState === "ready" ? "success" : "warning"} dot>
+          <Badge tone={badgeTone} dot>
             {badgeLabel}
           </Badge>
           <Button onClick={() => void refreshSettings()} disabled={loading}>
@@ -182,7 +193,7 @@ export function EmailDeliverySettingsSection() {
             <div className="email-delivery-settings-actions">
               <Button
                 variant="ghost"
-                disabled={!projection.accountTokenConfigured || refreshingSenders}
+                disabled={!projection.senderRefreshAllowed || refreshingSenders}
                 onClick={() => void refreshSenderIdentities()}
               >
                 {refreshingSenders ? "Refreshing…" : "Refresh sender identities"}

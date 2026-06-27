@@ -2646,18 +2646,30 @@ export type BotAppEmailDeliverySettingsProjection = {
     updatedAt: string | null;
   };
   senderSync: {
-    status: "not_configured" | "not_refreshed" | "ready" | "stale" | "no_confirmed_senders";
+    status:
+      | "not_configured"
+      | "not_refreshed"
+      | "invalid_credentials"
+      | "provider_unavailable"
+      | "no_confirmed_senders"
+      | "ready"
+      | "stale";
     message: string;
     lastRefreshedAt: string | null;
     confirmedSenders: Array<{ email: string; name: string | null }>;
   };
   uxState:
     | "schema_migration_pending"
-    | "sender_sync_unavailable"
+    | "not_configured"
+    | "not_refreshed"
+    | "invalid_credentials"
+    | "provider_unavailable"
     | "no_confirmed_senders"
-    | "ready";
+    | "ready"
+    | "stale";
   supportEmailEditable: boolean;
   senderChangeAllowed: boolean;
+  senderRefreshAllowed: boolean;
   accountTokenConfigured: boolean;
 };
 

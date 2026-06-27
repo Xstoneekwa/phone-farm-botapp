@@ -4256,7 +4256,14 @@ async function emailDeliverySettings() {
 
 async function emailDeliverySettingsRefreshSenders() {
   const result = await dashboardRequestResult("POST", "email_delivery_settings_refresh_senders", {});
-  return { ok: result.ok, data: result.data, error: result.error };
+  const payload = result.data && typeof result.data === "object" ? result.data : null;
+  const projection = payload?.projection ?? payload?.data?.projection ?? null;
+  return {
+    ok: result.ok,
+    data: result.ok ? result.data : projection ? { projection } : result.data,
+    error: result.error,
+    reason: payload?.reason ?? null,
+  };
 }
 
 async function emailDeliverySettingsSave(input) {
