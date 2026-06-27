@@ -2600,7 +2600,8 @@ export type BotAppEmailHistoryListItem = {
   categoryLabel: string;
   recipientEmail: string;
   fromEmail: "growth@boostmybusinesses.com";
-  trigger: "manual" | "automatic" | "reminder" | "manual_test";
+  trigger: "manual" | "automatic" | "reminder" | "manual_test" | "automatic_initial" | "automatic_reminder";
+  triggerLabel?: string;
   reminderIndex: number | null;
   intentStatus: string;
   deliveryStatus: string | null;
@@ -2631,6 +2632,54 @@ export type BotAppEmailTestDeliveryStatus = {
   disabledReason: string | null;
   readinessLabel: string | null;
   lockedFromEmail: "growth@boostmybusinesses.com";
+};
+
+export type BotAppNeedsMoreTargetsLifecycleDecision =
+  | "would_open_episode"
+  | "would_keep_active"
+  | "would_resolve_episode"
+  | "no_action";
+
+export type BotAppNeedsMoreTargetsDeliveryState =
+  | "delivery_ready"
+  | "blocked_missing_client_email"
+  | "blocked_canceled_account"
+  | "blocked_inactive_signal"
+  | "blocked_target_count_above_threshold";
+
+export type BotAppNeedsMoreTargetsPreviewAccountRow = {
+  instagramUsername: string | null;
+  clientLabel: string | null;
+  clientEmailMasked: string | null;
+  needsMoreSignalActive: boolean;
+  eligibleTargetCount: number;
+  threshold: number;
+  accountStatus: "active" | "canceled";
+  episodeState: "none" | "active" | "resolved" | "canceled";
+  lifecycleDecision: BotAppNeedsMoreTargetsLifecycleDecision;
+  deliveryState: BotAppNeedsMoreTargetsDeliveryState;
+  nextDueAt: string | null;
+  nextReminderIndex: number | null;
+  reason: string;
+};
+
+export type BotAppNeedsMoreTargetsLifecyclePreview = {
+  previewedAt: string;
+  readOnly: true;
+  mutationExecuted: false;
+  sequenceSchemaReady: boolean;
+  accountsAnalyzed: number;
+  summary: {
+    wouldOpenEpisode: number;
+    activeEpisodes: number;
+    blockedMissingClientEmail: number;
+    resolvedOrAboveThreshold: number;
+    canceled: number;
+    noAction: number;
+    wouldKeepActive: number;
+    wouldResolveEpisode: number;
+  };
+  items: BotAppNeedsMoreTargetsPreviewAccountRow[];
 };
 
 export type BotAppEmailHistoryDetail = BotAppEmailHistoryListItem & {

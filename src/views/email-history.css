@@ -68,6 +68,52 @@
   align-items: center;
 }
 
+.email-history-lifecycle-preview {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.email-history-lifecycle-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.email-history-lifecycle-header h3,
+.email-history-lifecycle-summary p {
+  margin: 0;
+}
+
+.email-history-lifecycle-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.email-history-lifecycle-summary span {
+  display: block;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.email-history-lifecycle-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.email-history-lifecycle-table th,
+.email-history-lifecycle-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
 .email-history-detail {
   display: grid;
   gap: 12px;

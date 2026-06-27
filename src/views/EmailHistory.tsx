@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Drawer } from "../design/components";
-import type { BotAppEmailHistoryDetail, BotAppEmailHistoryProjection } from "../api/types";
+import type {
+  BotAppEmailHistoryDetail,
+  BotAppEmailHistoryProjection,
+  BotAppNeedsMoreTargetsLifecyclePreview,
+} from "../api/types";
+import {
+  formatNeedsMoreTargetsDeliveryState,
+  formatNeedsMoreTargetsLifecycleDecision,
+} from "../email/needs-more-targets-preview-labels";
 import {
   canBrowseEmailHistory,
   readEmailFeatureProjection,
@@ -36,6 +44,9 @@ export function EmailHistory() {
   const [status, setStatus] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BotAppEmailHistoryDetail | null>(null);
+  const [lifecyclePreview, setLifecyclePreview] = useState<BotAppNeedsMoreTargetsLifecyclePreview | null>(null);
+  const [lifecyclePreviewLoading, setLifecyclePreviewLoading] = useState(false);
+  const [lifecyclePreviewMessage, setLifecyclePreviewMessage] = useState<string | null>(null);
 
   const projection = readEmailFeatureProjection(loadState, emptyProjection);
   const canBrowse = canBrowseEmailHistory(loadState);
@@ -70,6 +81,25 @@ export function EmailHistory() {
       setMessage(nextMessage);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function refreshLifecyclePreview() {
+    setLifecyclePreviewLoading(true);
+    try {
+      const result = await window.botappDesktop?.email?.needsMoreTargetsPreview?.();
+      if (result?.ok && result.data) {
+        setLifecyclePreview(result.data);
+        setLifecyclePreviewMessage(null);
+      } else {
+        setLifecyclePreview(null);
+        setLifecyclePreviewMessage(result?.error ?? "Needs-more lifecycle preview unavailable.");
+      }
+    } catch (error) {
+      setLifecyclePreview(null);
+      setLifecyclePreviewMessage(error instanceof Error ? error.message : "Needs-more lifecycle preview unavailable.");
+    } finally {
+      setLifecyclePreviewLoading(false);
     }
   }
 
@@ -119,6 +149,68 @@ export function EmailHistory() {
       </header>
 
       {message ? <div className="email-history-message">{message}</div> : null}
+
+      <section className="email-history-lifecycle-preview" aria-label="Needs more target accounts lifecycle preview">
+        <div className="email-history-lifecycle-header">
+          <div>
+            <h3>Needs more target accounts lifecycle</h3>
+            <p>Read-only production preview. No episode, intent, email, or lifecycle mutation is performed.</p>
+          </div>
+          <Button onClick={() => void refreshLifecyclePreview()} disabled={lifecyclePreviewLoading}>
+            Refresh preview
+          </Button>
+        </div>
+
+        {lifecyclePreviewMessage ? <div className="email-history-message">{lifecyclePreviewMessage}</div> : null}
+
+        {lifecyclePreview ? (
+          <>
+            <div className="email-history-lifecycle-summary">
+              <p><span>Accounts analyzed</span><strong>{lifecyclePreview.accountsAnalyzed}</strong></p>
+              <p><span>Would open episode</span><strong>{lifecyclePreview.summary.wouldOpenEpisode}</strong></p>
+              <p><span>Active episodes</span><strong>{lifecyclePreview.summary.activeEpisodes}</strong></p>
+              <p><span>Blocked: missing email</span><strong>{lifecyclePreview.summary.blockedMissingClientEmail}</strong></p>
+              <p><span>Resolved / above threshold</span><strong>{lifecyclePreview.summary.resolvedOrAboveThreshold}</strong></p>
+              <p><span>Canceled accounts</span><strong>{lifecyclePreview.summary.canceled}</strong></p>
+              <p><span>Last preview</span><strong>{new Date(lifecyclePreview.previewedAt).toLocaleString()}</strong></p>
+            </div>
+
+            {lifecyclePreview.items.length === 0 ? (
+              <div className="email-history-empty">
+                <strong>No pertinent accounts right now</strong>
+                <span>No active needs-more signal or active lifecycle episode matched the preview scope.</span>
+              </div>
+            ) : (
+              <div className="email-history-table-wrap">
+                <table className="email-history-lifecycle-table">
+                  <thead>
+                    <tr>
+                      <th>Instagram</th>
+                      <th>Client</th>
+                      <th>Eligible CT</th>
+                      <th>Lifecycle</th>
+                      <th>Delivery</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lifecyclePreview.items.map((item) => (
+                      <tr key={`${item.instagramUsername ?? "unknown"}-${item.clientLabel ?? "client"}`}>
+                        <td>{item.instagramUsername ? `@${item.instagramUsername}` : "—"}</td>
+                        <td>{item.clientLabel || "—"}</td>
+                        <td>{item.eligibleTargetCount} / {item.threshold}</td>
+                        <td>{formatNeedsMoreTargetsLifecycleDecision(item.lifecycleDecision)}</td>
+                        <td>{formatNeedsMoreTargetsDeliveryState(item.deliveryState)}</td>
+                        <td>{item.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : null}
+      </section>
 
       <section className="email-history-filters" aria-label="Email history filters">
         <FilterSelect label="Period" value={period} onChange={(value) => setPeriod(value as Period)} options={[
@@ -205,7 +297,7 @@ export function EmailHistory() {
                   </td>
                   <td>{item.recipientEmail}</td>
                   <td>{item.fromEmail}</td>
-                  <td>{item.trigger}{item.reminderIndex != null ? ` #${item.reminderIndex}` : ""}</td>
+                  <td>{item.triggerLabel ?? item.trigger}{item.reminderIndex != null ? ` #${item.reminderIndex}` : ""}</td>
                   <td>{item.deliveryStatus || item.intentStatus}</td>
                   <td>
                     <Button onClick={() => void openDetail(item.id)}>Detail</Button>
@@ -238,7 +330,7 @@ export function EmailHistory() {
             ) : null}
             <p><strong>Client</strong> {detail.clientName || "—"}</p>
             <p><strong>Instagram</strong> {detail.instagramUsername ? `@${detail.instagramUsername}` : "—"}</p>
-            <p><strong>Reason</strong> {detail.trigger} · reminder {detail.reminderIndex ?? "—"}</p>
+            <p><strong>Reason</strong> {detail.triggerLabel ?? detail.trigger} · reminder {detail.reminderIndex ?? "—"}</p>
             <p><strong>Client email</strong> {detail.recipientEmail}</p>
             <p><strong>Sender</strong> {detail.fromEmail}</p>
             <p><strong>Template version</strong> {detail.templateVersion ?? "—"}</p>
