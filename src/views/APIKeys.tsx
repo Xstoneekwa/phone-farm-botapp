@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Card, Input, Modal, type BadgeTone } from "../design/components";
 import type { ApiKeySummary, BotAppBackendEndpoint, BotAppRuntimeIntegrationStatus, CompassAiRuntimeStatus, IntegrationStatus, TargetingAiRuntimeStatus, WebhookEvent, WebhookSummary } from "../api/types";
 import { redactText } from "../security/redaction";
+import { EmailDeliverySettingsSection } from "./EmailDeliverySettingsSection";
 import { EmailTemplatesSection } from "./EmailTemplatesSection";
 import "./api-keys.css";
 
@@ -843,6 +844,8 @@ export function APIKeys({
           </div>
         </div>
       </Card>
+
+      <EmailDeliverySettingsSection />
 
       <EmailTemplatesSection />
 

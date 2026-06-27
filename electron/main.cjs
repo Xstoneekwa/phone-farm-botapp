@@ -1015,6 +1015,50 @@ const botappEndpointRegistry = [
     testStrategy: "fetch",
   },
   {
+    id: "email_delivery_settings",
+    name: "Email delivery settings",
+    method: "GET",
+    path: "/api/instagram-dashboard/email-delivery-settings",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Read transactional delivery settings projection for BotApp",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "email_delivery_settings_save",
+    name: "Email delivery settings save",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/email-delivery-settings",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Save support email or confirmed active sender with audit trail",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "email_delivery_settings_refresh_senders",
+    name: "Email delivery settings refresh senders",
+    method: "POST",
+    path: "/api/instagram-dashboard/email-delivery-settings/refresh-senders",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Refresh confirmed Postmark sender identities without mutating provider state",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "email_delivery_settings_audit",
+    name: "Email delivery settings audit",
+    method: "GET",
+    path: "/api/instagram-dashboard/email-delivery-settings/audit",
+    usedBy: ["API / Webhooks / Keys"],
+    purpose: "Read recent transactional delivery settings audit entries",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
     id: "settings_overview",
     name: "Settings overview",
     method: "GET",
@@ -4205,6 +4249,31 @@ async function emailTestDeliveryStatus() {
   return { ok: result.ok, data: result.data, error: result.error };
 }
 
+async function emailDeliverySettings() {
+  const result = await dashboardRequestResult("GET", "email_delivery_settings");
+  return { ok: result.ok, data: result.data, error: result.error };
+}
+
+async function emailDeliverySettingsRefreshSenders() {
+  const result = await dashboardRequestResult("POST", "email_delivery_settings_refresh_senders", {});
+  return { ok: result.ok, data: result.data, error: result.error };
+}
+
+async function emailDeliverySettingsSave(input) {
+  const result = await dashboardRequestResult("PATCH", "email_delivery_settings_save", {
+    support_email: input?.supportEmail,
+    active_from_email: input?.activeFromEmail,
+    config_version: input?.configVersion,
+    confirmed: input?.confirmed === true,
+  });
+  return { ok: result.ok, data: result.data, error: result.error };
+}
+
+async function emailDeliverySettingsAudit() {
+  const result = await dashboardRequestResult("GET", "email_delivery_settings_audit");
+  return { ok: result.ok, data: result.data, error: result.error };
+}
+
 async function emailSendTestDelivery(input) {
   const result = await dashboardRequestResult("POST", "email_test_delivery", {
     category: input?.category,
@@ -4701,6 +4770,10 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:email:list-history", (_event, input) => emailHistoryList(input || {}));
   ipcMain.handle("botapp:email:history-detail", (_event, intentId) => emailHistoryDetail(intentId));
   ipcMain.handle("botapp:email:test-delivery-status", () => emailTestDeliveryStatus());
+  ipcMain.handle("botapp:email:delivery-settings", () => emailDeliverySettings());
+  ipcMain.handle("botapp:email:delivery-settings-audit", () => emailDeliverySettingsAudit());
+  ipcMain.handle("botapp:email:refresh-delivery-senders", () => emailDeliverySettingsRefreshSenders());
+  ipcMain.handle("botapp:email:save-delivery-settings", (_event, input) => emailDeliverySettingsSave(input));
   ipcMain.handle("botapp:email:send-test-delivery", (_event, input) => emailSendTestDelivery(input));
   ipcMain.handle("botapp:auto-restart:overview", () => autoRestartOverview());
   ipcMain.handle("botapp:auto-restart:dry-run", () => autoRestartDryRun());

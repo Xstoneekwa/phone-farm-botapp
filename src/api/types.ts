@@ -2586,7 +2586,8 @@ export type BotAppEmailTemplateRow = {
 
 export type BotAppEmailTemplatesProjection = {
   featureAvailable: boolean;
-  fromEmail: "growth@boostmybusinesses.com";
+  fromEmail: string;
+  supportEmail?: string;
   categories: BotAppEmailTemplateCategory[];
   templates: BotAppEmailTemplateRow[];
 };
@@ -2631,7 +2632,47 @@ export type BotAppEmailTestDeliveryStatus = {
   canSendTest: boolean;
   disabledReason: string | null;
   readinessLabel: string | null;
-  lockedFromEmail: "growth@boostmybusinesses.com";
+  lockedFromEmail: string;
+  supportEmail?: string;
+};
+
+export type BotAppEmailDeliverySettingsProjection = {
+  schemaReady: boolean;
+  settings: {
+    activeFromEmail: string;
+    supportEmail: string;
+    configVersion: number;
+    source: "legacy_default" | "database";
+    updatedAt: string | null;
+  };
+  senderSync: {
+    status: "not_configured" | "not_refreshed" | "ready" | "stale" | "no_confirmed_senders";
+    message: string;
+    lastRefreshedAt: string | null;
+    confirmedSenders: Array<{ email: string; name: string | null }>;
+  };
+  uxState:
+    | "schema_migration_pending"
+    | "sender_sync_unavailable"
+    | "no_confirmed_senders"
+    | "ready";
+  supportEmailEditable: boolean;
+  senderChangeAllowed: boolean;
+  accountTokenConfigured: boolean;
+};
+
+export type BotAppEmailDeliverySettingsAudit = {
+  schemaReady: boolean;
+  items: Array<{
+    changedAt: string;
+    changedBy: string | null;
+    previousActiveFromEmail: string;
+    newActiveFromEmail: string;
+    previousSupportEmail: string;
+    newSupportEmail: string;
+    previousConfigVersion: number;
+    newConfigVersion: number;
+  }>;
 };
 
 export type BotAppNeedsMoreTargetsLifecycleDecision =

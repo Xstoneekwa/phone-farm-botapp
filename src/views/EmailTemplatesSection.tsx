@@ -70,6 +70,7 @@ export function EmailTemplatesSection() {
 
   const projection = readEmailFeatureProjection(loadState, fallbackProjection);
   const canEdit = canEditEmailTemplates(loadState);
+  const activeFromEmail = projection.fromEmail;
 
   async function refresh() {
     setLoading(true);
@@ -228,7 +229,7 @@ export function EmailTemplatesSection() {
           </Badge>
           <label>
             <span>Locked sender</span>
-            <code>{LOCKED_FROM}</code>
+            <code>{activeFromEmail}</code>
           </label>
           <Button onClick={() => void refresh()} disabled={loading}>Refresh templates</Button>
         </div>
@@ -286,7 +287,7 @@ export function EmailTemplatesSection() {
           <div className="email-template-editor">
             <label>
               <span>Locked sender</span>
-              <Input value={LOCKED_FROM} onChange={() => undefined} readOnly mono />
+              <Input value={activeFromEmail} onChange={() => undefined} readOnly mono />
             </label>
             <label>
               <span>Subject</span>
@@ -320,7 +321,7 @@ export function EmailTemplatesSection() {
               </p>
               <dl className="email-template-test-gates">
                 <div><dt>Template</dt><dd>{editing.categoryLabel}</dd></div>
-                <div><dt>Locked sender</dt><dd><code>{LOCKED_FROM}</code></dd></div>
+                <div><dt>Locked sender</dt><dd><code>{testStatus?.lockedFromEmail ?? activeFromEmail}</code></dd></div>
                 <div><dt>Test recipient</dt><dd>{testStatus?.testRecipientMasked ?? "Not configured"}</dd></div>
                 <div><dt>Test schema</dt><dd>{formatReadinessFlag(testStatus?.testSchemaReady, "Available", "Unavailable")}</dd></div>
                 <div><dt>Test gate</dt><dd>{formatReadinessFlag(testStatus?.testSendingEnabled, "Enabled", "Disabled")}</dd></div>
