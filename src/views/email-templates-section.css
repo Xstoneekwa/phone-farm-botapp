@@ -101,6 +101,14 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.email-template-test-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .email-template-test-note,
 .email-template-test-disabled {
   margin: 0;

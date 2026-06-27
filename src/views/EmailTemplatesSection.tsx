@@ -7,6 +7,11 @@ import {
   resolveEmailTemplatesLoad,
   type EmailFeatureLoadState,
 } from "../email/email-feature-load";
+import {
+  formatReadinessFlag,
+  resolveTestDeliveryReadinessLabel,
+  resolveTestDeliverySendDisabled,
+} from "../email/email-test-delivery-ui";
 import "./email-templates-section.css";
 
 const LOCKED_FROM = "growth@boostmybusinesses.com";
@@ -198,13 +203,21 @@ export function EmailTemplatesSection() {
       ? "Infrastructure pending"
       : "Relay unavailable";
 
-  const testDeliveryDisabled = !editing?.configured
-    || testStatusLoading
-    || !testStatus?.canSendTest;
+  const readinessInput = {
+    templateConfigured: Boolean(editing?.configured),
+    statusLoading: testStatusLoading,
+    testSchemaReady: testStatus?.testSchemaReady,
+    testSendingEnabled: testStatus?.testSendingEnabled,
+    testRecipientConfigured: testStatus?.testRecipientConfigured,
+    providerReady: testStatus?.providerReady,
+    clientSendingEnabled: testStatus?.clientSendingEnabled,
+    canSendTest: testStatus?.canSendTest,
+    disabledReason: testStatus?.disabledReason,
+    readinessLabel: testStatus?.readinessLabel,
+  };
 
-  const testDeliveryDisabledReason = editing && !editing.configured
-    ? "Configure an active template before sending a test delivery."
-    : testStatus?.disabledReason ?? "Test delivery gates are closed.";
+  const testDeliveryDisabled = resolveTestDeliverySendDisabled(readinessInput);
+  const readinessLabel = resolveTestDeliveryReadinessLabel(readinessInput);
 
   return (
     <Card title="Transactional Email Templates" subtitle="Edit subject and plain-text body from BotApp. Sender is locked server-side.">
@@ -295,27 +308,35 @@ export function EmailTemplatesSection() {
               </div>
             ) : null}
             <section className="email-template-test-delivery" aria-label="Internal test delivery">
-              <strong>Send test delivery</strong>
+              <div className="email-template-test-head">
+                <strong>Send test delivery</strong>
+                <Badge tone={testStatus?.canSendTest ? "success" : "warning"}>
+                  {testStatusLoading ? "Checking readiness…" : readinessLabel}
+                </Badge>
+              </div>
               <p className="email-template-test-note">
-                This sends one real test email to the configured test recipient.
+                This sends one real test email to the configured test recipient when all gates are open.
+                Normal client lifecycle sending remains disabled while CLIENT_EMAIL_SENDING_ENABLED=false.
               </p>
               <dl className="email-template-test-gates">
                 <div><dt>Template</dt><dd>{editing.categoryLabel}</dd></div>
                 <div><dt>Locked sender</dt><dd><code>{LOCKED_FROM}</code></dd></div>
                 <div><dt>Test recipient</dt><dd>{testStatus?.testRecipientMasked ?? "Not configured"}</dd></div>
-                <div><dt>Test gate</dt><dd>{testStatus?.testSendingEnabled ? "Enabled" : "Disabled"}</dd></div>
-                <div><dt>Provider</dt><dd>{testStatus?.providerReady ? "Postmark ready" : "Not ready"}</dd></div>
-                <div><dt>Schema</dt><dd>{testStatus?.testSchemaReady ? "Ready" : "Migration pending"}</dd></div>
+                <div><dt>Test schema</dt><dd>{formatReadinessFlag(testStatus?.testSchemaReady, "Available", "Unavailable")}</dd></div>
+                <div><dt>Test gate</dt><dd>{formatReadinessFlag(testStatus?.testSendingEnabled, "Enabled", "Disabled")}</dd></div>
+                <div><dt>Test recipient configured</dt><dd>{formatReadinessFlag(testStatus?.testRecipientConfigured, "Configured", "Not configured")}</dd></div>
+                <div><dt>Provider</dt><dd>{formatReadinessFlag(testStatus?.providerReady, "Postmark ready", "Not ready")}</dd></div>
+                <div><dt>Normal client sending</dt><dd>{testStatus?.clientSendingEnabled ? "Enabled" : "Remains disabled"}</dd></div>
               </dl>
               {!testStatus?.canSendTest ? (
-                <p className="email-template-test-disabled">{testDeliveryDisabledReason}</p>
+                <p className="email-template-test-disabled">{readinessLabel}</p>
               ) : null}
               {testConfirmOpen ? (
                 <div className="email-template-test-confirm">
                   <p>Confirm one internal test delivery to {testStatus?.testRecipientMasked ?? "the configured recipient"}?</p>
                   <div className="email-template-test-actions">
                     <Button variant="ghost" onClick={() => setTestConfirmOpen(false)} disabled={testSending}>Cancel</Button>
-                    <Button variant="primary" disabled={testSending} onClick={() => void sendTestDelivery()}>
+                    <Button variant="primary" disabled={testSending || testDeliveryDisabled} onClick={() => void sendTestDelivery()}>
                       {testSending ? "Sending…" : "Confirm test delivery"}
                     </Button>
                   </div>

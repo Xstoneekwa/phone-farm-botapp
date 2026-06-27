@@ -846,7 +846,7 @@ export function APIKeys({
 
       <EmailTemplatesSection />
 
-      <Card title="External Webhooks" subtitle="Local configuration is available. Real delivery, testing, and retries remain backend pending.">
+      <Card title="External Webhooks" subtitle="Local configuration is available. Controlled internal Postmark test delivery is wired through relay/admin, while normal client lifecycle email sending remains disabled (CLIENT_EMAIL_SENDING_ENABLED=false).">
         <div className="webhook-form">
           <Input value={webhookDraft.label} onChange={(label) => setWebhookDraft((draft) => ({ ...draft, label }))} placeholder="Webhook label" />
           <Input value={webhookDraft.url} onChange={(url) => setWebhookDraft((draft) => ({ ...draft, url }))} placeholder="https://your-app.example/api/bot-events" mono type="url" />
@@ -865,7 +865,7 @@ export function APIKeys({
                 </div>
                 <div className="webhook-status">
                   <Badge tone={hook.status === "active" ? "success" : "neutral"}>{hook.status}</Badge>
-                  <Badge tone="warning">Delivery backend pending</Badge>
+                  <Badge tone="neutral">Transactional test via relay</Badge>
                   <small>{hook.lastDeliveryAt ?? "No delivery yet"} · {hook.latestError ?? "No error"}</small>
                 </div>
                 <div className="button-row compact">

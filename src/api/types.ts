@@ -2623,11 +2623,13 @@ export type BotAppEmailHistoryProjection = {
 export type BotAppEmailTestDeliveryStatus = {
   clientSendingEnabled: boolean;
   testSendingEnabled: boolean;
+  testRecipientConfigured: boolean;
   testRecipientMasked: string | null;
   providerReady: boolean;
   testSchemaReady: boolean;
   canSendTest: boolean;
   disabledReason: string | null;
+  readinessLabel: string | null;
   lockedFromEmail: "growth@boostmybusinesses.com";
 };
 
