@@ -101,6 +101,24 @@
   opacity: 0.75;
 }
 
+.email-history-outbox-blocking {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 193, 7, 0.35);
+  background: rgba(255, 193, 7, 0.06);
+}
+
+.email-history-outbox-blocking ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.email-history-lifecycle-header .badge {
+  margin-top: 8px;
+}
+
 .email-history-lifecycle-table {
   width: 100%;
   border-collapse: collapse;

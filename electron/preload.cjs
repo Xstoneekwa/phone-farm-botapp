@@ -97,6 +97,7 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     sendTestDelivery: (input) => ipcRenderer.invoke("botapp:email:send-test-delivery", input),
     needsMoreTargetsPreview: () => ipcRenderer.invoke("botapp:email:needs-more-targets-preview"),
     accountLifecyclePreview: () => ipcRenderer.invoke("botapp:email:account-lifecycle-preview"),
+    outboxPreview: () => ipcRenderer.invoke("botapp:email:outbox-preview"),
     deliverySettings: () => ipcRenderer.invoke("botapp:email:delivery-settings"),
     deliverySettingsAudit: () => ipcRenderer.invoke("botapp:email:delivery-settings-audit"),
     refreshDeliverySenders: () => ipcRenderer.invoke("botapp:email:refresh-delivery-senders"),

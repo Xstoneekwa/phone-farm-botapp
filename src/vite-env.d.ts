@@ -79,6 +79,7 @@ type BotAppEmailHistoryDetail = import("./api/types").BotAppEmailHistoryDetail;
 type BotAppEmailTestDeliveryStatus = import("./api/types").BotAppEmailTestDeliveryStatus;
 type BotAppNeedsMoreTargetsLifecyclePreview = import("./api/types").BotAppNeedsMoreTargetsLifecyclePreview;
 type BotAppAccountLifecyclePreview = import("./api/types").BotAppAccountLifecyclePreview;
+type BotAppOutboxPreview = import("./api/types").BotAppOutboxPreview;
 type BotAppEmailDeliverySettingsProjection = import("./api/types").BotAppEmailDeliverySettingsProjection;
 type BotAppEmailDeliverySettingsAudit = import("./api/types").BotAppEmailDeliverySettingsAudit;
 
@@ -196,6 +197,7 @@ interface Window {
       sendTestDelivery: (input: { category: string }) => Promise<{ ok: boolean; data?: { action?: string; intentId?: string; providerMessageId?: string | null }; error?: string | null; reason?: string | null }>;
       needsMoreTargetsPreview: () => Promise<{ ok: boolean; data?: BotAppNeedsMoreTargetsLifecyclePreview; error?: string | null }>;
       accountLifecyclePreview: () => Promise<{ ok: boolean; data?: BotAppAccountLifecyclePreview; error?: string | null }>;
+      outboxPreview: () => Promise<{ ok: boolean; data?: BotAppOutboxPreview; error?: string | null }>;
       deliverySettings: () => Promise<{ ok: boolean; data?: BotAppEmailDeliverySettingsProjection; error?: string | null }>;
       deliverySettingsAudit: () => Promise<{ ok: boolean; data?: BotAppEmailDeliverySettingsAudit; error?: string | null }>;
       refreshDeliverySenders: () => Promise<{ ok: boolean; data?: { projection?: BotAppEmailDeliverySettingsProjection; refreshedAt?: string; confirmedSenderCount?: number }; error?: string | null }>;

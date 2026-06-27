@@ -5,11 +5,16 @@ import type {
   BotAppEmailHistoryDetail,
   BotAppEmailHistoryProjection,
   BotAppNeedsMoreTargetsLifecyclePreview,
+  BotAppOutboxPreview,
 } from "../api/types";
 import {
   formatAccountLifecycleDecision,
   formatAccountLifecycleDeliveryState,
 } from "../email/account-lifecycle-preview-labels";
+import {
+  formatOutboxPreviewDecisionLabel,
+  formatOutboxPreviewDeliveryStateLabel,
+} from "../email/outbox-preview-labels";
 import {
   formatNeedsMoreTargetsDeliveryState,
   formatNeedsMoreTargetsLifecycleDecision,
@@ -55,6 +60,9 @@ export function EmailHistory() {
   const [accountLifecyclePreview, setAccountLifecyclePreview] = useState<BotAppAccountLifecyclePreview | null>(null);
   const [accountLifecyclePreviewLoading, setAccountLifecyclePreviewLoading] = useState(false);
   const [accountLifecyclePreviewMessage, setAccountLifecyclePreviewMessage] = useState<string | null>(null);
+  const [outboxPreview, setOutboxPreview] = useState<BotAppOutboxPreview | null>(null);
+  const [outboxPreviewLoading, setOutboxPreviewLoading] = useState(false);
+  const [outboxPreviewMessage, setOutboxPreviewMessage] = useState<string | null>(null);
 
   const projection = readEmailFeatureProjection(loadState, emptyProjection);
   const canBrowse = canBrowseEmailHistory(loadState);
@@ -127,6 +135,25 @@ export function EmailHistory() {
       setAccountLifecyclePreviewMessage(error instanceof Error ? error.message : "Account lifecycle preview unavailable.");
     } finally {
       setAccountLifecyclePreviewLoading(false);
+    }
+  }
+
+  async function refreshOutboxPreview() {
+    setOutboxPreviewLoading(true);
+    try {
+      const result = await window.botappDesktop?.email?.outboxPreview?.();
+      if (result?.ok && result.data) {
+        setOutboxPreview(result.data);
+        setOutboxPreviewMessage(null);
+      } else {
+        setOutboxPreview(null);
+        setOutboxPreviewMessage(result?.error ?? "Transactional email outbox preview unavailable.");
+      }
+    } catch (error) {
+      setOutboxPreview(null);
+      setOutboxPreviewMessage(error instanceof Error ? error.message : "Transactional email outbox preview unavailable.");
+    } finally {
+      setOutboxPreviewLoading(false);
     }
   }
 
@@ -295,6 +322,90 @@ export function EmailHistory() {
                         <td>{item.currentStateActive ? "Active" : "Inactive"}</td>
                         <td>{formatAccountLifecycleDecision(item.lifecycleDecision)}</td>
                         <td>{formatAccountLifecycleDeliveryState(item.deliveryState)}</td>
+                        <td>{item.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : null}
+      </section>
+
+      <section className="email-history-lifecycle-preview" aria-label="Transactional email outbox preview">
+        <div className="email-history-lifecycle-header">
+          <div>
+            <h3>Transactional email outbox preview</h3>
+            <p>Combined read-only planner for needs-more and account lifecycle categories. Shows what the outbox would do next without creating episodes, intents, or emails.</p>
+            <Badge tone="warning">Preview only — no email or intent created</Badge>
+          </div>
+          <Button onClick={() => void refreshOutboxPreview()} disabled={outboxPreviewLoading}>
+            Refresh outbox preview
+          </Button>
+        </div>
+
+        {outboxPreviewMessage ? <div className="email-history-message">{outboxPreviewMessage}</div> : null}
+
+        {outboxPreview ? (
+          <>
+            <div className="email-history-lifecycle-summary">
+              <p><span>Accounts analyzed</span><strong>{outboxPreview.summary.accountsAnalyzed}</strong></p>
+              <p><span>Planned items</span><strong>{outboxPreview.summary.plannedItems}</strong></p>
+              <p><span>Would create initial</span><strong>{outboxPreview.summary.wouldCreateInitialIntent}</strong></p>
+              <p><span>Would create reminder</span><strong>{outboxPreview.summary.wouldCreateReminderIntent}</strong></p>
+              <p><span>Blocked by watermark</span><strong>{outboxPreview.summary.blockedLegacyPreWatermark}</strong></p>
+              <p><span>Blocked by gates</span><strong>{outboxPreview.summary.blockedDeliveryGate}</strong></p>
+              <p><span>Blocked missing client email</span><strong>{outboxPreview.summary.blockedMissingClientEmail}</strong></p>
+              <p><span>Ready-to-dispatch theoretical</span><strong>{outboxPreview.summary.readyToDispatchTheoretical}</strong></p>
+              <p><span>Readiness</span><strong>{outboxPreview.readinessStatus}</strong></p>
+              <p><span>Last preview</span><strong>{new Date(outboxPreview.previewedAt).toLocaleString()}</strong></p>
+            </div>
+
+            {outboxPreview.readinessBlockingReasons.length > 0 ? (
+              <div className="email-history-outbox-blocking">
+                <strong>Blocking causes</strong>
+                <ul>
+                  {outboxPreview.readinessBlockingReasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {outboxPreview.items.length === 0 ? (
+              <div className="email-history-empty">
+                <strong>No pertinent lifecycle email actions right now.</strong>
+                <span>No accounts matched the combined outbox planner scope, or every row resolved to no action.</span>
+              </div>
+            ) : (
+              <div className="email-history-table-wrap">
+                <table className="email-history-lifecycle-table">
+                  <thead>
+                    <tr>
+                      <th>Instagram</th>
+                      <th>Client</th>
+                      <th>Category</th>
+                      <th>Trigger</th>
+                      <th>Parent</th>
+                      <th>Lifecycle decision</th>
+                      <th>Delivery state</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {outboxPreview.items.map((item) => (
+                      <tr key={`${item.category}-${item.instagramUsername ?? "unknown"}-${item.clientLabel ?? "client"}-${item.lifecycleDecision}-${item.trigger ?? "none"}-${item.reminderIndex ?? "na"}`}>
+                        <td>{item.instagramUsername ? `@${item.instagramUsername}` : "—"}</td>
+                        <td>{item.clientLabel || "—"}</td>
+                        <td>{item.categoryLabel}</td>
+                        <td>
+                          {item.triggerLabel ?? "—"}
+                          {item.reminderIndex != null ? ` #${item.reminderIndex}` : ""}
+                        </td>
+                        <td>{item.parentLabel}</td>
+                        <td>{item.lifecycleDecisionLabel || formatOutboxPreviewDecisionLabel(item.lifecycleDecision)}</td>
+                        <td>{item.deliveryStateLabel || formatOutboxPreviewDeliveryStateLabel(item.deliveryState)}</td>
                         <td>{item.reason}</td>
                       </tr>
                     ))}

@@ -2784,6 +2784,69 @@ export type BotAppAccountLifecyclePreview = {
   items: BotAppAccountLifecyclePreviewRow[];
 };
 
+export type BotAppOutboxPreviewDecision =
+  | "would_open_episode"
+  | "would_create_initial_intent"
+  | "would_create_reminder_intent"
+  | "would_close_episode"
+  | "would_cancel_episode"
+  | "blocked_legacy_pre_watermark"
+  | "blocked_missing_client_email"
+  | "blocked_template_unavailable"
+  | "blocked_delivery_gate"
+  | "no_action";
+
+export type BotAppOutboxPreviewItem = {
+  instagramUsername: string | null;
+  clientLabel: string | null;
+  clientEmailMasked: string | null;
+  category: string;
+  categoryLabel: string;
+  parentType: "sequence" | "lifecycle_episode" | null;
+  parentLabel: string;
+  trigger: string | null;
+  triggerLabel: string | null;
+  reminderIndex: number | null;
+  lifecycleDecision: BotAppOutboxPreviewDecision;
+  lifecycleDecisionLabel: string;
+  deliveryState: string;
+  deliveryStateLabel: string;
+  gateState: string;
+  gateStateLabel: string;
+  watermarkState: string;
+  watermarkStateLabel: string;
+  templateConfigured: boolean;
+  templateVersion: number | null;
+  senderConfigured: boolean;
+  supportEmailConfigured: boolean;
+  reason: string;
+};
+
+export type BotAppOutboxPreview = {
+  previewedAt: string;
+  readOnly: true;
+  mutationExecuted: false;
+  accountsAnalyzed: number;
+  readinessStatus: "blocked" | "partial" | "ready_for_future_activation";
+  readinessBlockingReasons: string[];
+  summary: {
+    accountsAnalyzed: number;
+    plannedItems: number;
+    wouldOpenEpisode: number;
+    wouldCreateInitialIntent: number;
+    wouldCreateReminderIntent: number;
+    wouldCloseEpisode: number;
+    wouldCancelEpisode: number;
+    blockedLegacyPreWatermark: number;
+    blockedMissingClientEmail: number;
+    blockedTemplateUnavailable: number;
+    blockedDeliveryGate: number;
+    noAction: number;
+    readyToDispatchTheoretical: number;
+  };
+  items: BotAppOutboxPreviewItem[];
+};
+
 export type BotAppEmailHistoryDetail = BotAppEmailHistoryListItem & {
   scheduledFor: string | null;
   sentAt: string | null;
