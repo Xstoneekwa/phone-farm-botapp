@@ -971,6 +971,17 @@ const botappEndpointRegistry = [
     testStrategy: "none",
   },
   {
+    id: "email_lifecycle_preview",
+    name: "Account lifecycle email preview",
+    method: "GET",
+    path: "/api/instagram-dashboard/email-lifecycle/preview",
+    usedBy: ["Email History"],
+    purpose: "Read-only preview for account_paused, account_canceled, and needs_assistance lifecycle emails",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
     id: "email_needs_more_targets_preview",
     name: "Needs more targets lifecycle preview",
     method: "GET",
@@ -4139,6 +4150,19 @@ async function emailTemplatesPreview(input) {
   return { ok: result.ok, data: result.data, error: result.error };
 }
 
+async function emailAccountLifecyclePreview() {
+  try {
+    const data = await dashboardGet("email_lifecycle_preview");
+    return { ok: true, data };
+  } catch (error) {
+    return {
+      ok: false,
+      data: null,
+      error: safeRuntimeError(error, "Account lifecycle preview unavailable."),
+    };
+  }
+}
+
 async function emailNeedsMoreTargetsPreview() {
   try {
     const data = await dashboardGet("email_needs_more_targets_preview");
@@ -4672,6 +4696,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:email:list-templates", () => emailTemplatesList());
   ipcMain.handle("botapp:email:save-template", (_event, input) => emailTemplatesSave(input));
   ipcMain.handle("botapp:email:preview-template", (_event, input) => emailTemplatesPreview(input));
+  ipcMain.handle("botapp:email:account-lifecycle-preview", () => emailAccountLifecyclePreview());
   ipcMain.handle("botapp:email:needs-more-targets-preview", () => emailNeedsMoreTargetsPreview());
   ipcMain.handle("botapp:email:list-history", (_event, input) => emailHistoryList(input || {}));
   ipcMain.handle("botapp:email:history-detail", (_event, intentId) => emailHistoryDetail(intentId));

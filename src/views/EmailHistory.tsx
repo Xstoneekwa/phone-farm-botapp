@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Drawer } from "../design/components";
 import type {
+  BotAppAccountLifecyclePreview,
   BotAppEmailHistoryDetail,
   BotAppEmailHistoryProjection,
   BotAppNeedsMoreTargetsLifecyclePreview,
 } from "../api/types";
+import {
+  formatAccountLifecycleDecision,
+  formatAccountLifecycleDeliveryState,
+} from "../email/account-lifecycle-preview-labels";
 import {
   formatNeedsMoreTargetsDeliveryState,
   formatNeedsMoreTargetsLifecycleDecision,
@@ -44,9 +49,12 @@ export function EmailHistory() {
   const [status, setStatus] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BotAppEmailHistoryDetail | null>(null);
-  const [lifecyclePreview, setLifecyclePreview] = useState<BotAppNeedsMoreTargetsLifecyclePreview | null>(null);
-  const [lifecyclePreviewLoading, setLifecyclePreviewLoading] = useState(false);
-  const [lifecyclePreviewMessage, setLifecyclePreviewMessage] = useState<string | null>(null);
+  const [needsMorePreview, setNeedsMorePreview] = useState<BotAppNeedsMoreTargetsLifecyclePreview | null>(null);
+  const [needsMorePreviewLoading, setNeedsMorePreviewLoading] = useState(false);
+  const [needsMorePreviewMessage, setNeedsMorePreviewMessage] = useState<string | null>(null);
+  const [accountLifecyclePreview, setAccountLifecyclePreview] = useState<BotAppAccountLifecyclePreview | null>(null);
+  const [accountLifecyclePreviewLoading, setAccountLifecyclePreviewLoading] = useState(false);
+  const [accountLifecyclePreviewMessage, setAccountLifecyclePreviewMessage] = useState<string | null>(null);
 
   const projection = readEmailFeatureProjection(loadState, emptyProjection);
   const canBrowse = canBrowseEmailHistory(loadState);
@@ -84,22 +92,41 @@ export function EmailHistory() {
     }
   }
 
-  async function refreshLifecyclePreview() {
-    setLifecyclePreviewLoading(true);
+  async function refreshNeedsMorePreview() {
+    setNeedsMorePreviewLoading(true);
     try {
       const result = await window.botappDesktop?.email?.needsMoreTargetsPreview?.();
       if (result?.ok && result.data) {
-        setLifecyclePreview(result.data);
-        setLifecyclePreviewMessage(null);
+        setNeedsMorePreview(result.data);
+        setNeedsMorePreviewMessage(null);
       } else {
-        setLifecyclePreview(null);
-        setLifecyclePreviewMessage(result?.error ?? "Needs-more lifecycle preview unavailable.");
+        setNeedsMorePreview(null);
+        setNeedsMorePreviewMessage(result?.error ?? "Needs-more lifecycle preview unavailable.");
       }
     } catch (error) {
-      setLifecyclePreview(null);
-      setLifecyclePreviewMessage(error instanceof Error ? error.message : "Needs-more lifecycle preview unavailable.");
+      setNeedsMorePreview(null);
+      setNeedsMorePreviewMessage(error instanceof Error ? error.message : "Needs-more lifecycle preview unavailable.");
     } finally {
-      setLifecyclePreviewLoading(false);
+      setNeedsMorePreviewLoading(false);
+    }
+  }
+
+  async function refreshAccountLifecyclePreview() {
+    setAccountLifecyclePreviewLoading(true);
+    try {
+      const result = await window.botappDesktop?.email?.accountLifecyclePreview?.();
+      if (result?.ok && result.data) {
+        setAccountLifecyclePreview(result.data);
+        setAccountLifecyclePreviewMessage(null);
+      } else {
+        setAccountLifecyclePreview(null);
+        setAccountLifecyclePreviewMessage(result?.error ?? "Account lifecycle preview unavailable.");
+      }
+    } catch (error) {
+      setAccountLifecyclePreview(null);
+      setAccountLifecyclePreviewMessage(error instanceof Error ? error.message : "Account lifecycle preview unavailable.");
+    } finally {
+      setAccountLifecyclePreviewLoading(false);
     }
   }
 
@@ -156,26 +183,26 @@ export function EmailHistory() {
             <h3>Needs more target accounts lifecycle</h3>
             <p>Read-only production preview. No episode, intent, email, or lifecycle mutation is performed.</p>
           </div>
-          <Button onClick={() => void refreshLifecyclePreview()} disabled={lifecyclePreviewLoading}>
+          <Button onClick={() => void refreshNeedsMorePreview()} disabled={needsMorePreviewLoading}>
             Refresh preview
           </Button>
         </div>
 
-        {lifecyclePreviewMessage ? <div className="email-history-message">{lifecyclePreviewMessage}</div> : null}
+        {needsMorePreviewMessage ? <div className="email-history-message">{needsMorePreviewMessage}</div> : null}
 
-        {lifecyclePreview ? (
+        {needsMorePreview ? (
           <>
             <div className="email-history-lifecycle-summary">
-              <p><span>Accounts analyzed</span><strong>{lifecyclePreview.accountsAnalyzed}</strong></p>
-              <p><span>Would open episode</span><strong>{lifecyclePreview.summary.wouldOpenEpisode}</strong></p>
-              <p><span>Active episodes</span><strong>{lifecyclePreview.summary.activeEpisodes}</strong></p>
-              <p><span>Blocked: missing email</span><strong>{lifecyclePreview.summary.blockedMissingClientEmail}</strong></p>
-              <p><span>Resolved / above threshold</span><strong>{lifecyclePreview.summary.resolvedOrAboveThreshold}</strong></p>
-              <p><span>Canceled accounts</span><strong>{lifecyclePreview.summary.canceled}</strong></p>
-              <p><span>Last preview</span><strong>{new Date(lifecyclePreview.previewedAt).toLocaleString()}</strong></p>
+              <p><span>Accounts analyzed</span><strong>{needsMorePreview.accountsAnalyzed}</strong></p>
+              <p><span>Would open episode</span><strong>{needsMorePreview.summary.wouldOpenEpisode}</strong></p>
+              <p><span>Active episodes</span><strong>{needsMorePreview.summary.activeEpisodes}</strong></p>
+              <p><span>Blocked: missing email</span><strong>{needsMorePreview.summary.blockedMissingClientEmail}</strong></p>
+              <p><span>Resolved / above threshold</span><strong>{needsMorePreview.summary.resolvedOrAboveThreshold}</strong></p>
+              <p><span>Canceled accounts</span><strong>{needsMorePreview.summary.canceled}</strong></p>
+              <p><span>Last preview</span><strong>{new Date(needsMorePreview.previewedAt).toLocaleString()}</strong></p>
             </div>
 
-            {lifecyclePreview.items.length === 0 ? (
+            {needsMorePreview.items.length === 0 ? (
               <div className="email-history-empty">
                 <strong>No pertinent accounts right now</strong>
                 <span>No active needs-more signal or active lifecycle episode matched the preview scope.</span>
@@ -194,13 +221,80 @@ export function EmailHistory() {
                     </tr>
                   </thead>
                   <tbody>
-                    {lifecyclePreview.items.map((item) => (
-                      <tr key={`${item.instagramUsername ?? "unknown"}-${item.clientLabel ?? "client"}`}>
+                    {needsMorePreview.items.map((item) => (
+                      <tr key={`needs-more-${item.instagramUsername ?? "unknown"}-${item.clientLabel ?? "client"}`}>
                         <td>{item.instagramUsername ? `@${item.instagramUsername}` : "—"}</td>
                         <td>{item.clientLabel || "—"}</td>
                         <td>{item.eligibleTargetCount} / {item.threshold}</td>
                         <td>{formatNeedsMoreTargetsLifecycleDecision(item.lifecycleDecision)}</td>
                         <td>{formatNeedsMoreTargetsDeliveryState(item.deliveryState)}</td>
+                        <td>{item.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : null}
+      </section>
+
+      <section className="email-history-lifecycle-preview" aria-label="Account lifecycle communication preview">
+        <div className="email-history-lifecycle-header">
+          <div>
+            <h3>Account lifecycle communication</h3>
+            <p>Read-only preview for paused, canceled, and needs assistance categories. Historical states stay no-backfill until post-activation transitions exist.</p>
+          </div>
+          <Button onClick={() => void refreshAccountLifecyclePreview()} disabled={accountLifecyclePreviewLoading}>
+            Refresh preview
+          </Button>
+        </div>
+
+        {accountLifecyclePreviewMessage ? <div className="email-history-message">{accountLifecyclePreviewMessage}</div> : null}
+
+        {accountLifecyclePreview ? (
+          <>
+            <div className="email-history-lifecycle-summary">
+              <p><span>Accounts analyzed</span><strong>{accountLifecyclePreview.accountsAnalyzed}</strong></p>
+              <p><span>Paused rows</span><strong>{accountLifecyclePreview.summary.pausedRows}</strong></p>
+              <p><span>Canceled rows</span><strong>{accountLifecyclePreview.summary.canceledRows}</strong></p>
+              <p><span>Needs assistance rows</span><strong>{accountLifecyclePreview.summary.needsAssistanceRows}</strong></p>
+              <p><span>Would open on future transition</span><strong>{accountLifecyclePreview.summary.wouldOpenOnFutureTransition}</strong></p>
+              <p><span>Active episodes</span><strong>{accountLifecyclePreview.summary.activeEpisodes}</strong></p>
+              <p><span>Legacy no-backfill</span><strong>{accountLifecyclePreview.summary.legacyStatesNoBackfill}</strong></p>
+              <p><span>Blocked: missing email</span><strong>{accountLifecyclePreview.summary.blockedMissingClientEmail}</strong></p>
+              <p><span>Blocked: transition evidence</span><strong>{accountLifecyclePreview.summary.blockedMissingTransitionEvidence}</strong></p>
+              <p><span>Last preview</span><strong>{new Date(accountLifecyclePreview.previewedAt).toLocaleString()}</strong></p>
+            </div>
+
+            {accountLifecyclePreview.items.length === 0 ? (
+              <div className="email-history-empty">
+                <strong>No pertinent accounts right now</strong>
+                <span>No paused, canceled, or needs assistance lifecycle states matched the preview scope.</span>
+              </div>
+            ) : (
+              <div className="email-history-table-wrap">
+                <table className="email-history-lifecycle-table">
+                  <thead>
+                    <tr>
+                      <th>Instagram</th>
+                      <th>Client</th>
+                      <th>Category</th>
+                      <th>Current state</th>
+                      <th>Lifecycle</th>
+                      <th>Delivery</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accountLifecyclePreview.items.map((item) => (
+                      <tr key={`${item.category}-${item.instagramUsername ?? "unknown"}-${item.clientLabel ?? "client"}`}>
+                        <td>{item.instagramUsername ? `@${item.instagramUsername}` : "—"}</td>
+                        <td>{item.clientLabel || "—"}</td>
+                        <td>{item.categoryLabel}</td>
+                        <td>{item.currentStateActive ? "Active" : "Inactive"}</td>
+                        <td>{formatAccountLifecycleDecision(item.lifecycleDecision)}</td>
+                        <td>{formatAccountLifecycleDeliveryState(item.deliveryState)}</td>
                         <td>{item.reason}</td>
                       </tr>
                     ))}

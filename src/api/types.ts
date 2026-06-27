@@ -2682,6 +2682,55 @@ export type BotAppNeedsMoreTargetsLifecyclePreview = {
   items: BotAppNeedsMoreTargetsPreviewAccountRow[];
 };
 
+export type BotAppAccountLifecyclePreviewDecision =
+  | "would_open_episode_on_future_transition"
+  | "would_keep_active"
+  | "would_resolve_episode"
+  | "legacy_state_no_backfill"
+  | "no_action";
+
+export type BotAppAccountLifecycleDeliveryState =
+  | "delivery_ready"
+  | "blocked_missing_client_email"
+  | "blocked_canceled_account"
+  | "blocked_missing_transition_evidence";
+
+export type BotAppAccountLifecyclePreviewRow = {
+  instagramUsername: string | null;
+  clientLabel: string | null;
+  clientEmailMasked: string | null;
+  category: "account_paused" | "account_canceled" | "needs_assistance";
+  categoryLabel: string;
+  currentStateActive: boolean;
+  canonicalSource: string;
+  transitionAt: string | null;
+  episodeState: "none" | "active" | "resolved" | "canceled";
+  lifecycleDecision: BotAppAccountLifecyclePreviewDecision;
+  deliveryState: BotAppAccountLifecycleDeliveryState;
+  reason: string;
+};
+
+export type BotAppAccountLifecyclePreview = {
+  previewedAt: string;
+  readOnly: true;
+  mutationExecuted: false;
+  lifecycleSchemaReady: boolean;
+  automationWatermarkConfigured: boolean;
+  accountsAnalyzed: number;
+  summary: {
+    accountsAnalyzed: number;
+    pausedRows: number;
+    canceledRows: number;
+    needsAssistanceRows: number;
+    wouldOpenOnFutureTransition: number;
+    activeEpisodes: number;
+    legacyStatesNoBackfill: number;
+    blockedMissingClientEmail: number;
+    blockedMissingTransitionEvidence: number;
+  };
+  items: BotAppAccountLifecyclePreviewRow[];
+};
+
 export type BotAppEmailHistoryDetail = BotAppEmailHistoryListItem & {
   scheduledFor: string | null;
   sentAt: string | null;

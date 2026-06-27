@@ -96,6 +96,7 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     testDeliveryStatus: () => ipcRenderer.invoke("botapp:email:test-delivery-status"),
     sendTestDelivery: (input) => ipcRenderer.invoke("botapp:email:send-test-delivery", input),
     needsMoreTargetsPreview: () => ipcRenderer.invoke("botapp:email:needs-more-targets-preview"),
+    accountLifecyclePreview: () => ipcRenderer.invoke("botapp:email:account-lifecycle-preview"),
   },
   deviceViews: {
     list: () => ipcRenderer.invoke("botapp:device-views:list"),
