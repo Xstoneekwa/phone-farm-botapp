@@ -115,6 +115,13 @@
   padding-left: 18px;
 }
 
+.email-history-precedence-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
 .email-history-lifecycle-header .badge {
   margin-top: 8px;
 }

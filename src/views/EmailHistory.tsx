@@ -351,7 +351,9 @@ export function EmailHistory() {
           <>
             <div className="email-history-lifecycle-summary">
               <p><span>Accounts analyzed</span><strong>{outboxPreview.summary.accountsAnalyzed}</strong></p>
-              <p><span>Planned items</span><strong>{outboxPreview.summary.plannedItems}</strong></p>
+              <p><span>Raw observations</span><strong>{outboxPreview.summary.rawObservations}</strong></p>
+              <p><span>Effective candidates</span><strong>{outboxPreview.summary.effectiveCandidates}</strong></p>
+              <p><span>Suppressed by lifecycle priority</span><strong>{outboxPreview.summary.suppressedByLifecyclePriority}</strong></p>
               <p><span>Would create initial</span><strong>{outboxPreview.summary.wouldCreateInitialIntent}</strong></p>
               <p><span>Would create reminder</span><strong>{outboxPreview.summary.wouldCreateReminderIntent}</strong></p>
               <p><span>Blocked by watermark</span><strong>{outboxPreview.summary.blockedLegacyPreWatermark}</strong></p>
@@ -406,7 +408,12 @@ export function EmailHistory() {
                         <td>{item.parentLabel}</td>
                         <td>{item.lifecycleDecisionLabel || formatOutboxPreviewDecisionLabel(item.lifecycleDecision)}</td>
                         <td>{item.deliveryStateLabel || formatOutboxPreviewDeliveryStateLabel(item.deliveryState)}</td>
-                        <td>{item.reason}</td>
+                        <td>
+                          {item.reason}
+                          {item.precedenceNote ? (
+                            <span className="email-history-precedence-note">{item.precedenceNote}</span>
+                          ) : null}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

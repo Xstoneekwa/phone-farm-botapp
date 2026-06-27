@@ -2819,6 +2819,9 @@ export type BotAppOutboxPreviewItem = {
   templateVersion: number | null;
   senderConfigured: boolean;
   supportEmailConfigured: boolean;
+  dispatchEligible: boolean;
+  suppressedSiblingCount: number;
+  precedenceNote: string | null;
   reason: string;
 };
 
@@ -2831,6 +2834,9 @@ export type BotAppOutboxPreview = {
   readinessBlockingReasons: string[];
   summary: {
     accountsAnalyzed: number;
+    rawObservations: number;
+    effectiveCandidates: number;
+    suppressedByLifecyclePriority: number;
     plannedItems: number;
     wouldOpenEpisode: number;
     wouldCreateInitialIntent: number;
