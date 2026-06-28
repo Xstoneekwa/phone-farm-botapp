@@ -28,10 +28,10 @@ test("relay delete preflight route accepts BotApp relay auth not web session onl
 
 test("delete modal loads preflight through ipc and keeps final delete gated", () => {
   assert.match(devicesViewSource, /window\.botappDesktop\?\.devices\?\.deletePreflight/);
-  assert.match(devicesViewSource, /preflight\?\.deletable === true/);
-  assert.match(devicesViewSource, /confirmationName === String\(preflight\?\.displayName/);
+  assert.match(devicesViewSource, /canConfirmDeviceDelete/);
+  assert.match(devicesViewSource, /preflightAligned/);
   assert.match(devicesViewSource, /disabled=\{!canDelete \|\| submitting\}/);
-  assert.match(devicesViewSource, /if \(!canDelete \|\| submitting\) return;/);
+  assert.match(devicesViewSource, /if \(!canDelete \|\| submitting \|\| !preflightAligned\) return;/);
   assert.doesNotMatch(devicesViewSource, /deletePreflight[\s\S]{0,400}confirmDelete\(\)/);
 });
 

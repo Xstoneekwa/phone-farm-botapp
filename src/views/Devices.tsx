@@ -7,6 +7,13 @@ import {
   projectBackendHeartbeat,
   summarizeBackendHeartbeats,
 } from "./device-backend-heartbeat";
+import {
+  canConfirmDeviceDelete,
+  DELETE_PREFLIGHT_MISMATCH_FR,
+  isDeletePreflightAligned,
+  preflightDisplayName,
+  resolveDeleteModalDeviceId,
+} from "./devices-delete-preflight-sync";
 import "./devices.css";
 
 type DevicePanel = "add" | "history" | "edit" | "delete" | null;
@@ -334,7 +341,12 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
   }
 
   function openPanel(nextPanel: DevicePanel, device?: Device) {
-    setSelectedDevice(device ?? devices[0] ?? null);
+    if (nextPanel === "delete") {
+      const physicalFallback = devices.find((item) => item.deviceKind === "physical_phone") ?? null;
+      setSelectedDevice(device?.deviceKind === "physical_phone" ? device : physicalFallback);
+    } else {
+      setSelectedDevice(device ?? devices[0] ?? null);
+    }
     setPanel(nextPanel);
   }
 
@@ -442,7 +454,11 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
       {panel === "delete" && selectedDevice ? (
         <DeleteDeviceModal
           devices={devices.filter((device) => device.deviceKind === "physical_phone")}
-          initialDevice={selectedDevice}
+          initialDevice={
+            selectedDevice.deviceKind === "physical_phone"
+              ? selectedDevice
+              : devices.find((device) => device.deviceKind === "physical_phone") ?? selectedDevice
+          }
           onClose={() => setPanel(null)}
           onDeleted={async (deviceName) => {
             setMessage(`${deviceName} retiré de l'inventaire opérationnel.`);
@@ -694,41 +710,55 @@ function DeleteDeviceModal({
   onClose: () => void;
   onDeleted: (deviceName: string) => void | Promise<void>;
 }) {
-  const [selectedId, setSelectedId] = useState(initialDevice.id);
+  const [selectedId, setSelectedId] = useState(() => resolveDeleteModalDeviceId(devices, initialDevice));
   const [confirmationName, setConfirmationName] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [preflight, setPreflight] = useState<Record<string, unknown> | null>(null);
-  const selectedDevice = devices.find((device) => device.id === selectedId) ?? initialDevice;
-  const canDelete = Boolean(
-    preflight?.deletable === true &&
-    confirmationName === String(preflight?.displayName || selectedDevice.name) &&
-    typeof window.botappDesktop?.devices?.delete === "function",
-  );
+  const selectedDevice = devices.find((device) => device.id === selectedId) ?? devices[0] ?? initialDevice;
+  const preflightAligned = isDeletePreflightAligned(selectedId, selectedDevice.name, preflight);
+  const canDelete = canConfirmDeviceDelete({
+    loading,
+    preflight,
+    selectedId,
+    selectedDeviceName: selectedDevice.name,
+    confirmationName,
+    deleteAvailable: typeof window.botappDesktop?.devices?.delete === "function",
+  });
 
   useEffect(() => {
     let cancelled = false;
+    const requestDeviceId = selectedId;
+    const requestDeviceName = devices.find((device) => device.id === requestDeviceId)?.name ?? "";
     setLoading(true);
     setError("");
     setPreflight(null);
-    void window.botappDesktop?.devices?.deletePreflight?.({ deviceId: selectedId })?.then((result) => {
-      if (cancelled) return;
+    void window.botappDesktop?.devices?.deletePreflight?.({ deviceId: requestDeviceId })?.then((result) => {
+      if (cancelled || requestDeviceId !== selectedId) return;
       if (!result?.ok) {
         setError(result?.error || "Impossible de charger la vérification de suppression.");
         setLoading(false);
         return;
       }
-      setPreflight(result.data || null);
+      const data = result.data || null;
+      if (!isDeletePreflightAligned(requestDeviceId, requestDeviceName, data)) {
+        setPreflight(null);
+        setError(DELETE_PREFLIGHT_MISMATCH_FR);
+        setLoading(false);
+        return;
+      }
+      setPreflight(data);
+      setError("");
       setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [selectedId]);
+  }, [selectedId, devices]);
 
   async function confirmDelete() {
-    if (!canDelete || submitting) return;
+    if (!canDelete || submitting || !preflightAligned) return;
     setSubmitting(true);
     setError("");
     const result = await window.botappDesktop!.devices!.delete!({
@@ -763,9 +793,9 @@ function DeleteDeviceModal({
           </label>
         ) : null}
         {loading ? <p>Chargement de la vérification…</p> : null}
-        {!loading && preflight ? (
+        {!loading && preflight && preflightAligned ? (
           <div className="devices-delete-preflight">
-            <p><strong>{String(preflight.displayName || selectedDevice.name)}</strong></p>
+            <p><strong>{preflightDisplayName(preflight) || selectedDevice.name}</strong></p>
             <div className="devices-delete-grid">
               <span>Statut ADB <strong>{selectedDevice.localAdbStatus || "unknown"}</strong></span>
               <span>Clones <strong>{Number(preflight.cloneCount || 0)}</strong></span>
@@ -791,7 +821,7 @@ function DeleteDeviceModal({
                   <span>Saisissez exactement le nom du téléphone pour confirmer</span>
                   <input
                     value={confirmationName}
-                    placeholder={String(preflight.displayName || selectedDevice.name)}
+                    placeholder={preflightDisplayName(preflight) || selectedDevice.name}
                     onChange={(event) => setConfirmationName(event.target.value)}
                   />
                 </label>
