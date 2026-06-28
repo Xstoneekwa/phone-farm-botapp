@@ -1605,6 +1605,7 @@ export type Device = {
   lockReason: string | null;
   backendStatus?: string;
   backendLastSeenAt?: string;
+  backendHeartbeatDbStatus?: string;
   localAdbStatus?: "device" | "offline" | "unauthorized" | "not_seen" | "adb_unavailable" | "unknown" | string;
   localAdbCheckedAt?: string;
   localAdbAvailable?: boolean;

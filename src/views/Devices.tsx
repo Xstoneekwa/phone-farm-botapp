@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { BotAppAddPhonePayload, BotAppDeviceHistoryEntry, BotAppRestartPhonePayload, Device } from "../api/types";
 import type { DeviceViewResult, DeviceViewState, LocalToolDiagnostics } from "../desktop/device-views";
 import { closeAllDeviceViews, closeDeviceView, focusDeviceView, listOpenDeviceViews, openDeviceView, subscribeDeviceViewState } from "../desktop/device-views";
+import {
+  buildHeartbeatDiagnostic,
+  projectBackendHeartbeat,
+  summarizeBackendHeartbeats,
+} from "./device-backend-heartbeat";
 import "./devices.css";
 
 type DevicePanel = "add" | "history" | "edit" | "delete" | null;
@@ -172,6 +177,9 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [message, setMessage] = useState("");
   const [localTools, setLocalTools] = useState<LocalToolDiagnostics | null>(null);
+  const [heartbeatRestartStage, setHeartbeatRestartStage] = useState<string | null>(null);
+  const [lastPublisherResult, setLastPublisherResult] = useState<Record<string, unknown> | null>(null);
+  const canRestartHeartbeats = typeof window.botappDesktop?.devices?.restartHeartbeatPublisher === "function";
 
   useEffect(() => {
     let cancelled = false;
@@ -328,6 +336,38 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
     setMessage("Devices refreshed from shared backend and local ADB check.");
   }
 
+  async function restartHeartbeats() {
+    if (!canRestartHeartbeats) return;
+    setMessage("Relance du publisher…");
+    setHeartbeatRestartStage("publisher_start");
+    const result = await window.botappDesktop!.devices!.restartHeartbeatPublisher!();
+    setLastPublisherResult(result as Record<string, unknown>);
+    if (result.stage === "heartbeat_received" || result.ok) {
+      setHeartbeatRestartStage("heartbeat_received");
+      setMessage(result.message || "Heartbeat reçu — prêt");
+      if (onRefresh) await onRefresh();
+      return;
+    }
+    if (result.stage === "heartbeat_timeout") {
+      setHeartbeatRestartStage("heartbeat_timeout");
+      setMessage(result.message || "Le téléphone reste non assignable.");
+      if (onRefresh) await onRefresh();
+      return;
+    }
+    setHeartbeatRestartStage("publisher_failed");
+    setMessage(result.message || result.error || "Impossible de relancer le publisher de heartbeats.");
+  }
+
+  async function copyHeartbeatDiagnostic() {
+    const diagnostic = buildHeartbeatDiagnostic(devices, lastPublisherResult);
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(diagnostic, null, 2));
+      setMessage("Diagnostic copié.");
+    } catch {
+      setMessage("Impossible de copier le diagnostic.");
+    }
+  }
+
   return (
     <div className="devices-screen">
       <header className="devices-header">
@@ -338,6 +378,7 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
             <span className="active">{activeCount} active</span>
             <span className="offline">{offlineCount} offline</span>
           </div>
+          <BackendHeartbeatSummary devices={devices} />
         </div>
       </header>
 
@@ -348,6 +389,7 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
               <DeviceRow
                 key={device.id}
                 device={device}
+                heartbeatPending={heartbeatRestartStage === "publisher_start"}
                 isOpen={isViewOpen(openViews, device)}
                 onOpen={() => void openPhoneView(device)}
                 onClose={() => void closeOne(device)}
@@ -360,6 +402,11 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
         <aside className="devices-actions-panel" aria-label="Device actions">
           <button type="button" className="device-action add" onClick={() => openPanel("add")}>+ Add</button>
           <button type="button" className="device-action" onClick={() => void refreshDevices()}>Refresh</button>
+          {canRestartHeartbeats ? (
+            <button type="button" className="device-action device-action-heartbeat" onClick={() => void restartHeartbeats()} disabled={heartbeatRestartStage === "publisher_start"}>
+              Relancer les heartbeats
+            </button>
+          ) : null}
           <button type="button" className="device-action" onClick={() => void openAll()}>Open All</button>
           <button type="button" className="device-action" onClick={() => void closeAll()}>Close All</button>
           <button type="button" className="device-action" onClick={() => setConfirmState({ kind: "restart_all", devices })}>Restart All</button>
@@ -371,6 +418,12 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
       </div>
 
       {message ? <div className="devices-message">{message}</div> : null}
+      {heartbeatRestartStage === "publisher_start" ? <div className="devices-message devices-message-heartbeat">Attente du premier heartbeat…</div> : null}
+      {heartbeatRestartStage === "heartbeat_timeout" || heartbeatRestartStage === "publisher_failed" ? (
+        <div className="devices-heartbeat-diagnostic-actions">
+          <button type="button" className="device-action" onClick={() => void copyHeartbeatDiagnostic()}>Copier le diagnostic</button>
+        </div>
+      ) : null}
       {toolsMessage ? <div className="devices-message">{toolsMessage}</div> : null}
 
       {panel === "add" ? <AddPhoneDrawer onClose={() => setPanel(null)} onPrepared={() => setMessage("Add phone is backend_pending from BotApp. No fake phone was created.")} /> : null}
@@ -404,14 +457,44 @@ function RefreshIcon() {
   );
 }
 
+function BackendHeartbeatSummary({ devices }: { devices: Device[] }) {
+  const summary = useMemo(() => summarizeBackendHeartbeats(devices), [devices]);
+  if (!summary.totalPhysical) return null;
+  return (
+    <div className={`devices-backend-heartbeat-summary ${summary.globalReady ? "ready" : "blocked"}`}>
+      <span>Heartbeats backend : {summary.active} actifs / {summary.expired} expirés / {summary.unknown} inconnus</span>
+      <strong>{summary.globalLabelFr}</strong>
+    </div>
+  );
+}
+
+function BackendHeartbeatIndicator({ device, pending }: { device: Device; pending?: boolean }) {
+  const projection = useMemo(() => projectBackendHeartbeat(device, { pending }), [device, pending]);
+  if (!projection) return null;
+  return (
+    <div className={`devices-backend-heartbeat-indicator state-${projection.label}`}>
+      <div className="devices-backend-heartbeat-line">
+        <span>Heartbeat backend : <strong>{projection.labelFr}</strong></span>
+        {projection.relativeFr ? <span title={projection.preciseAt}>Dernier signal {projection.relativeFr}</span> : null}
+      </div>
+      <div className="devices-backend-heartbeat-line">
+        <span>{projection.consequenceFr}</span>
+      </div>
+      {projection.explanationFr ? <p className="devices-backend-heartbeat-help">{projection.explanationFr}</p> : null}
+    </div>
+  );
+}
+
 function DeviceRow({
   device,
+  heartbeatPending,
   isOpen,
   onOpen,
   onClose,
   onRestart,
 }: {
   device: Device;
+  heartbeatPending?: boolean;
   isOpen: boolean;
   onOpen: () => void;
   onClose: () => void;
@@ -455,6 +538,7 @@ function DeviceRow({
         <span>Free <strong>{device.appInstancesAvailableCount}</strong></span>
         <span>Occupied <strong>{device.appInstancesOccupiedCount}</strong></span>
       </div>
+      <BackendHeartbeatIndicator device={device} pending={heartbeatPending} />
       {device.viewUnavailableReason ? <p className="device-warning">{device.viewUnavailableReason}</p> : null}
       {appInstances.length ? (
         <div className="device-app-instances">

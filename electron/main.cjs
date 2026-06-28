@@ -561,6 +561,11 @@ const runtimeIpcHandlers = [
   "botapp:integrations:remove-webhook",
 ];
 const dispatcherWrapperPath = process.env.BOTAPP_DISPATCHER_WRAPPER_PATH || "/Users/admin/instagram-worker-python/scripts/run_control_dispatcher_service.sh";
+const workerRootPath = path.dirname(path.dirname(dispatcherWrapperPath));
+const deviceHeartbeatPublisherPath = process.env.BOTAPP_DEVICE_HEARTBEAT_PUBLISHER_PATH || path.join(workerRootPath, "device_heartbeat_publisher.py");
+const workerEnvFilePath = process.env.BOTAPP_WORKER_ENV_FILE || path.join(workerRootPath, ".env");
+const deviceHeartbeatPythonPath = process.env.BOTAPP_PYTHON || "python3";
+const ASSIGNMENT_HEARTBEAT_STALE_MS = 15 * 60 * 1000;
 const dispatcherAllowedActions = new Set(["status", "install", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"]);
 const botappEndpointRegistry = [
   {
@@ -2515,6 +2520,7 @@ function localKnownDevices() {
     lockReason: "Backend heartbeat unavailable",
     backendStatus: "unknown",
     backendLastSeenAt: "",
+    backendHeartbeatDbStatus: "unknown",
     localAdbStatus: "unknown",
     localAdbCheckedAt: "",
     localAdbAvailable: false,
@@ -2593,6 +2599,7 @@ function asDashboardDevice(row, index, localAdb) {
     lockReason: row?.heartbeat_warning || null,
     backendStatus: String(row?.status || "unknown"),
     backendLastSeenAt: String(row?.heartbeat_last_seen_at || row?.last_seen_at || ""),
+    backendHeartbeatDbStatus: String(row?.heartbeat_status || row?.status || "unknown").toLowerCase(),
     localAdbStatus: localAdb?.adbAvailable ? localState : "adb_unavailable",
     localAdbCheckedAt: localAdb?.checkedAt || "",
     localAdbAvailable: Boolean(localAdb?.adbAvailable),
@@ -3929,6 +3936,129 @@ async function botappDevicesList(input = {}) {
   }
 }
 
+function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isPhysicalDeviceAssignmentHeartbeatLive(device) {
+  if (String(device?.deviceKind || "") !== "physical_phone") return true;
+  const dbStatus = String(device?.backendHeartbeatDbStatus || device?.heartbeatStatus || "").toLowerCase();
+  const lastSeenAt = String(device?.backendLastSeenAt || "").trim();
+  if (dbStatus !== "online" || !lastSeenAt) return false;
+  const lastSeenMs = Date.parse(lastSeenAt);
+  if (!Number.isFinite(lastSeenMs)) return false;
+  return Date.now() - lastSeenMs <= ASSIGNMENT_HEARTBEAT_STALE_MS;
+}
+
+function parsePublisherJson(stdout) {
+  const lines = String(stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (!line.startsWith("{") || !line.endsWith("}")) continue;
+    try {
+      return JSON.parse(line);
+    } catch {
+      // Ignore non-JSON noise on stdout.
+    }
+  }
+  return null;
+}
+
+function runDeviceHeartbeatPublisherOnce() {
+  if (!fs.existsSync(deviceHeartbeatPublisherPath)) {
+    return { ok: false, error: "heartbeat_publisher_missing", published_count: 0, skipped_count: 0 };
+  }
+  const args = [deviceHeartbeatPublisherPath, "--env-file", workerEnvFilePath, "--include-battery"];
+  const result = spawnSync(deviceHeartbeatPythonPath, args, {
+    cwd: workerRootPath,
+    encoding: "utf8",
+    shell: false,
+    timeout: 90000,
+    maxBuffer: 1024 * 1024,
+    env: process.env,
+  });
+  if (result.error) {
+    const reason = result.error.code === "ETIMEDOUT" ? "heartbeat_publisher_timeout" : safeRuntimeError(result.error, "Heartbeat publisher failed.");
+    return { ok: false, error: reason, published_count: 0, skipped_count: 0, stdout: safeDispatcherText(result.stdout), stderr: safeDispatcherText(result.stderr) };
+  }
+  const parsed = parsePublisherJson(result.stdout);
+  if (!parsed) {
+    return {
+      ok: false,
+      error: result.status === 0 ? "heartbeat_publisher_output_invalid" : safeDispatcherText(result.stderr) || "heartbeat_publisher_failed",
+      published_count: 0,
+      skipped_count: 0,
+      stdout: safeDispatcherText(result.stdout),
+      stderr: safeDispatcherText(result.stderr),
+      exitCode: result.status ?? null,
+    };
+  }
+  const publishedCount = Number(parsed.published_count ?? 0);
+  const skippedCount = Number(parsed.skipped_count ?? 0);
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      error: safeDispatcherText(result.stderr) || "heartbeat_publisher_failed",
+      published_count: publishedCount,
+      skipped_count: skippedCount,
+      stdout: safeDispatcherText(result.stdout),
+      stderr: safeDispatcherText(result.stderr),
+      exitCode: result.status ?? null,
+    };
+  }
+  return {
+    ok: true,
+    published_count: publishedCount,
+    skipped_count: skippedCount,
+    observed_count: Number(parsed.observed_count ?? 0),
+    stdout: safeDispatcherText(result.stdout),
+    stderr: safeDispatcherText(result.stderr),
+  };
+}
+
+async function restartDeviceHeartbeatPublisher() {
+  const publish = runDeviceHeartbeatPublisherOnce();
+  if (!publish.ok) {
+    return {
+      ok: false,
+      stage: "publisher_start",
+      message: "Impossible de relancer le publisher de heartbeats.",
+      error: publish.error || "heartbeat_publisher_failed",
+      published_count: publish.published_count || 0,
+      skipped_count: publish.skipped_count || 0,
+    };
+  }
+
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    await sleepMs(2000);
+    const inventory = await botappDevicesList({});
+    if (!inventory.ok || !Array.isArray(inventory.data)) continue;
+    const physical = inventory.data.filter((device) => String(device?.deviceKind || "") === "physical_phone");
+    if (!physical.length || physical.every(isPhysicalDeviceAssignmentHeartbeatLive)) {
+      return {
+        ok: true,
+        stage: "heartbeat_received",
+        message: "Heartbeat reçu — prêt",
+        published_count: publish.published_count || 0,
+        skipped_count: publish.skipped_count || 0,
+        data: inventory.data,
+      };
+    }
+  }
+
+  const inventory = await botappDevicesList({});
+  return {
+    ok: false,
+    stage: "heartbeat_timeout",
+    message: "Le téléphone reste non assignable. Aucun heartbeat récent n'a été confirmé côté service d'assignation.",
+    error: "heartbeat_timeout",
+    published_count: publish.published_count || 0,
+    skipped_count: publish.skipped_count || 0,
+    data: inventory.ok ? inventory.data : [],
+  };
+}
+
 function readRelayError(data, fallback) {
   const reason = data?.reason || data?.error?.code || data?.error;
   const fallbackReason = data?.fallback_reason || data?.data?.fallback_reason;
@@ -4822,6 +4952,14 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:connect:open-device-view", (_event, input) => openDeviceViewFromClientIntent(input?.intent_token || input?.intentToken || input));
   ipcMain.handle("botapp:dispatcher:ensure", () => ensureDispatcherAutostart().catch((error) => dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed."))));
   ipcMain.handle("botapp:devices:list", (_event, input) => botappDevicesList(input));
+  ipcMain.handle("botapp:devices:restart-heartbeat-publisher", () => restartDeviceHeartbeatPublisher().catch((error) => ({
+    ok: false,
+    stage: "publisher_start",
+    message: "Impossible de relancer le publisher de heartbeats.",
+    error: safeRuntimeError(error, "Heartbeat publisher restart crashed safely."),
+    published_count: 0,
+    skipped_count: 0,
+  })));
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
   ipcMain.handle("botapp:profiles:stats-history", (_event, input) => profileStatsHistoryData(input?.accountId || input?.account_id || input, input?.days));
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));

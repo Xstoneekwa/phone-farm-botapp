@@ -143,6 +143,15 @@ interface Window {
     };
     devices?: {
       list: (input?: { format?: "raw" | "normalized" }) => Promise<{ ok: boolean; data?: Record<string, unknown>[]; error?: string | null }>;
+      restartHeartbeatPublisher?: () => Promise<{
+        ok: boolean;
+        stage?: string;
+        message?: string;
+        error?: string | null;
+        published_count?: number;
+        skipped_count?: number;
+        data?: Record<string, unknown>[];
+      }>;
     };
     profiles?: {
       details: (accountId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
