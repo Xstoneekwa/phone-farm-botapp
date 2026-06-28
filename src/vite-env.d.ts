@@ -57,8 +57,10 @@ type BotAppDeviceViewResult = {
 
 type BotAppRuntimeIntegrationStatus = import("./api/types").BotAppRuntimeIntegrationStatus;
 type BotAppDispatcherHealth = import("./api/types").BotAppDispatcherHealth;
+type BotAppDeviceHeartbeatHealth = import("./api/types").BotAppDeviceHeartbeatHealth;
 type BotAppRelayHealth = import("./api/types").BotAppRelayHealth;
 type BotAppDispatcherHealthAction = "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
+type BotAppDeviceHeartbeatHealthAction = "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
 type CompassAiRuntimeStatus = import("./api/types").CompassAiRuntimeStatus;
 type TargetingAiRuntimeStatus = import("./api/types").TargetingAiRuntimeStatus;
 type TargetingAiSaveResult = import("./api/types").TargetingAiSaveResult;
@@ -90,11 +92,16 @@ interface Window {
     runtime?: {
       status: () => Promise<BotAppRuntimeIntegrationStatus>;
     };
-    dispatcher?: {
-      status: () => Promise<BotAppDispatcherHealth>;
-      action: (action: BotAppDispatcherHealthAction) => Promise<BotAppDispatcherHealth>;
-      ensure: () => Promise<BotAppDispatcherHealth>;
-    };
+  dispatcher?: {
+    status: () => Promise<BotAppDispatcherHealth>;
+    action: (action: BotAppDispatcherHealthAction) => Promise<BotAppDispatcherHealth>;
+    ensure: () => Promise<BotAppDispatcherHealth>;
+  };
+  deviceHeartbeat?: {
+    status: () => Promise<BotAppDeviceHeartbeatHealth>;
+    action: (action: BotAppDeviceHeartbeatHealthAction) => Promise<BotAppDeviceHeartbeatHealth>;
+    ensure: () => Promise<BotAppDeviceHeartbeatHealth>;
+  };
     compass?: {
       status: () => Promise<CompassAiRuntimeStatus>;
       saveRelayConfig: (input: { relayUrl: string; relayCredential?: string }) => Promise<CompassAiRuntimeStatus>;

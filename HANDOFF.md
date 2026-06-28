@@ -239,6 +239,119 @@ Before any checkpoint commit:
   - Auto Login progress and code popup paths render
   - Check Login confirmation shows safe readiness status and payload only
 
+## Device Heartbeat Service — Lifecycle, Monitoring and Recovery
+
+### Why `ADB Connected` is not enough
+
+A phone can appear **Connected** in BotApp Devices because local `adb devices -l` sees it on the Mac. Assignment readiness on the backend uses **`device_heartbeats.last_seen_at`** with a freshness gate of **15 minutes** (`ASSIGNMENT_HEARTBEAT_STALE_MS`). If the canonical publisher stops, ADB can stay green while the backend marks the phone stale and **blocks new client account assignment**.
+
+### Three distinct signals
+
+| Signal | Meaning | Source |
+|--------|---------|--------|
+| **ADB local** | USB/network link from Mac to phone | Local `adb devices -l` in BotApp Devices |
+| **Heartbeat backend** | Last publish to Supabase `device_heartbeats` | Canonical `device_heartbeat_publisher.py` via worker env |
+| **Client assignability** | Backend allows slot assignment for onboarding | Fresh `online` heartbeat + assignment capacity rules |
+
+Devices UI shows **Connected** and **Heartbeat backend** as separate indicators. Runtime Health shows the **Device heartbeat service** supervisor state.
+
+### Architecture
+
+```
+BotApp (Electron main)
+  └─ ensureDeviceHeartbeatAutostart() on app ready
+       └─ scripts/device_heartbeat_service.sh  (install / resume / restart / status)
+            └─ launchd: com.boost.phonefarm.device-heartbeat (KeepAlive + RunAtLoad)
+                 └─ device_heartbeat_publisher.py --serve --interval-seconds 60
+                      └─ adb devices -l → runtime_heartbeat.heartbeat_device() → Supabase
+```
+
+- **No synthetic DB heartbeats** — only the publisher that reads real ADB state may write.
+- **No Instagram login, runs, assignment, or phone restarts** in this path.
+- **Duplicate guard** — wrapper lock + PID file + `fix-duplicate` action.
+
+### Normal publish frequency
+
+- **Immediate** publish on service start.
+- Then every **60 seconds** (configurable via `DEVICE_HEARTBEAT_INTERVAL_SECONDS`, max 300, min 15).
+- Target: stay well under the **15 minute** backend stale threshold.
+
+### Autostart
+
+- **BotApp open** → `ensureDeviceHeartbeatAutostart()` installs/resumes LaunchAgent if needed.
+- **Mac login** → launchd `RunAtLoad` + `KeepAlive` restarts the wrapper if the process exits.
+- **Independent of relay auth** — uses worker `.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
+
+### Self-heal after crash
+
+- launchd `KeepAlive` relaunches `device_heartbeat_service.sh start`.
+- BotApp reopen re-runs `ensureDeviceHeartbeatAutostart()`.
+- Duplicate publishers trigger `fix-duplicate` (kill extras, kickstart LaunchAgent).
+
+### Manual button: `Relancer les heartbeats`
+
+- **Recovery only** — not required in normal operation.
+- Calls the **canonical supervisor** (`restart` or `fix-duplicate`), never a second standalone publisher process.
+- Success is declared only after a **real backend heartbeat** is confirmed via Devices inventory polling.
+
+### Devices UI states (backend heartbeat)
+
+| Label FR | Meaning |
+|----------|---------|
+| **Actif** | Fresh backend heartbeat within 15 min, status `online` |
+| **Expiré** | Stale or non-online — assignment blocked |
+| **Inconnu** | No backend timestamp available |
+| **En attente** | Recovery poll in progress after manual restart |
+
+### Runtime Health — Device heartbeat service
+
+| Operator label | Meaning |
+|----------------|---------|
+| **Opérationnel** | Process running, last cycle OK, phones seen |
+| **Dégradé** | Running but backend/cycle issue, duplicate process, or stale backend age |
+| **Arrêté** | Service not running / paused |
+| **Aucun téléphone détecté** | Service OK but zero ADB phones in last cycle |
+
+### Operator checklist before adding a client account
+
+1. Phone **Connected** in Devices (local ADB).
+2. **Heartbeat backend: Actif** on each physical phone.
+3. Runtime Health **Device heartbeat service: Opérationnel**.
+4. **Clone available** on the target phone.
+
+### Recovery if heartbeat expires
+
+1. Wait ~1–2 minutes — autostart/KeepAlive may recover alone.
+2. Open **Runtime Health** → Device heartbeat service → **Restart** or **Fix duplicate**.
+3. If still stale: Devices → **Relancer les heartbeats** (supervisor recovery).
+4. Confirm **Actif** on all Samsung/physical phones before adding accounts.
+
+### Never do
+
+- Write fake rows to `device_heartbeats` in SQL or scripts.
+- Restart phones unnecessarily to “fix” heartbeat.
+- Run Instagram login to test assignability.
+- Ignore **Expiré** while onboarding clients.
+
+### Dependencies and limits
+
+- Worker repo path (default `/Users/admin/instagram-worker-python`).
+- Worker `.env` with Supabase service credentials.
+- `adb` on PATH or `ADB_PATH`.
+- Registered phone rows in DB (`adb_serial` mapping) — unregistered serials are skipped honestly.
+- Backend outage → degraded state, retries on next cycle; no silent success.
+
+### Validation after BotApp install or update
+
+1. Open BotApp — service starts without manual click.
+2. Runtime Health shows **Opérationnel** (or honest **Aucun téléphone détecté** if unplugged).
+3. Devices shows **Heartbeat backend: Actif** within ~60s for connected phones.
+4. Wait several cycles (~5 min) — heartbeats stay fresh without clicking.
+5. Quit and reopen BotApp — service resumes automatically.
+6. Optional: `launchctl kickstart -k gui/$UID/com.boost.phonefarm.device-heartbeat` after controlled stop — process returns.
+
+Logs: `logs/device-heartbeat-service/heartbeat.log` (paths redacted in UI).
+
 ## Next Work
 
 Recommended next milestone:

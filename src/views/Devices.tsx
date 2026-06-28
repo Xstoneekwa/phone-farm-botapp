@@ -338,8 +338,8 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
 
   async function restartHeartbeats() {
     if (!canRestartHeartbeats) return;
-    setMessage("Relance du publisher…");
-    setHeartbeatRestartStage("publisher_start");
+    setMessage("Relance du service heartbeat…");
+    setHeartbeatRestartStage("service_restart");
     const result = await window.botappDesktop!.devices!.restartHeartbeatPublisher!();
     setLastPublisherResult(result as Record<string, unknown>);
     if (result.stage === "heartbeat_received" || result.ok) {
@@ -354,8 +354,8 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
       if (onRefresh) await onRefresh();
       return;
     }
-    setHeartbeatRestartStage("publisher_failed");
-    setMessage(result.message || result.error || "Impossible de relancer le publisher de heartbeats.");
+    setHeartbeatRestartStage("service_failed");
+    setMessage(result.message || result.error || "Impossible de relancer le service heartbeat devices.");
   }
 
   async function copyHeartbeatDiagnostic() {
@@ -389,7 +389,7 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
               <DeviceRow
                 key={device.id}
                 device={device}
-                heartbeatPending={heartbeatRestartStage === "publisher_start"}
+                heartbeatPending={heartbeatRestartStage === "service_restart"}
                 isOpen={isViewOpen(openViews, device)}
                 onOpen={() => void openPhoneView(device)}
                 onClose={() => void closeOne(device)}
@@ -403,7 +403,7 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
           <button type="button" className="device-action add" onClick={() => openPanel("add")}>+ Add</button>
           <button type="button" className="device-action" onClick={() => void refreshDevices()}>Refresh</button>
           {canRestartHeartbeats ? (
-            <button type="button" className="device-action device-action-heartbeat" onClick={() => void restartHeartbeats()} disabled={heartbeatRestartStage === "publisher_start"}>
+            <button type="button" className="device-action device-action-heartbeat" onClick={() => void restartHeartbeats()} disabled={heartbeatRestartStage === "service_restart"}>
               Relancer les heartbeats
             </button>
           ) : null}
@@ -418,8 +418,8 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
       </div>
 
       {message ? <div className="devices-message">{message}</div> : null}
-      {heartbeatRestartStage === "publisher_start" ? <div className="devices-message devices-message-heartbeat">Attente du premier heartbeat…</div> : null}
-      {heartbeatRestartStage === "heartbeat_timeout" || heartbeatRestartStage === "publisher_failed" ? (
+      {heartbeatRestartStage === "service_restart" ? <div className="devices-message devices-message-heartbeat">Attente du heartbeat backend…</div> : null}
+      {heartbeatRestartStage === "heartbeat_timeout" || heartbeatRestartStage === "service_failed" ? (
         <div className="devices-heartbeat-diagnostic-actions">
           <button type="button" className="device-action" onClick={() => void copyHeartbeatDiagnostic()}>Copier le diagnostic</button>
         </div>

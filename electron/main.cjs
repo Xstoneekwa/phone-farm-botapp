@@ -531,6 +531,10 @@ const runtimeIpcHandlers = [
   "botapp:connect:open-device-view",
   "botapp:dispatcher:ensure",
   "botapp:devices:list",
+  "botapp:devices:restart-heartbeat-publisher",
+  "botapp:device-heartbeat:status",
+  "botapp:device-heartbeat:ensure",
+  "botapp:device-heartbeat:action",
   "botapp:profiles:details",
   "botapp:profiles:create-dry-run",
   "botapp:profiles:create",
@@ -563,10 +567,12 @@ const runtimeIpcHandlers = [
 const dispatcherWrapperPath = process.env.BOTAPP_DISPATCHER_WRAPPER_PATH || "/Users/admin/instagram-worker-python/scripts/run_control_dispatcher_service.sh";
 const workerRootPath = path.dirname(path.dirname(dispatcherWrapperPath));
 const deviceHeartbeatPublisherPath = process.env.BOTAPP_DEVICE_HEARTBEAT_PUBLISHER_PATH || path.join(workerRootPath, "device_heartbeat_publisher.py");
+const deviceHeartbeatServiceWrapperPath = process.env.BOTAPP_DEVICE_HEARTBEAT_SERVICE_WRAPPER_PATH || path.join(workerRootPath, "scripts/device_heartbeat_service.sh");
 const workerEnvFilePath = process.env.BOTAPP_WORKER_ENV_FILE || path.join(workerRootPath, ".env");
 const deviceHeartbeatPythonPath = process.env.BOTAPP_PYTHON || "python3";
 const ASSIGNMENT_HEARTBEAT_STALE_MS = 15 * 60 * 1000;
 const dispatcherAllowedActions = new Set(["status", "install", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"]);
+const deviceHeartbeatAllowedActions = new Set(["status", "install", "pause", "resume", "restart", "stop", "logs", "fix-duplicate"]);
 const botappEndpointRegistry = [
   {
     id: "botapp_overview",
@@ -4016,20 +4022,278 @@ function runDeviceHeartbeatPublisherOnce() {
   };
 }
 
+function deviceHeartbeatFallbackStatus(status, message, extra = {}) {
+  const now = new Date().toISOString();
+  return {
+    ok: false,
+    status,
+    operatorStatus: status === "stopped" ? "stopped" : "degraded",
+    operatorLabelFr: status === "stopped" ? "Arrêté" : "Dégradé",
+    serviceId: "device-heartbeat-publisher",
+    paused: false,
+    processRunning: false,
+    pid: null,
+    processCount: 0,
+    duplicateProcess: false,
+    launchdLoaded: false,
+    intervalSeconds: 60,
+    lastCycleAt: null,
+    lastCycleOk: false,
+    lastPublishedCount: 0,
+    lastObservedCount: 0,
+    physicalPhonesSeen: 0,
+    youngestBackendHeartbeatAgeSeconds: null,
+    physicalPhonesInInventory: null,
+    lastError: message,
+    logsPath: null,
+    checkedAt: now,
+    message,
+    ...extra,
+  };
+}
+
+function computeDeviceHeartbeatOperatorLabel(normalized) {
+  if (!normalized.processRunning && (normalized.status === "stopped" || normalized.status === "paused" || !normalized.launchdLoaded)) {
+    return { operatorStatus: "stopped", operatorLabelFr: "Arrêté" };
+  }
+  if (normalized.processRunning && normalized.lastObservedCount === 0 && normalized.physicalPhonesSeen === 0) {
+    return { operatorStatus: "no_phones_detected", operatorLabelFr: "Aucun téléphone détecté" };
+  }
+  if (normalized.status === "running" && normalized.lastCycleOk && !normalized.duplicateProcess) {
+    return { operatorStatus: "operational", operatorLabelFr: "Opérationnel" };
+  }
+  return { operatorStatus: "degraded", operatorLabelFr: "Dégradé" };
+}
+
+function normalizeDeviceHeartbeatStatus(raw, action) {
+  const lastError = safeDispatcherText(raw?.lastError || "");
+  const status = ["running", "paused", "stopped", "degraded", "starting", "unhealthy", "unknown"].includes(raw?.status) ? raw.status : "unknown";
+  const normalized = {
+    ok: Boolean(raw?.ok),
+    status,
+    serviceId: String(raw?.service_id || raw?.serviceId || "device-heartbeat-publisher"),
+    paused: Boolean(raw?.paused),
+    processRunning: Boolean(raw?.processRunning),
+    pid: Number.isFinite(Number(raw?.pid)) ? Number(raw.pid) : null,
+    processCount: Number.isFinite(Number(raw?.processCount)) ? Number(raw.processCount) : 0,
+    duplicateProcess: Boolean(raw?.duplicateProcess),
+    launchdLoaded: Boolean(raw?.launchdLoaded),
+    intervalSeconds: Number.isFinite(Number(raw?.intervalSeconds)) ? Number(raw.intervalSeconds) : 60,
+    lastCycleAt: typeof raw?.lastCycleAt === "string" && raw.lastCycleAt ? raw.lastCycleAt : null,
+    lastCycleOk: Boolean(raw?.lastCycleOk),
+    lastPublishedCount: Number.isFinite(Number(raw?.lastPublishedCount)) ? Number(raw.lastPublishedCount) : 0,
+    lastObservedCount: Number.isFinite(Number(raw?.lastObservedCount)) ? Number(raw.lastObservedCount) : 0,
+    physicalPhonesSeen: Number.isFinite(Number(raw?.physicalPhonesSeen)) ? Number(raw.physicalPhonesSeen) : 0,
+    youngestBackendHeartbeatAgeSeconds: null,
+    physicalPhonesInInventory: null,
+    lastError: lastError || null,
+    logsPath: typeof raw?.logsPath === "string" ? raw.logsPath : null,
+    checkedAt: typeof raw?.checkedAt === "string" && raw.checkedAt ? raw.checkedAt : new Date().toISOString(),
+    message: safeDispatcherText(raw?.message || "Device heartbeat service status unavailable."),
+    action,
+  };
+  const operator = computeDeviceHeartbeatOperatorLabel(normalized);
+  return {
+    ...normalized,
+    operatorStatus: operator.operatorStatus,
+    operatorLabelFr: operator.operatorLabelFr,
+  };
+}
+
+function runDeviceHeartbeatWrapper(command, args = [], timeoutMs = 25000) {
+  if (!deviceHeartbeatAllowedActions.has(command)) {
+    return { ok: false, error: "device_heartbeat_action_not_allowed" };
+  }
+  if (!fs.existsSync(deviceHeartbeatServiceWrapperPath)) {
+    return { ok: false, error: "device_heartbeat_wrapper_missing" };
+  }
+  try {
+    fs.accessSync(deviceHeartbeatServiceWrapperPath, fs.constants.X_OK);
+  } catch {
+    return { ok: false, error: "device_heartbeat_wrapper_not_executable" };
+  }
+  const result = spawnSync(deviceHeartbeatServiceWrapperPath, [command, ...args], {
+    cwd: workerRootPath,
+    encoding: "utf8",
+    shell: false,
+    timeout: timeoutMs,
+    maxBuffer: 1024 * 1024,
+  });
+  if (result.error) {
+    const reason = result.error.code === "ETIMEDOUT" ? "device_heartbeat_command_timeout" : safeRuntimeError(result.error, "Device heartbeat command failed.");
+    return { ok: false, error: reason, stdout: safeDispatcherText(result.stdout), stderr: safeDispatcherText(result.stderr), exitCode: result.status ?? null };
+  }
+  return {
+    ok: result.status === 0,
+    stdout: String(result.stdout || ""),
+    stderr: safeDispatcherText(result.stderr),
+    exitCode: result.status ?? 0,
+  };
+}
+
+async function enrichDeviceHeartbeatStatus(normalized) {
+  try {
+    const inventory = await botappDevicesList({});
+    if (!inventory.ok || !Array.isArray(inventory.data)) return normalized;
+    const physical = inventory.data.filter((device) => String(device?.deviceKind || "") === "physical_phone");
+    let youngestAgeSeconds = null;
+    for (const device of physical) {
+      const lastSeenAt = String(device?.backendLastSeenAt || "").trim();
+      if (!lastSeenAt) continue;
+      const lastSeenMs = Date.parse(lastSeenAt);
+      if (!Number.isFinite(lastSeenMs)) continue;
+      const ageSeconds = Math.max(0, (Date.now() - lastSeenMs) / 1000);
+      youngestAgeSeconds = youngestAgeSeconds === null ? ageSeconds : Math.min(youngestAgeSeconds, ageSeconds);
+    }
+    const enriched = {
+      ...normalized,
+      youngestBackendHeartbeatAgeSeconds: youngestAgeSeconds,
+      physicalPhonesInInventory: physical.length,
+    };
+    const operator = computeDeviceHeartbeatOperatorLabel(enriched);
+    if (youngestAgeSeconds !== null && youngestAgeSeconds > ASSIGNMENT_HEARTBEAT_STALE_MS / 1000 && enriched.processRunning) {
+      return {
+        ...enriched,
+        operatorStatus: "degraded",
+        operatorLabelFr: "Dégradé",
+        message: "Les téléphones sont connectés localement, mais leur signal backend n'est plus à jour. Le service tente une récupération automatique.",
+      };
+    }
+    return {
+      ...enriched,
+      operatorStatus: operator.operatorStatus,
+      operatorLabelFr: operator.operatorLabelFr,
+    };
+  } catch {
+    return normalized;
+  }
+}
+
+async function deviceHeartbeatStatus() {
+  const result = runDeviceHeartbeatWrapper("status", ["--json"]);
+  if (!result.ok && !result.stdout) {
+    return deviceHeartbeatFallbackStatus("unknown", result.error || "Device heartbeat status unavailable.");
+  }
+  const parsed = parseDispatcherJson(result.stdout);
+  if (!parsed) {
+    return deviceHeartbeatFallbackStatus("unknown", "Device heartbeat status output was not valid JSON.", {
+      lastError: result.error || result.stderr || "device_heartbeat_status_json_invalid",
+    });
+  }
+  return enrichDeviceHeartbeatStatus(normalizeDeviceHeartbeatStatus(parsed, "status"));
+}
+
+async function ensureDeviceHeartbeatAutostart() {
+  let status = await deviceHeartbeatStatus();
+  if (status.status === "running" && status.processRunning && !status.duplicateProcess) {
+    return status;
+  }
+
+  if (status.duplicateProcess) {
+    runDeviceHeartbeatWrapper("fix-duplicate", [], 45000);
+    status = await deviceHeartbeatStatus();
+    if (status.status === "running" && status.processRunning && !status.duplicateProcess) {
+      return status;
+    }
+  }
+
+  if (!status.launchdLoaded) {
+    const install = runDeviceHeartbeatWrapper("install", [], 30000);
+    if (!install.ok) {
+      return {
+        ...status,
+        message: "Device heartbeat LaunchAgent install failed. Open Runtime Health to retry.",
+        lastError: install.error || install.stderr || status.lastError,
+      };
+    }
+  }
+
+  const resume = runDeviceHeartbeatWrapper("resume", [], 45000);
+  status = await deviceHeartbeatStatus();
+  if (status.status === "running" && status.processRunning) {
+    return status;
+  }
+
+  return {
+    ...status,
+    ok: status.status === "running" && status.processRunning,
+    message: resume.ok
+      ? (status.message || "Device heartbeat service is starting.")
+      : `Device heartbeat autostart attempted: ${safeDispatcherText(resume.error || resume.stderr || status.lastError || "unknown")}`,
+  };
+}
+
+async function deviceHeartbeatAction(action) {
+  const normalized = String(action || "").trim();
+  if (!deviceHeartbeatAllowedActions.has(normalized) || normalized === "status") {
+    return deviceHeartbeatFallbackStatus("unknown", "Device heartbeat action is not allowed.", { action: normalized || "status" });
+  }
+  try {
+    if (normalized === "logs") {
+      const result = runDeviceHeartbeatWrapper("logs", ["--path"], 8000);
+      const logPath = String(result.stdout || "").split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
+      if (!result.ok || !logPath) {
+        return deviceHeartbeatFallbackStatus("unknown", result.error || "Device heartbeat logs path unavailable.", { action: "logs" });
+      }
+      if (fs.existsSync(logPath)) {
+        shell.showItemInFolder(logPath);
+      } else {
+        await shell.openPath(path.dirname(logPath));
+      }
+      const current = await deviceHeartbeatStatus();
+      return {
+        ...current,
+        action: "logs",
+        logsPath: logPath,
+        message: "Device heartbeat logs opened.",
+      };
+    }
+    const timeoutMs = normalized === "restart" || normalized === "fix-duplicate" ? 45000 : 25000;
+    const result = runDeviceHeartbeatWrapper(normalized, [], timeoutMs);
+    const current = await deviceHeartbeatStatus();
+    return {
+      ...current,
+      action: normalized,
+      ok: result.ok && current.ok,
+      lastError: result.ok ? current.lastError : safeDispatcherText(result.error || result.stderr || current.lastError || "device_heartbeat_action_failed"),
+      message: result.ok ? current.message : `Device heartbeat ${normalized} failed. Runtime Health stayed open; retry or use Restart cleanly.`,
+    };
+  } catch (error) {
+    const current = await deviceHeartbeatStatus().catch(() => deviceHeartbeatFallbackStatus("unknown", "Device heartbeat status unavailable after action error."));
+    return {
+      ...current,
+      action: normalized,
+      ok: false,
+      lastError: safeRuntimeError(error, "device_heartbeat_action_exception"),
+      message: `Device heartbeat ${normalized} failed safely. BotApp stayed open.`,
+    };
+  }
+}
+
 async function restartDeviceHeartbeatPublisher() {
-  const publish = runDeviceHeartbeatPublisherOnce();
-  if (!publish.ok) {
+  let service = await deviceHeartbeatStatus();
+  const recoveryAction = service.duplicateProcess ? "fix-duplicate" : "restart";
+  const restart = runDeviceHeartbeatWrapper(recoveryAction, [], 45000);
+  if (!restart.ok) {
     return {
       ok: false,
-      stage: "publisher_start",
-      message: "Impossible de relancer le publisher de heartbeats.",
-      error: publish.error || "heartbeat_publisher_failed",
-      published_count: publish.published_count || 0,
-      skipped_count: publish.skipped_count || 0,
+      stage: "service_restart",
+      message: "Impossible de relancer le service heartbeat devices.",
+      error: restart.error || restart.stderr || "device_heartbeat_service_restart_failed",
+      published_count: service.lastPublishedCount || 0,
+      skipped_count: 0,
+      service,
     };
   }
 
-  const deadline = Date.now() + 30000;
+  const serviceDeadline = Date.now() + 25000;
+  while (Date.now() < serviceDeadline) {
+    await sleepMs(2000);
+    service = await deviceHeartbeatStatus();
+    if (service.processRunning && service.lastCycleOk) break;
+  }
+
+  const deadline = Date.now() + 45000;
   while (Date.now() < deadline) {
     await sleepMs(2000);
     const inventory = await botappDevicesList({});
@@ -4040,9 +4304,10 @@ async function restartDeviceHeartbeatPublisher() {
         ok: true,
         stage: "heartbeat_received",
         message: "Heartbeat reçu — prêt",
-        published_count: publish.published_count || 0,
-        skipped_count: publish.skipped_count || 0,
+        published_count: service.lastPublishedCount || 0,
+        skipped_count: 0,
         data: inventory.data,
+        service,
       };
     }
   }
@@ -4051,11 +4316,12 @@ async function restartDeviceHeartbeatPublisher() {
   return {
     ok: false,
     stage: "heartbeat_timeout",
-    message: "Le téléphone reste non assignable. Aucun heartbeat récent n'a été confirmé côté service d'assignation.",
+    message: "Les nouveaux comptes ne peuvent pas encore être préparés. Ouvrez Runtime Health ou utilisez Relancer les heartbeats.",
     error: "heartbeat_timeout",
-    published_count: publish.published_count || 0,
-    skipped_count: publish.skipped_count || 0,
+    published_count: service.lastPublishedCount || 0,
+    skipped_count: 0,
     data: inventory.ok ? inventory.data : [],
+    service,
   };
 }
 
@@ -4951,6 +5217,9 @@ function registerRuntimeIpc() {
   })));
   ipcMain.handle("botapp:connect:open-device-view", (_event, input) => openDeviceViewFromClientIntent(input?.intent_token || input?.intentToken || input));
   ipcMain.handle("botapp:dispatcher:ensure", () => ensureDispatcherAutostart().catch((error) => dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed."))));
+  ipcMain.handle("botapp:device-heartbeat:status", () => deviceHeartbeatStatus().catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat status failed."))));
+  ipcMain.handle("botapp:device-heartbeat:ensure", () => ensureDeviceHeartbeatAutostart().catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat autostart failed."))));
+  ipcMain.handle("botapp:device-heartbeat:action", (_event, action) => deviceHeartbeatAction(action).catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat action crashed safely."))));
   ipcMain.handle("botapp:devices:list", (_event, input) => botappDevicesList(input));
   ipcMain.handle("botapp:devices:restart-heartbeat-publisher", () => restartDeviceHeartbeatPublisher().catch((error) => ({
     ok: false,
@@ -5090,6 +5359,10 @@ app.whenReady().then(async () => {
 
     const relay = await botappRelayHealth();
     let dispatcher = null;
+    let deviceHeartbeat = null;
+    deviceHeartbeat = await ensureDeviceHeartbeatAutostart().catch((error) => ({
+      ...deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat autostart failed.")),
+    }));
     if (relay.ok && relay.relay_authenticated) {
       dispatcher = await ensureDispatcherAutostart().catch((error) => ({
         ...dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed.")),
@@ -5101,6 +5374,8 @@ app.whenReady().then(async () => {
       relayOk: Boolean(relay.ok && relay.relay_authenticated),
       dispatcherStatus: dispatcher?.status || "deferred",
       dispatcherRunning: Boolean(dispatcher?.processRunning),
+      deviceHeartbeatStatus: deviceHeartbeat?.operatorLabelFr || deviceHeartbeat?.status || "unknown",
+      deviceHeartbeatRunning: Boolean(deviceHeartbeat?.processRunning),
       checkedAt: new Date().toISOString(),
     });
 

@@ -136,12 +136,20 @@ test("devices view wires backend heartbeat summary and restart action additively
   assert.match(css, /\.devices-backend-heartbeat-indicator/);
 });
 
-test("restart heartbeat IPC uses canonical publisher without device or dispatcher restart", () => {
+test("restart heartbeat IPC uses canonical service supervisor without device or dispatcher restart", () => {
   const mainSource = readFileSync(new URL("../../electron/main.cjs", import.meta.url), "utf8");
   const preloadSource = readFileSync(new URL("../../electron/preload.cjs", import.meta.url), "utf8");
-  assert.match(mainSource, /device_heartbeat_publisher\.py/);
+  const runtimeHealthSource = readFileSync(new URL("./RuntimeHealth.tsx", import.meta.url), "utf8");
+  assert.match(mainSource, /device_heartbeat_service\.sh/);
+  assert.match(mainSource, /ensureDeviceHeartbeatAutostart/);
   assert.match(mainSource, /botapp:devices:restart-heartbeat-publisher/);
+  assert.match(mainSource, /botapp:device-heartbeat:status/);
   assert.match(preloadSource, /restartHeartbeatPublisher/);
+  assert.match(preloadSource, /deviceHeartbeat/);
+  assert.match(runtimeHealthSource, /Device heartbeat service/);
+  const restartBlock = mainSource.slice(mainSource.indexOf("async function restartDeviceHeartbeatPublisher"));
+  assert.match(restartBlock.slice(0, 2500), /runDeviceHeartbeatWrapper/);
+  assert.doesNotMatch(restartBlock.slice(0, 2500), /runDeviceHeartbeatPublisherOnce\(\)/);
   assert.doesNotMatch(mainSource, /assign_account_slot/);
   assert.doesNotMatch(mainSource, /restart_all_phones/);
 });

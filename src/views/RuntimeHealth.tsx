@@ -1,7 +1,33 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Card, type BadgeTone } from "../design/components";
-import type { BotAppDispatcherHealth, BotAppDispatcherStatus, BotAppRelayHealth } from "../api/types";
+import type { BotAppDeviceHeartbeatHealth, BotAppDeviceHeartbeatOperatorStatus, BotAppDispatcherHealth, BotAppDispatcherStatus, BotAppRelayHealth } from "../api/types";
 import "./runtime-health.css";
+
+const fallbackDeviceHeartbeatHealth: BotAppDeviceHeartbeatHealth = {
+  ok: false,
+  status: "unknown",
+  operatorStatus: "degraded",
+  operatorLabelFr: "Dégradé",
+  serviceId: "device-heartbeat-publisher",
+  paused: false,
+  processRunning: false,
+  pid: null,
+  processCount: 0,
+  duplicateProcess: false,
+  launchdLoaded: false,
+  intervalSeconds: 60,
+  lastCycleAt: null,
+  lastCycleOk: false,
+  lastPublishedCount: 0,
+  lastObservedCount: 0,
+  physicalPhonesSeen: 0,
+  youngestBackendHeartbeatAgeSeconds: null,
+  physicalPhonesInInventory: null,
+  lastError: null,
+  logsPath: null,
+  checkedAt: new Date().toISOString(),
+  message: "Device heartbeat service status unavailable.",
+};
 
 const fallbackDispatcherHealth: BotAppDispatcherHealth = {
   ok: false,
@@ -54,6 +80,14 @@ const statusCopy: Record<BotAppDispatcherStatus, { label: string; detail: string
 };
 
 type DispatcherAction = "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
+type DeviceHeartbeatAction = "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
+
+const deviceHeartbeatOperatorCopy: Record<BotAppDeviceHeartbeatOperatorStatus, { tone: BadgeTone }> = {
+  operational: { tone: "success" },
+  degraded: { tone: "warning" },
+  stopped: { tone: "error" },
+  no_phones_detected: { tone: "info" },
+};
 
 function formatDate(value: string | null) {
   if (!value) return "unknown";
@@ -88,27 +122,47 @@ function Detail({ label, value }: { label: string; value: ReactNode }) {
 
 export function RuntimeHealth() {
   const [health, setHealth] = useState<BotAppDispatcherHealth>(fallbackDispatcherHealth);
+  const [deviceHeartbeatHealth, setDeviceHeartbeatHealth] = useState<BotAppDeviceHeartbeatHealth>(fallbackDeviceHeartbeatHealth);
   const [relayHealth, setRelayHealth] = useState<BotAppRelayHealth>(fallbackRelayHealth);
   const [loading, setLoading] = useState(true);
-  const [busyAction, setBusyAction] = useState<DispatcherAction | "refresh" | null>(null);
+  const [deviceHeartbeatLoading, setDeviceHeartbeatLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState<DispatcherAction | DeviceHeartbeatAction | "refresh" | null>(null);
   const [message, setMessage] = useState("");
 
   async function refresh() {
     setBusyAction("refresh");
     try {
-      const [result, relayResult] = await Promise.all([
+      const [result, relayResult, heartbeatResult] = await Promise.all([
         window.botappDesktop?.dispatcher?.status?.(),
         window.botappDesktop?.relay?.health?.(),
+        window.botappDesktop?.deviceHeartbeat?.status?.(),
       ]);
       setHealth(result ?? fallbackDispatcherHealth);
       setRelayHealth(relayResult ?? fallbackRelayHealth);
+      setDeviceHeartbeatHealth(heartbeatResult ?? fallbackDeviceHeartbeatHealth);
       setMessage(result?.message ?? fallbackDispatcherHealth.message);
     } catch {
       setHealth(fallbackDispatcherHealth);
       setRelayHealth(fallbackRelayHealth);
+      setDeviceHeartbeatHealth(fallbackDeviceHeartbeatHealth);
       setMessage("Dispatcher status unavailable.");
     } finally {
       setLoading(false);
+      setDeviceHeartbeatLoading(false);
+      setBusyAction(null);
+    }
+  }
+
+  async function runDeviceHeartbeatAction(action: DeviceHeartbeatAction) {
+    setBusyAction(action);
+    try {
+      const result = await window.botappDesktop?.deviceHeartbeat?.action?.(action);
+      setDeviceHeartbeatHealth(result ?? fallbackDeviceHeartbeatHealth);
+      setMessage(result?.message ?? "Device heartbeat action completed.");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "unknown error";
+      setMessage(`Device heartbeat action failed safely (${detail}).`);
+    } finally {
       setBusyAction(null);
     }
   }
@@ -135,6 +189,7 @@ export function RuntimeHealth() {
   }, []);
 
   const copy = statusCopy[health.status] ?? statusCopy.unknown;
+  const deviceHeartbeatTone = deviceHeartbeatOperatorCopy[deviceHeartbeatHealth.operatorStatus]?.tone ?? "neutral";
   const preflightReason = useMemo(() => {
     const preflight = health.preflight ?? {};
     const reason = preflight.reason ?? preflight.error;
@@ -191,6 +246,53 @@ export function RuntimeHealth() {
             <Detail label="Supabase REST" value={health.supabaseRestStatus} />
             <Detail label="device count online" value={health.deviceCountOnline ?? "unknown"} />
             <Detail label="last error / reason" value={health.lastError || "none"} />
+          </div>
+        )}
+      </Card>
+
+      <Card
+        title="Device heartbeat service"
+        subtitle="Publie les heartbeats ADB vers le backend pour garder les téléphones physiques assignables. Ce service ne lance ni login Instagram, ni runs, ni actions sociales."
+        actions={
+          <div className="runtime-actions">
+            <Button variant="ghost" onClick={() => void refresh()} disabled={Boolean(busyAction)}>Refresh</Button>
+            <Button variant="primary" onClick={() => void runDeviceHeartbeatAction("resume")} disabled={Boolean(busyAction)}>
+              {deviceHeartbeatHealth.status === "paused" || deviceHeartbeatHealth.status === "stopped" ? "Start / Resume" : "Resume"}
+            </Button>
+            <Button variant="secondary" onClick={() => void runDeviceHeartbeatAction("restart")} disabled={Boolean(busyAction)}>Restart</Button>
+            {deviceHeartbeatHealth.duplicateProcess ? (
+              <Button variant="primary" onClick={() => void runDeviceHeartbeatAction("fix-duplicate")} disabled={Boolean(busyAction)}>Fix duplicate</Button>
+            ) : null}
+            <Button variant="ghost" onClick={() => void runDeviceHeartbeatAction("logs")} disabled={Boolean(busyAction)}>Open logs</Button>
+          </div>
+        }
+      >
+        <div className={`runtime-device-heartbeat-banner ${deviceHeartbeatHealth.operatorStatus}`}>
+          <div>
+            <strong>{deviceHeartbeatHealth.operatorLabelFr}</strong>
+            <span>{deviceHeartbeatHealth.message}</span>
+          </div>
+          <Badge tone={deviceHeartbeatTone} dot={deviceHeartbeatHealth.operatorStatus === "operational"}>
+            {deviceHeartbeatHealth.operatorLabelFr}
+          </Badge>
+        </div>
+        {deviceHeartbeatLoading ? (
+          <div className="empty-state"><strong>Loading device heartbeat service</strong><span>Reading local launchd and last publish cycle.</span></div>
+        ) : (
+          <div className="runtime-health-grid">
+            <Detail label="service status" value={deviceHeartbeatHealth.status} />
+            <Detail label="process running" value={boolLabel(deviceHeartbeatHealth.processRunning)} />
+            <Detail label="process pid" value={deviceHeartbeatHealth.pid ?? "none"} />
+            <Detail label="process count" value={deviceHeartbeatHealth.processCount} />
+            <Detail label="launchd loaded" value={boolLabel(deviceHeartbeatHealth.launchdLoaded)} />
+            <Detail label="publish interval" value={`${deviceHeartbeatHealth.intervalSeconds}s`} />
+            <Detail label="last cycle at" value={formatDate(deviceHeartbeatHealth.lastCycleAt)} />
+            <Detail label="last cycle ok" value={boolLabel(deviceHeartbeatHealth.lastCycleOk)} />
+            <Detail label="physical phones seen (ADB)" value={deviceHeartbeatHealth.physicalPhonesSeen} />
+            <Detail label="youngest backend heartbeat age" value={formatAge(deviceHeartbeatHealth.youngestBackendHeartbeatAgeSeconds)} />
+            <Detail label="physical phones in inventory" value={deviceHeartbeatHealth.physicalPhonesInInventory ?? "unknown"} />
+            <Detail label="last published count" value={deviceHeartbeatHealth.lastPublishedCount} />
+            <Detail label="last error / reason" value={deviceHeartbeatHealth.lastError || "none"} />
           </div>
         )}
       </Card>

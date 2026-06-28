@@ -2326,6 +2326,37 @@ export type BotAppRuntimeIntegrationStatus = {
   environment: "local" | "development" | "production";
 };
 
+export type BotAppDeviceHeartbeatServiceStatus = "running" | "paused" | "stopped" | "degraded" | "starting" | "unhealthy" | "unknown";
+
+export type BotAppDeviceHeartbeatOperatorStatus = "operational" | "degraded" | "stopped" | "no_phones_detected";
+
+export type BotAppDeviceHeartbeatHealth = {
+  ok: boolean;
+  status: BotAppDeviceHeartbeatServiceStatus;
+  operatorStatus: BotAppDeviceHeartbeatOperatorStatus;
+  operatorLabelFr: string;
+  serviceId: string;
+  paused: boolean;
+  processRunning: boolean;
+  pid: number | null;
+  processCount: number;
+  duplicateProcess: boolean;
+  launchdLoaded: boolean;
+  intervalSeconds: number;
+  lastCycleAt: string | null;
+  lastCycleOk: boolean;
+  lastPublishedCount: number;
+  lastObservedCount: number;
+  physicalPhonesSeen: number;
+  youngestBackendHeartbeatAgeSeconds: number | null;
+  physicalPhonesInInventory: number | null;
+  lastError: string | null;
+  logsPath: string | null;
+  checkedAt: string;
+  message: string;
+  action?: "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
+};
+
 export type BotAppDispatcherStatus = "running" | "paused" | "stopped" | "unhealthy" | "starting" | "unknown";
 
 export type BotAppDispatcherHealth = {
