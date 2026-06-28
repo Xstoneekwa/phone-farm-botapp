@@ -708,6 +708,11 @@
   padding-left: 18px;
 }
 
+.devices-delete-history-note {
+  font-size: 12px;
+  color: #44586a;
+}
+
 .devices-backend-heartbeat-indicator {
   display: grid;
   gap: 4px;

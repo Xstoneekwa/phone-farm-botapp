@@ -185,6 +185,7 @@ test("devices view wires backend heartbeat summary and restart action additively
   assert.match(devicesView, /Relancer les heartbeats/);
   assert.match(devicesView, /device-backend-heartbeat/);
   assert.match(devicesView, /devices-delete-preflight/);
+  assert.match(devicesView, /releasedAssignmentsInfoFr/);
   assert.match(devicesView, /deletePreflight/);
   assert.doesNotMatch(devicesView, /device_heartbeats/);
   assert.match(css, /\.devices-backend-heartbeat-summary/);

@@ -783,7 +783,10 @@ function DeleteDeviceModal({
               </div>
             ) : (
               <>
-                <p>Cette action retire ce téléphone de l'inventaire opérationnel. Elle ne supprime aucun compte client ou Instagram.</p>
+                <p>Cette action retire ce téléphone de l'inventaire opérationnel. Les historiques d'assignation déjà terminés sont conservés pour audit. Aucun compte client ou Instagram ne sera supprimé.</p>
+                {typeof preflight.releasedAssignmentsInfoFr === "string" && preflight.releasedAssignmentsInfoFr ? (
+                  <p className="devices-delete-history-note">{preflight.releasedAssignmentsInfoFr}</p>
+                ) : null}
                 <label className="devices-delete-confirm">
                   <span>Saisissez exactement le nom du téléphone pour confirmer</span>
                   <input
