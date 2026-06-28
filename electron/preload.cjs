@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   },
   devices: {
     list: (input) => ipcRenderer.invoke("botapp:devices:list", input),
+    deletePreflight: (input) => ipcRenderer.invoke("botapp:devices:delete-preflight", input),
+    delete: (input) => ipcRenderer.invoke("botapp:devices:delete", input),
     restartHeartbeatPublisher: () => ipcRenderer.invoke("botapp:devices:restart-heartbeat-publisher"),
     subscribeHeartbeatRecovery: (callback) => {
       const handler = (_event, payload) => callback(payload);

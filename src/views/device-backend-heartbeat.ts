@@ -130,9 +130,46 @@ export type BackendHeartbeatSummary = {
   expired: number;
   unknown: number;
   totalPhysical: number;
+  assignableCapacityCount: number;
+  offlineInventoryCount: number;
   globalReady: boolean;
   globalLabelFr: string;
+  secondaryAlertFr: string | null;
 };
+
+const DISALLOWED_INVENTORY_STATUSES = new Set([
+  "disabled",
+  "maintenance",
+  "offline",
+  "unavailable",
+  "resting",
+  "cooldown",
+  "retired",
+  "archived",
+]);
+
+export function isDeviceInventoryStatusEligible(device: Device) {
+  const status = String(device.backendStatus || device.status || "").trim().toLowerCase();
+  if (!status || DISALLOWED_INVENTORY_STATUSES.has(status)) return false;
+  return status === "available" || status === "active" || status === "online" || status === "connected";
+}
+
+export function hasSelectableAssignmentSlot(device: Device) {
+  if (Array.isArray(device.appInstances) && device.appInstances.length) {
+    return device.appInstances.some((app) => app.selectable === true);
+  }
+  return Number(device.appInstancesAvailableCount || 0) > 0;
+}
+
+/** Mirrors assignment-live-capacity: ADB present + fresh heartbeat + eligible inventory + free clone slot. */
+export function isDeviceLiveAssignmentCapacity(device: Device, now = new Date()) {
+  if (device.deviceKind !== "physical_phone") return false;
+  if (device.localAdbStatus !== "device") return false;
+  const projection = projectBackendHeartbeat(device, { now });
+  if (!projection?.assignable) return false;
+  if (!isDeviceInventoryStatusEligible(device)) return false;
+  return hasSelectableAssignmentSlot(device);
+}
 
 export function summarizeBackendHeartbeats(devices: Device[], now = new Date()): BackendHeartbeatSummary {
   const physical = devices.filter((device) => device.deviceKind === "physical_phone");
@@ -147,16 +184,40 @@ export function summarizeBackendHeartbeats(devices: Device[], now = new Date()):
     else expired += 1;
   }
 
-  const globalReady = physical.length > 0 && expired === 0 && unknown === 0 && active === physical.length;
+  const assignableDevices = physical.filter((device) => isDeviceLiveAssignmentCapacity(device, now));
+  const offlineInventoryCount = physical.filter((device) => device.localAdbStatus !== "device").length;
+  const assignableCapacityCount = assignableDevices.length;
+  const globalReady = assignableCapacityCount > 0;
+
+  let globalLabelFr = "Assignations bloquées : heartbeat requis";
+  if (globalReady) {
+    const names = assignableDevices.map((device) => device.name).filter(Boolean);
+    if (assignableCapacityCount === 1) {
+      globalLabelFr = `Assignations prêtes : ${names[0] || "1 téléphone"} actif`;
+    } else {
+      globalLabelFr = `Assignations prêtes : ${assignableCapacityCount} Samsung actifs`;
+    }
+  } else if (physical.length === 0) {
+    globalLabelFr = "Assignations bloquées : aucun téléphone physique";
+  }
+
+  let secondaryAlertFr: string | null = null;
+  if (offlineInventoryCount > 0) {
+    secondaryAlertFr = offlineInventoryCount === 1
+      ? "1 téléphone inventorié n'est pas connecté localement"
+      : `${offlineInventoryCount} téléphones inventoriés ne sont pas connectés localement`;
+  }
+
   return {
     active,
     expired,
     unknown,
     totalPhysical: physical.length,
+    assignableCapacityCount,
+    offlineInventoryCount,
     globalReady,
-    globalLabelFr: globalReady
-      ? "Prêt pour les nouvelles assignations"
-      : "Assignations bloquées : heartbeat requis",
+    globalLabelFr,
+    secondaryAlertFr,
   };
 }
 

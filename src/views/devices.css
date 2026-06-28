@@ -670,6 +670,44 @@
   color: #172033;
 }
 
+.devices-backend-heartbeat-secondary {
+  font-size: 11px;
+  color: #7a5b12;
+}
+
+.devices-delete-preflight {
+  display: grid;
+  gap: 10px;
+}
+
+.devices-delete-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  font-size: 12px;
+}
+
+.devices-delete-grid strong {
+  color: #172033;
+}
+
+.devices-delete-select,
+.devices-delete-confirm {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.devices-delete-select select,
+.devices-delete-confirm input {
+  width: 100%;
+}
+
+.devices-modal-delete ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
 .devices-backend-heartbeat-indicator {
   display: grid;
   gap: 4px;

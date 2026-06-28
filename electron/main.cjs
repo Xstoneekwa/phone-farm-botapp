@@ -619,6 +619,28 @@ const botappEndpointRegistry = [
     testStrategy: "fetch",
   },
   {
+    id: "devices_delete_preflight",
+    name: "Devices delete preflight",
+    method: "POST",
+    path: "/api/instagram-dashboard/devices/delete-phone-preflight",
+    usedBy: ["Devices"],
+    purpose: "Load safe delete preflight for an operational phone inventory row",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "devices_delete",
+    name: "Devices delete phone",
+    method: "POST",
+    path: "/api/instagram-dashboard/devices/delete-phone",
+    usedBy: ["Devices"],
+    purpose: "Remove an empty phone from operational inventory after explicit confirmation",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
     id: "run_control_health",
     name: "Run Control dispatcher health",
     method: "GET",
@@ -3942,6 +3964,28 @@ async function botappDevicesList(input = {}) {
   }
 }
 
+async function deviceDeletePreflight(deviceId) {
+  const normalizedDeviceId = String(deviceId || "").trim();
+  if (!normalizedDeviceId) return { ok: false, error: "Missing device id." };
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) return { ok: false, error: "Configure the relay URL in API / Webhooks / Keys to delete devices." };
+  return dashboardRequestResult("POST", "devices_delete_preflight", { device_id: normalizedDeviceId });
+}
+
+async function deviceDelete(input = {}) {
+  const deviceId = String(input?.deviceId || input?.device_id || "").trim();
+  const confirmationName = String(input?.confirmationName || input?.confirmation_name || "").trim();
+  if (!deviceId) return { ok: false, error: "Missing device id." };
+  if (!confirmationName) return { ok: false, error: "Missing confirmation name." };
+  const cfg = compassConfig();
+  if (!cfg.relayUrl) return { ok: false, error: "Configure the relay URL in API / Webhooks / Keys to delete devices." };
+  return dashboardRequestResult("POST", "devices_delete", {
+    device_id: deviceId,
+    confirmation_name: confirmationName,
+    source: "BotApp",
+  });
+}
+
 function sleepMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -4263,6 +4307,8 @@ async function fetchPhysicalDeviceHeartbeatSnapshot() {
       .filter((row) => row && typeof row === "object")
       .map((row) => ({
         deviceKind: String(row?.device_kind || row?.kind || "physical_phone").includes("emulator") ? "emulator" : "physical_phone",
+        adbSerial: String(row?.adb_serial || row?.adbSerial || "").trim(),
+        name: String(row?.device_name || row?.name || row?.phone_name || "").trim(),
         backendLastSeenAt: String(row?.heartbeat_last_seen_at || row?.last_seen_at || ""),
         backendHeartbeatDbStatus: String(row?.heartbeat_status || row?.status || "unknown").toLowerCase(),
       }))
@@ -4270,6 +4316,14 @@ async function fetchPhysicalDeviceHeartbeatSnapshot() {
   } catch {
     return null;
   }
+}
+
+function adbPresentPhysicalHeartbeatDevices(physicalRows, localAdb) {
+  const adbDevices = localAdb?.devices instanceof Map ? localAdb.devices : new Map();
+  return (physicalRows || []).filter((device) => {
+    const serial = String(device?.adbSerial || "").trim();
+    return serial && adbDevices.get(serial) === "device";
+  });
 }
 
 async function enrichDeviceHeartbeatStatusLight(normalized) {
@@ -4485,18 +4539,40 @@ async function runDeviceHeartbeatRecoveryJob(job) {
       skipped_count: 0,
     });
 
+    const localAdb = localAdbDeviceMap();
+    const initialPhysical = await fetchPhysicalDeviceHeartbeatSnapshot();
+    const offlineExcludedCount = initialPhysical
+      ? Math.max(0, initialPhysical.length - adbPresentPhysicalHeartbeatDevices(initialPhysical, localAdb).length)
+      : 0;
+    if (offlineExcludedCount > 0) {
+      progress({
+        ok: true,
+        stage: "waiting_heartbeat",
+        message: offlineExcludedCount === 1
+          ? "1 téléphone hors ligne non inclus dans la vérification"
+          : `${offlineExcludedCount} téléphones hors ligne non inclus dans la vérification`,
+        published_count: service.lastPublishedCount || 0,
+        skipped_count: 0,
+        offline_excluded_count: offlineExcludedCount,
+      });
+    }
+
     const deadline = Date.now() + 45000;
     while (Date.now() < deadline && !job.aborted) {
       await sleepMs(2000);
       const physical = await fetchPhysicalDeviceHeartbeatSnapshot();
       if (!physical) continue;
-      if (!physical.length || physical.every(isPhysicalDeviceAssignmentHeartbeatLive)) {
+      const adbPresent = adbPresentPhysicalHeartbeatDevices(physical, localAdb);
+      if (!adbPresent.length || adbPresent.every(isPhysicalDeviceAssignmentHeartbeatLive)) {
         progress({
           ok: true,
           stage: "heartbeat_received",
-          message: "Heartbeat reçu — prêt",
+          message: offlineExcludedCount > 0
+            ? "Heartbeat reçu — prêt (téléphones hors ligne exclus de la vérification)"
+            : "Heartbeat reçu — prêt",
           published_count: service.lastPublishedCount || 0,
           skipped_count: 0,
+          offline_excluded_count: offlineExcludedCount,
         });
         return;
       }
@@ -5424,6 +5500,8 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:device-heartbeat:ensure", () => ensureDeviceHeartbeatAutostart().catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat autostart failed."))));
   ipcMain.handle("botapp:device-heartbeat:action", (_event, action) => deviceHeartbeatAction(action).catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat action crashed safely."))));
   ipcMain.handle("botapp:devices:list", (_event, input) => botappDevicesList(input));
+  ipcMain.handle("botapp:devices:delete-preflight", (_event, input) => deviceDeletePreflight(input?.deviceId || input?.device_id || input));
+  ipcMain.handle("botapp:devices:delete", (_event, input) => deviceDelete(input));
   ipcMain.handle("botapp:devices:restart-heartbeat-publisher", (event) => {
     try {
       return startDeviceHeartbeatRecovery(event.sender);

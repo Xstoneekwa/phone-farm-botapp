@@ -439,7 +439,17 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
       {panel === "add" ? <AddPhoneDrawer onClose={() => setPanel(null)} onPrepared={() => setMessage("Add phone is backend_pending from BotApp. No fake phone was created.")} /> : null}
       {panel === "history" ? <HistoryDrawer history={history} onClose={() => setPanel(null)} /> : null}
       {panel === "edit" && selectedDevice ? <EditDeviceDrawer device={selectedDevice} onClose={() => setPanel(null)} onPrepared={() => setMessage("Edit device payload prepared for secure relay.")} /> : null}
-      {panel === "delete" && selectedDevice ? <DeleteDeviceModal device={selectedDevice} onClose={() => setPanel(null)} onPrepared={() => setMessage("Delete device payload prepared for secure relay.")} /> : null}
+      {panel === "delete" && selectedDevice ? (
+        <DeleteDeviceModal
+          devices={devices.filter((device) => device.deviceKind === "physical_phone")}
+          initialDevice={selectedDevice}
+          onClose={() => setPanel(null)}
+          onDeleted={async (deviceName) => {
+            setMessage(`${deviceName} retiré de l'inventaire opérationnel.`);
+            await onRefresh?.();
+          }}
+        />
+      ) : null}
       {confirmState ? <RestartModal confirmState={confirmState} onClose={() => setConfirmState(null)} onConfirm={confirmRestart} /> : null}
     </div>
   );
@@ -474,6 +484,7 @@ function BackendHeartbeatSummary({ devices }: { devices: Device[] }) {
     <div className={`devices-backend-heartbeat-summary ${summary.globalReady ? "ready" : "blocked"}`}>
       <span>Heartbeats backend : {summary.active} actifs / {summary.expired} expirés / {summary.unknown} inconnus</span>
       <strong>{summary.globalLabelFr}</strong>
+      {summary.secondaryAlertFr ? <span className="devices-backend-heartbeat-secondary">{summary.secondaryAlertFr}</span> : null}
     </div>
   );
 }
@@ -672,16 +683,125 @@ function EditDeviceDrawer({ device, onClose, onPrepared }: { device: Device; onC
   );
 }
 
-function DeleteDeviceModal({ device, onClose, onPrepared }: { device: Device; onClose: () => void; onPrepared: () => void }) {
+function DeleteDeviceModal({
+  devices,
+  initialDevice,
+  onClose,
+  onDeleted,
+}: {
+  devices: Device[];
+  initialDevice: Device;
+  onClose: () => void;
+  onDeleted: (deviceName: string) => void | Promise<void>;
+}) {
+  const [selectedId, setSelectedId] = useState(initialDevice.id);
+  const [confirmationName, setConfirmationName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [preflight, setPreflight] = useState<Record<string, unknown> | null>(null);
+  const selectedDevice = devices.find((device) => device.id === selectedId) ?? initialDevice;
+  const canDelete = Boolean(
+    preflight?.deletable === true &&
+    confirmationName === String(preflight?.displayName || selectedDevice.name) &&
+    typeof window.botappDesktop?.devices?.delete === "function",
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    setPreflight(null);
+    void window.botappDesktop?.devices?.deletePreflight?.({ deviceId: selectedId })?.then((result) => {
+      if (cancelled) return;
+      if (!result?.ok) {
+        setError(result?.error || "Impossible de charger la vérification de suppression.");
+        setLoading(false);
+        return;
+      }
+      setPreflight(result.data || null);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  async function confirmDelete() {
+    if (!canDelete || submitting) return;
+    setSubmitting(true);
+    setError("");
+    const result = await window.botappDesktop!.devices!.delete!({
+      deviceId: selectedId,
+      confirmationName,
+    });
+    if (!result?.ok) {
+      setError(result?.error || "La suppression a échoué.");
+      setSubmitting(false);
+      return;
+    }
+    await onDeleted(String(preflight?.displayName || selectedDevice.name));
+    onClose();
+  }
+
+  const blockingReasons = Array.isArray(preflight?.blockingReasonsFr)
+    ? preflight!.blockingReasonsFr.filter((reason): reason is string => typeof reason === "string")
+    : [];
+
   return (
     <div className="devices-modal-backdrop" role="dialog" aria-modal="true" aria-label="Delete device">
-      <div className="devices-modal">
-        <h3>Delete device?</h3>
-        <p><strong>{device.name}</strong> will be removed from the future phone inventory only after the secure relay validates there are no active assignments, phone views, or runtime locks.</p>
-        <p className="devices-warning">This is a prepared danger action. No phone is removed from inventory from this screen.</p>
+      <div className="devices-modal devices-modal-delete">
+        <h3>Supprimer un téléphone ?</h3>
+        {devices.length > 1 ? (
+          <label className="devices-delete-select">
+            <span>Téléphone</span>
+            <select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setConfirmationName(""); }}>
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>{device.name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {loading ? <p>Chargement de la vérification…</p> : null}
+        {!loading && preflight ? (
+          <div className="devices-delete-preflight">
+            <p><strong>{String(preflight.displayName || selectedDevice.name)}</strong></p>
+            <div className="devices-delete-grid">
+              <span>Statut ADB <strong>{selectedDevice.localAdbStatus || "unknown"}</strong></span>
+              <span>Clones <strong>{Number(preflight.cloneCount || 0)}</strong></span>
+              <span>Occupés/réservés <strong>{Number(preflight.occupiedCloneCount || 0)}</strong></span>
+              <span>Assignations actives <strong>{Number(preflight.activeAssignmentCount || 0)}</strong></span>
+              <span>Comptes Instagram liés <strong>{Number(preflight.linkedInstagramAccountCount || 0)}</strong></span>
+              <span>Runs actifs <strong>{Number(preflight.activeRunRequestCount || 0)}</strong></span>
+            </div>
+            {blockingReasons.length ? (
+              <div className="devices-warning">
+                <strong>Suppression refusée</strong>
+                <ul>
+                  {blockingReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                </ul>
+              </div>
+            ) : (
+              <>
+                <p>Cette action retire ce téléphone de l'inventaire opérationnel. Elle ne supprime aucun compte client ou Instagram.</p>
+                <label className="devices-delete-confirm">
+                  <span>Saisissez exactement le nom du téléphone pour confirmer</span>
+                  <input
+                    value={confirmationName}
+                    placeholder={String(preflight.displayName || selectedDevice.name)}
+                    onChange={(event) => setConfirmationName(event.target.value)}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+        ) : null}
+        {error ? <p className="devices-warning">{error}</p> : null}
         <footer>
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" className="danger" onClick={() => { onPrepared(); onClose(); }}>Delete</button>
+          <button type="button" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button type="button" className="danger" disabled={!canDelete || submitting} onClick={() => void confirmDelete()}>
+            {submitting ? "Suppression…" : "Delete"}
+          </button>
         </footer>
       </div>
     </div>

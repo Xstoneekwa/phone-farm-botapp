@@ -6,6 +6,7 @@ import {
   buildHeartbeatDiagnostic,
   formatRelativeTimeFr,
   isAssignmentHeartbeatLive,
+  isDeviceLiveAssignmentCapacity,
   projectBackendHeartbeat,
   summarizeBackendHeartbeats,
 } from "./device-backend-heartbeat.ts";
@@ -121,7 +122,59 @@ test("summary counts physical phones only", () => {
   assert.equal(summary.totalPhysical, 2);
   assert.equal(summary.active, 1);
   assert.equal(summary.expired, 1);
+  assert.equal(summary.assignableCapacityCount, 1);
+  assert.equal(summary.globalReady, true);
+  assert.match(summary.globalLabelFr, /Assignations prêtes/);
+});
+
+test("two adb phones ready and one offline inventory does not block globally", () => {
+  const summary = summarizeBackendHeartbeats(
+    [
+      physicalDevice({ id: "phone-1", name: "Samsung A16-01" }),
+      physicalDevice({ id: "phone-2", name: "Samsung A16-02" }),
+      physicalDevice({
+        id: "phone-legacy",
+        name: "Entry 2C Physical Outreach Phone",
+        localAdbStatus: "not_seen",
+        backendLastSeenAt: "",
+        backendHeartbeatDbStatus: "unknown",
+        heartbeatStatus: "unknown",
+      }),
+    ],
+    now,
+  );
+  assert.equal(summary.assignableCapacityCount, 2);
+  assert.equal(summary.globalReady, true);
+  assert.match(summary.globalLabelFr, /2 Samsung actifs/);
+  assert.equal(summary.secondaryAlertFr, "1 téléphone inventorié n'est pas connecté localement");
+});
+
+test("zero assignable capacity keeps global block honest", () => {
+  const summary = summarizeBackendHeartbeats(
+    [
+      physicalDevice({
+        backendLastSeenAt: new Date(now.getTime() - ASSIGNMENT_HEARTBEAT_STALE_MS - 1000).toISOString(),
+        backendHeartbeatDbStatus: "stale",
+      }),
+      physicalDevice({
+        id: "phone-legacy",
+        name: "Entry 2C Physical Outreach Phone",
+        localAdbStatus: "not_seen",
+        backendLastSeenAt: "",
+        backendHeartbeatDbStatus: "unknown",
+      }),
+    ],
+    now,
+  );
+  assert.equal(summary.assignableCapacityCount, 0);
   assert.equal(summary.globalReady, false);
+  assert.match(summary.globalLabelFr, /Assignations bloquées/);
+});
+
+test("live assignment capacity requires adb, heartbeat, inventory status and selectable clone", () => {
+  assert.equal(isDeviceLiveAssignmentCapacity(physicalDevice(), now), true);
+  assert.equal(isDeviceLiveAssignmentCapacity(physicalDevice({ localAdbStatus: "not_seen" }), now), false);
+  assert.equal(isDeviceLiveAssignmentCapacity(physicalDevice({ appInstancesAvailableCount: 0, appInstances: [] }), now), false);
 });
 
 test("devices view wires backend heartbeat summary and restart action additively", () => {
@@ -131,8 +184,11 @@ test("devices view wires backend heartbeat summary and restart action additively
   assert.match(devicesView, /BackendHeartbeatIndicator/);
   assert.match(devicesView, /Relancer les heartbeats/);
   assert.match(devicesView, /device-backend-heartbeat/);
+  assert.match(devicesView, /devices-delete-preflight/);
+  assert.match(devicesView, /deletePreflight/);
   assert.doesNotMatch(devicesView, /device_heartbeats/);
   assert.match(css, /\.devices-backend-heartbeat-summary/);
+  assert.match(css, /\.devices-backend-heartbeat-secondary/);
   assert.match(css, /\.devices-backend-heartbeat-indicator/);
 });
 
@@ -145,6 +201,10 @@ test("restart heartbeat IPC uses async non-blocking recovery supervisor", () => 
   assert.match(mainSource, /runDeviceHeartbeatWrapperAsync/);
   assert.match(mainSource, /runDeviceHeartbeatRecoveryJob/);
   assert.match(mainSource, /botapp:devices:heartbeat-recovery/);
+  assert.match(mainSource, /adbPresentPhysicalHeartbeatDevices/);
+  assert.match(mainSource, /offline_excluded_count/);
+  assert.match(mainSource, /botapp:devices:delete-preflight/);
+  assert.match(mainSource, /botapp:devices:delete/);
   assert.match(mainSource, /device_heartbeat_service\.sh/);
   assert.match(mainSource, /ensureDeviceHeartbeatAutostart/);
   assert.match(preloadSource, /restartHeartbeatPublisher/);
@@ -158,7 +218,8 @@ test("restart heartbeat IPC uses async non-blocking recovery supervisor", () => 
   assert.doesNotMatch(recoveryBlock.slice(0, 4000), /spawnSync\(/);
   assert.match(recoveryBlock.slice(0, 4000), /runDeviceHeartbeatWrapperAsync/);
   assert.match(recoveryBlock.slice(0, 4000), /fetchPhysicalDeviceHeartbeatSnapshot/);
-  assert.doesNotMatch(mainSource, /assign_account_slot/);
+  assert.match(recoveryBlock.slice(0, 6000), /adbPresentPhysicalHeartbeatDevices/);
+  assert.doesNotMatch(recoveryBlock.slice(0, 6000), /physical\.every\(isPhysicalDeviceAssignmentHeartbeatLive\)/);
   assert.doesNotMatch(mainSource, /restart_all_phones/);
 });
 

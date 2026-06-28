@@ -150,6 +150,8 @@ interface Window {
     };
     devices?: {
       list: (input?: { format?: "raw" | "normalized" }) => Promise<{ ok: boolean; data?: Record<string, unknown>[]; error?: string | null }>;
+      deletePreflight?: (input: { deviceId: string } | string) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null; status?: number }>;
+      delete?: (input: { deviceId: string; confirmationName: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null; status?: number }>;
       restartHeartbeatPublisher?: () => Promise<{
         ok: boolean;
         started?: boolean;
