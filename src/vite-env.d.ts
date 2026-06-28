@@ -152,6 +152,7 @@ interface Window {
       list: (input?: { format?: "raw" | "normalized" }) => Promise<{ ok: boolean; data?: Record<string, unknown>[]; error?: string | null }>;
       restartHeartbeatPublisher?: () => Promise<{
         ok: boolean;
+        started?: boolean;
         stage?: string;
         message?: string;
         error?: string | null;
@@ -159,6 +160,7 @@ interface Window {
         skipped_count?: number;
         data?: Record<string, unknown>[];
       }>;
+      subscribeHeartbeatRecovery?: (callback: (result: Record<string, unknown>) => void) => (() => void) | undefined;
     };
     profiles?: {
       details: (accountId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;

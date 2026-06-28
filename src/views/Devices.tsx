@@ -170,6 +170,13 @@ const initialAddPhoneForm: AddPhoneFormState = {
   hostLabel: "",
 };
 
+const HEARTBEAT_RECOVERY_BUSY_STAGES = new Set([
+  "service_verifying",
+  "waiting_heartbeat",
+  "service_restart",
+  "recovery_in_progress",
+]);
+
 export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; onAction: (action: string, target: string, danger?: boolean) => void; onRefresh?: () => Promise<void> | void }) {
   const [openViews, setOpenViews] = useState<DeviceViewState[]>([]);
   const [panel, setPanel] = useState<DevicePanel>(null);
@@ -192,11 +199,25 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
     const unsubscribe = subscribeDeviceViewState((state) => {
       if (!cancelled) setOpenViews(state);
     });
+    const unsubscribeRecovery = window.botappDesktop?.devices?.subscribeHeartbeatRecovery?.((result) => {
+      if (cancelled) return;
+      setLastPublisherResult(result as Record<string, unknown>);
+      const stage = String(result?.stage || "");
+      if (stage) setHeartbeatRestartStage(stage);
+      if (result?.message) setMessage(String(result.message));
+      if (stage === "heartbeat_received" && result?.ok) {
+        void onRefresh?.();
+      }
+      if (stage === "heartbeat_timeout" || stage === "service_failed") {
+        void onRefresh?.();
+      }
+    });
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeRecovery?.();
     };
-  }, []);
+  }, [onRefresh]);
 
   const savedCount = devices.length;
   const activeCount = connectedDevices(devices).length;
@@ -337,25 +358,13 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
   }
 
   async function restartHeartbeats() {
-    if (!canRestartHeartbeats) return;
-    setMessage("Relance du service heartbeat…");
-    setHeartbeatRestartStage("service_restart");
+    if (!canRestartHeartbeats || (heartbeatRestartStage && HEARTBEAT_RECOVERY_BUSY_STAGES.has(heartbeatRestartStage))) return;
+    setMessage("Vérification du service…");
+    setHeartbeatRestartStage("service_verifying");
     const result = await window.botappDesktop!.devices!.restartHeartbeatPublisher!();
-    setLastPublisherResult(result as Record<string, unknown>);
-    if (result.stage === "heartbeat_received" || result.ok) {
-      setHeartbeatRestartStage("heartbeat_received");
-      setMessage(result.message || "Heartbeat reçu — prêt");
-      if (onRefresh) await onRefresh();
-      return;
-    }
-    if (result.stage === "heartbeat_timeout") {
-      setHeartbeatRestartStage("heartbeat_timeout");
-      setMessage(result.message || "Le téléphone reste non assignable.");
-      if (onRefresh) await onRefresh();
-      return;
-    }
-    setHeartbeatRestartStage("service_failed");
-    setMessage(result.message || result.error || "Impossible de relancer le service heartbeat devices.");
+    if (result?.message) setMessage(String(result.message));
+    if (result?.stage) setHeartbeatRestartStage(String(result.stage));
+    if (result?.started === false) return;
   }
 
   async function copyHeartbeatDiagnostic() {
@@ -389,7 +398,7 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
               <DeviceRow
                 key={device.id}
                 device={device}
-                heartbeatPending={heartbeatRestartStage === "service_restart"}
+                heartbeatPending={Boolean(heartbeatRestartStage && HEARTBEAT_RECOVERY_BUSY_STAGES.has(heartbeatRestartStage))}
                 isOpen={isViewOpen(openViews, device)}
                 onOpen={() => void openPhoneView(device)}
                 onClose={() => void closeOne(device)}
@@ -403,7 +412,7 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
           <button type="button" className="device-action add" onClick={() => openPanel("add")}>+ Add</button>
           <button type="button" className="device-action" onClick={() => void refreshDevices()}>Refresh</button>
           {canRestartHeartbeats ? (
-            <button type="button" className="device-action device-action-heartbeat" onClick={() => void restartHeartbeats()} disabled={heartbeatRestartStage === "service_restart"}>
+            <button type="button" className="device-action device-action-heartbeat" onClick={() => void restartHeartbeats()} disabled={Boolean(heartbeatRestartStage && HEARTBEAT_RECOVERY_BUSY_STAGES.has(heartbeatRestartStage))}>
               Relancer les heartbeats
             </button>
           ) : null}
@@ -418,7 +427,8 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
       </div>
 
       {message ? <div className="devices-message">{message}</div> : null}
-      {heartbeatRestartStage === "service_restart" ? <div className="devices-message devices-message-heartbeat">Attente du heartbeat backend…</div> : null}
+      {heartbeatRestartStage === "service_verifying" ? <div className="devices-message devices-message-heartbeat">Vérification du service…</div> : null}
+      {heartbeatRestartStage === "waiting_heartbeat" ? <div className="devices-message devices-message-heartbeat">Attente d'un heartbeat récent…</div> : null}
       {heartbeatRestartStage === "heartbeat_timeout" || heartbeatRestartStage === "service_failed" ? (
         <div className="devices-heartbeat-diagnostic-actions">
           <button type="button" className="device-action" onClick={() => void copyHeartbeatDiagnostic()}>Copier le diagnostic</button>

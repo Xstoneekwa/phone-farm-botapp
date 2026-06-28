@@ -136,20 +136,28 @@ test("devices view wires backend heartbeat summary and restart action additively
   assert.match(css, /\.devices-backend-heartbeat-indicator/);
 });
 
-test("restart heartbeat IPC uses canonical service supervisor without device or dispatcher restart", () => {
+test("restart heartbeat IPC uses async non-blocking recovery supervisor", () => {
   const mainSource = readFileSync(new URL("../../electron/main.cjs", import.meta.url), "utf8");
   const preloadSource = readFileSync(new URL("../../electron/preload.cjs", import.meta.url), "utf8");
+  const devicesView = readFileSync(new URL("./Devices.tsx", import.meta.url), "utf8");
   const runtimeHealthSource = readFileSync(new URL("./RuntimeHealth.tsx", import.meta.url), "utf8");
+  assert.match(mainSource, /startDeviceHeartbeatRecovery/);
+  assert.match(mainSource, /runDeviceHeartbeatWrapperAsync/);
+  assert.match(mainSource, /runDeviceHeartbeatRecoveryJob/);
+  assert.match(mainSource, /botapp:devices:heartbeat-recovery/);
   assert.match(mainSource, /device_heartbeat_service\.sh/);
   assert.match(mainSource, /ensureDeviceHeartbeatAutostart/);
-  assert.match(mainSource, /botapp:devices:restart-heartbeat-publisher/);
-  assert.match(mainSource, /botapp:device-heartbeat:status/);
   assert.match(preloadSource, /restartHeartbeatPublisher/);
-  assert.match(preloadSource, /deviceHeartbeat/);
+  assert.match(preloadSource, /subscribeHeartbeatRecovery/);
+  assert.match(devicesView, /subscribeHeartbeatRecovery/);
+  assert.match(devicesView, /service_verifying/);
+  assert.match(devicesView, /waiting_heartbeat/);
   assert.match(runtimeHealthSource, /Device heartbeat service/);
-  const restartBlock = mainSource.slice(mainSource.indexOf("async function restartDeviceHeartbeatPublisher"));
-  assert.match(restartBlock.slice(0, 2500), /runDeviceHeartbeatWrapper/);
-  assert.doesNotMatch(restartBlock.slice(0, 2500), /runDeviceHeartbeatPublisherOnce\(\)/);
+  assert.doesNotMatch(mainSource, /async function restartDeviceHeartbeatPublisher/);
+  const recoveryBlock = mainSource.slice(mainSource.indexOf("async function runDeviceHeartbeatRecoveryJob"));
+  assert.doesNotMatch(recoveryBlock.slice(0, 4000), /spawnSync\(/);
+  assert.match(recoveryBlock.slice(0, 4000), /runDeviceHeartbeatWrapperAsync/);
+  assert.match(recoveryBlock.slice(0, 4000), /fetchPhysicalDeviceHeartbeatSnapshot/);
   assert.doesNotMatch(mainSource, /assign_account_slot/);
   assert.doesNotMatch(mainSource, /restart_all_phones/);
 });

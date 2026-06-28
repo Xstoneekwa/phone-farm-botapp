@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
-const { spawnSync } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const { closeAllDeviceViews, registerDeviceViewIpc, runDeviceViewSelfTest, openDeviceView } = require("./device-view-manager.cjs");
 const {
   parseOpenDeviceViewDeepLink,
@@ -4131,6 +4131,71 @@ function runDeviceHeartbeatWrapper(command, args = [], timeoutMs = 25000) {
   };
 }
 
+function runDeviceHeartbeatWrapperAsync(command, args = [], timeoutMs = 25000) {
+  if (!deviceHeartbeatAllowedActions.has(command)) {
+    return Promise.resolve({ ok: false, error: "device_heartbeat_action_not_allowed" });
+  }
+  if (!fs.existsSync(deviceHeartbeatServiceWrapperPath)) {
+    return Promise.resolve({ ok: false, error: "device_heartbeat_wrapper_missing" });
+  }
+  try {
+    fs.accessSync(deviceHeartbeatServiceWrapperPath, fs.constants.X_OK);
+  } catch {
+    return Promise.resolve({ ok: false, error: "device_heartbeat_wrapper_not_executable" });
+  }
+  return new Promise((resolve) => {
+    const child = spawn(deviceHeartbeatServiceWrapperPath, [command, ...args], {
+      cwd: workerRootPath,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(payload);
+    };
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      finish({
+        ok: false,
+        error: "device_heartbeat_command_timeout",
+        stdout: safeDispatcherText(stdout),
+        stderr: safeDispatcherText(stderr),
+        exitCode: null,
+      });
+    }, timeoutMs);
+    child.stdout?.on("data", (chunk) => {
+      stdout += String(chunk || "");
+      if (stdout.length > 1024 * 1024) stdout = stdout.slice(-1024 * 1024);
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk || "");
+      if (stderr.length > 256 * 1024) stderr = stderr.slice(-256 * 1024);
+    });
+    child.on("error", (error) => {
+      finish({
+        ok: false,
+        error: safeRuntimeError(error, "Device heartbeat command failed."),
+        stdout: safeDispatcherText(stdout),
+        stderr: safeDispatcherText(stderr),
+        exitCode: null,
+      });
+    });
+    child.on("close", (code) => {
+      finish({
+        ok: code === 0,
+        stdout: String(stdout || ""),
+        stderr: safeDispatcherText(stderr),
+        exitCode: code ?? 0,
+      });
+    });
+  });
+}
+
 async function enrichDeviceHeartbeatStatus(normalized) {
   try {
     const inventory = await botappDevicesList({});
@@ -4169,8 +4234,7 @@ async function enrichDeviceHeartbeatStatus(normalized) {
   }
 }
 
-async function deviceHeartbeatStatus() {
-  const result = runDeviceHeartbeatWrapper("status", ["--json"]);
+function normalizeDeviceHeartbeatWrapperResult(result, action) {
   if (!result.ok && !result.stdout) {
     return deviceHeartbeatFallbackStatus("unknown", result.error || "Device heartbeat status unavailable.");
   }
@@ -4180,7 +4244,78 @@ async function deviceHeartbeatStatus() {
       lastError: result.error || result.stderr || "device_heartbeat_status_json_invalid",
     });
   }
-  return enrichDeviceHeartbeatStatus(normalizeDeviceHeartbeatStatus(parsed, "status"));
+  return normalizeDeviceHeartbeatStatus(parsed, action);
+}
+
+async function fetchPhysicalDeviceHeartbeatSnapshot() {
+  try {
+    const data = await dashboardGet("devices_overview");
+    const items = Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.phone_devices)
+          ? data.phone_devices
+          : Array.isArray(data)
+            ? data
+            : [];
+    return items
+      .filter((row) => row && typeof row === "object")
+      .map((row) => ({
+        deviceKind: String(row?.device_kind || row?.kind || "physical_phone").includes("emulator") ? "emulator" : "physical_phone",
+        backendLastSeenAt: String(row?.heartbeat_last_seen_at || row?.last_seen_at || ""),
+        backendHeartbeatDbStatus: String(row?.heartbeat_status || row?.status || "unknown").toLowerCase(),
+      }))
+      .filter((device) => device.deviceKind === "physical_phone");
+  } catch {
+    return null;
+  }
+}
+
+async function enrichDeviceHeartbeatStatusLight(normalized) {
+  const physical = await fetchPhysicalDeviceHeartbeatSnapshot();
+  if (!physical) return normalized;
+  let youngestAgeSeconds = null;
+  for (const device of physical) {
+    const lastSeenAt = String(device?.backendLastSeenAt || "").trim();
+    if (!lastSeenAt) continue;
+    const lastSeenMs = Date.parse(lastSeenAt);
+    if (!Number.isFinite(lastSeenMs)) continue;
+    const ageSeconds = Math.max(0, (Date.now() - lastSeenMs) / 1000);
+    youngestAgeSeconds = youngestAgeSeconds === null ? ageSeconds : Math.min(youngestAgeSeconds, ageSeconds);
+  }
+  const enriched = {
+    ...normalized,
+    youngestBackendHeartbeatAgeSeconds: youngestAgeSeconds,
+    physicalPhonesInInventory: physical.length,
+  };
+  const operator = computeDeviceHeartbeatOperatorLabel(enriched);
+  if (youngestAgeSeconds !== null && youngestAgeSeconds > ASSIGNMENT_HEARTBEAT_STALE_MS / 1000 && enriched.processRunning) {
+    return {
+      ...enriched,
+      operatorStatus: "degraded",
+      operatorLabelFr: "Dégradé",
+      message: "Les téléphones sont connectés localement, mais leur signal backend n'est plus à jour. Le service tente une récupération automatique.",
+    };
+  }
+  return {
+    ...enriched,
+    operatorStatus: operator.operatorStatus,
+    operatorLabelFr: operator.operatorLabelFr,
+  };
+}
+
+async function deviceHeartbeatStatusAsync(options = {}) {
+  const result = await runDeviceHeartbeatWrapperAsync("status", ["--json"], 25000);
+  const normalized = normalizeDeviceHeartbeatWrapperResult(result, "status");
+  if (options.skipInventoryEnrich) return normalized;
+  return enrichDeviceHeartbeatStatusLight(normalized);
+}
+
+async function deviceHeartbeatStatus() {
+  const result = runDeviceHeartbeatWrapper("status", ["--json"]);
+  const normalized = normalizeDeviceHeartbeatWrapperResult(result, "status");
+  return enrichDeviceHeartbeatStatus(normalized);
 }
 
 async function ensureDeviceHeartbeatAutostart() {
@@ -4270,59 +4405,127 @@ async function deviceHeartbeatAction(action) {
   }
 }
 
-async function restartDeviceHeartbeatPublisher() {
-  let service = await deviceHeartbeatStatus();
-  const recoveryAction = service.duplicateProcess ? "fix-duplicate" : "restart";
-  const restart = runDeviceHeartbeatWrapper(recoveryAction, [], 45000);
-  if (!restart.ok) {
+const DEVICE_HEARTBEAT_RECOVERY_CHANNEL = "botapp:devices:heartbeat-recovery";
+let activeHeartbeatRecovery = null;
+
+function sendHeartbeatRecoveryProgress(webContents, payload) {
+  if (!webContents || webContents.isDestroyed()) return;
+  webContents.send(DEVICE_HEARTBEAT_RECOVERY_CHANNEL, payload);
+}
+
+function cancelActiveHeartbeatRecovery() {
+  if (!activeHeartbeatRecovery) return;
+  activeHeartbeatRecovery.aborted = true;
+  activeHeartbeatRecovery = null;
+}
+
+function startDeviceHeartbeatRecovery(webContents) {
+  if (activeHeartbeatRecovery && !activeHeartbeatRecovery.aborted) {
     return {
-      ok: false,
-      stage: "service_restart",
-      message: "Impossible de relancer le service heartbeat devices.",
-      error: restart.error || restart.stderr || "device_heartbeat_service_restart_failed",
-      published_count: service.lastPublishedCount || 0,
-      skipped_count: 0,
-      service,
+      ok: true,
+      started: false,
+      stage: "recovery_in_progress",
+      message: "Récupération déjà en cours…",
     };
   }
+  const job = { aborted: false, webContents };
+  activeHeartbeatRecovery = job;
+  void runDeviceHeartbeatRecoveryJob(job);
+  return {
+    ok: true,
+    started: true,
+    stage: "service_verifying",
+    message: "Vérification du service…",
+  };
+}
 
-  const serviceDeadline = Date.now() + 25000;
-  while (Date.now() < serviceDeadline) {
-    await sleepMs(2000);
-    service = await deviceHeartbeatStatus();
-    if (service.processRunning && service.lastCycleOk) break;
-  }
-
-  const deadline = Date.now() + 45000;
-  while (Date.now() < deadline) {
-    await sleepMs(2000);
-    const inventory = await botappDevicesList({});
-    if (!inventory.ok || !Array.isArray(inventory.data)) continue;
-    const physical = inventory.data.filter((device) => String(device?.deviceKind || "") === "physical_phone");
-    if (!physical.length || physical.every(isPhysicalDeviceAssignmentHeartbeatLive)) {
-      return {
-        ok: true,
-        stage: "heartbeat_received",
-        message: "Heartbeat reçu — prêt",
+async function runDeviceHeartbeatRecoveryJob(job) {
+  const progress = (payload) => {
+    if (job.aborted) return;
+    sendHeartbeatRecoveryProgress(job.webContents, payload);
+  };
+  try {
+    progress({
+      ok: true,
+      stage: "service_verifying",
+      message: "Vérification du service…",
+      published_count: 0,
+      skipped_count: 0,
+    });
+    let service = await deviceHeartbeatStatusAsync({ skipInventoryEnrich: true });
+    if (job.aborted) return;
+    const recoveryAction = service.duplicateProcess ? "fix-duplicate" : "restart";
+    const restart = await runDeviceHeartbeatWrapperAsync(recoveryAction, [], 45000);
+    if (job.aborted) return;
+    if (!restart.ok) {
+      progress({
+        ok: false,
+        stage: "service_failed",
+        message: "Impossible de relancer le service heartbeat devices.",
+        error: safeDispatcherText(restart.error || restart.stderr || "device_heartbeat_service_restart_failed"),
         published_count: service.lastPublishedCount || 0,
         skipped_count: 0,
-        data: inventory.data,
-        service,
-      };
+      });
+      return;
+    }
+
+    const serviceDeadline = Date.now() + 25000;
+    while (Date.now() < serviceDeadline && !job.aborted) {
+      await sleepMs(2000);
+      service = await deviceHeartbeatStatusAsync({ skipInventoryEnrich: true });
+      if (service.processRunning && service.lastCycleOk) break;
+    }
+    if (job.aborted) return;
+
+    progress({
+      ok: true,
+      stage: "waiting_heartbeat",
+      message: "Attente d'un heartbeat récent…",
+      published_count: service.lastPublishedCount || 0,
+      skipped_count: 0,
+    });
+
+    const deadline = Date.now() + 45000;
+    while (Date.now() < deadline && !job.aborted) {
+      await sleepMs(2000);
+      const physical = await fetchPhysicalDeviceHeartbeatSnapshot();
+      if (!physical) continue;
+      if (!physical.length || physical.every(isPhysicalDeviceAssignmentHeartbeatLive)) {
+        progress({
+          ok: true,
+          stage: "heartbeat_received",
+          message: "Heartbeat reçu — prêt",
+          published_count: service.lastPublishedCount || 0,
+          skipped_count: 0,
+        });
+        return;
+      }
+    }
+
+    if (job.aborted) return;
+    progress({
+      ok: false,
+      stage: "heartbeat_timeout",
+      message: "La récupération n'a pas abouti. Le téléphone reste non assignable.",
+      error: "heartbeat_timeout",
+      published_count: service.lastPublishedCount || 0,
+      skipped_count: 0,
+    });
+  } catch (error) {
+    if (job.aborted) return;
+    progress({
+      ok: false,
+      stage: "service_failed",
+      message: "Impossible de relancer le service heartbeat devices.",
+      error: safeRuntimeError(error, "device_heartbeat_recovery_failed"),
+      published_count: 0,
+      skipped_count: 0,
+    });
+  } finally {
+    if (activeHeartbeatRecovery === job) {
+      activeHeartbeatRecovery = null;
     }
   }
-
-  const inventory = await botappDevicesList({});
-  return {
-    ok: false,
-    stage: "heartbeat_timeout",
-    message: "Les nouveaux comptes ne peuvent pas encore être préparés. Ouvrez Runtime Health ou utilisez Relancer les heartbeats.",
-    error: "heartbeat_timeout",
-    published_count: service.lastPublishedCount || 0,
-    skipped_count: 0,
-    data: inventory.ok ? inventory.data : [],
-    service,
-  };
 }
 
 function readRelayError(data, fallback) {
@@ -5221,14 +5424,20 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:device-heartbeat:ensure", () => ensureDeviceHeartbeatAutostart().catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat autostart failed."))));
   ipcMain.handle("botapp:device-heartbeat:action", (_event, action) => deviceHeartbeatAction(action).catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat action crashed safely."))));
   ipcMain.handle("botapp:devices:list", (_event, input) => botappDevicesList(input));
-  ipcMain.handle("botapp:devices:restart-heartbeat-publisher", () => restartDeviceHeartbeatPublisher().catch((error) => ({
-    ok: false,
-    stage: "publisher_start",
-    message: "Impossible de relancer le publisher de heartbeats.",
-    error: safeRuntimeError(error, "Heartbeat publisher restart crashed safely."),
-    published_count: 0,
-    skipped_count: 0,
-  })));
+  ipcMain.handle("botapp:devices:restart-heartbeat-publisher", (event) => {
+    try {
+      return startDeviceHeartbeatRecovery(event.sender);
+    } catch (error) {
+      return {
+        ok: false,
+        stage: "service_failed",
+        message: "Impossible de relancer le service heartbeat devices.",
+        error: safeRuntimeError(error, "Heartbeat recovery start crashed safely."),
+        published_count: 0,
+        skipped_count: 0,
+      };
+    }
+  });
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
   ipcMain.handle("botapp:profiles:stats-history", (_event, input) => profileStatsHistoryData(input?.accountId || input?.account_id || input, input?.days));
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));
@@ -5479,5 +5688,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  cancelActiveHeartbeatRecovery();
   closeAllDeviceViews();
 });

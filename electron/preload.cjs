@@ -49,6 +49,11 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   devices: {
     list: (input) => ipcRenderer.invoke("botapp:devices:list", input),
     restartHeartbeatPublisher: () => ipcRenderer.invoke("botapp:devices:restart-heartbeat-publisher"),
+    subscribeHeartbeatRecovery: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on("botapp:devices:heartbeat-recovery", handler);
+      return () => ipcRenderer.removeListener("botapp:devices:heartbeat-recovery", handler);
+    },
   },
   profiles: {
     details: (accountId) => ipcRenderer.invoke("botapp:profiles:details", accountId),
