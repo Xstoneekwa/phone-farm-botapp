@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Card, type BadgeTone } from "../design/components";
-import type { BotAppDeviceHeartbeatHealth, BotAppDeviceHeartbeatOperatorStatus, BotAppDispatcherHealth, BotAppDispatcherStatus, BotAppRelayHealth } from "../api/types";
+import type { BotAppDeviceHeartbeatHealth, BotAppDeviceHeartbeatOperatorStatus, BotAppDispatcherHealth, BotAppDispatcherStatus, BotAppRelayHealth, BotAppSchedulerRuntimeHealth } from "../api/types";
 import "./runtime-health.css";
 
 const fallbackDeviceHeartbeatHealth: BotAppDeviceHeartbeatHealth = {
@@ -124,7 +124,7 @@ export function RuntimeHealth() {
   const [health, setHealth] = useState<BotAppDispatcherHealth>(fallbackDispatcherHealth);
   const [deviceHeartbeatHealth, setDeviceHeartbeatHealth] = useState<BotAppDeviceHeartbeatHealth>(fallbackDeviceHeartbeatHealth);
   const [relayHealth, setRelayHealth] = useState<BotAppRelayHealth>(fallbackRelayHealth);
-  const [schedulerRuntimeHealth, setSchedulerRuntimeHealth] = useState({
+  const [schedulerRuntimeHealth, setSchedulerRuntimeHealth] = useState<BotAppSchedulerRuntimeHealth>({
     ok: false,
     status: "unknown",
     worker_id: "",
@@ -132,8 +132,8 @@ export function RuntimeHealth() {
     scheduler_available: false,
     voluntary_shutdown: false,
     dispatcher_observed_status: "",
-    lastPublishedAt: null as string | null,
-    lastError: null as string | null,
+    lastPublishedAt: null,
+    lastError: null,
     message: "Scheduler runtime status unavailable.",
     checkedAt: new Date().toISOString(),
   });
@@ -271,7 +271,7 @@ export function RuntimeHealth() {
         actions={
           <div className="runtime-actions">
             <Button variant="ghost" onClick={() => void refresh()} disabled={Boolean(busyAction)}>Refresh</Button>
-            <Button variant="primary" onClick={() => void window.botappDesktop?.schedulerRuntime?.ensure?.().then((result) => {
+            <Button variant="primary" onClick={() => void window.botappDesktop?.schedulerRuntime?.ensure?.().then((result: BotAppSchedulerRuntimeHealth | undefined) => {
               if (result) setSchedulerRuntimeHealth(result);
               setMessage(result?.message || "Scheduler runtime refreshed.");
             })} disabled={Boolean(busyAction)}>Ensure runtime</Button>

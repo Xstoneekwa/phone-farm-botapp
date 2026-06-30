@@ -2359,6 +2359,29 @@ export type BotAppDeviceHeartbeatHealth = {
 
 export type BotAppDispatcherStatus = "running" | "paused" | "stopped" | "unhealthy" | "starting" | "unknown";
 
+export type BotAppSchedulerRuntimeStatus =
+  | "active"
+  | "idle"
+  | "offline"
+  | "unavailable"
+  | "degraded"
+  | "stopping"
+  | "unknown";
+
+export type BotAppSchedulerRuntimeHealth = {
+  ok: boolean;
+  status: BotAppSchedulerRuntimeStatus;
+  worker_id: string;
+  runtime_host: string;
+  scheduler_available: boolean;
+  voluntary_shutdown: boolean;
+  dispatcher_observed_status: string;
+  lastPublishedAt: string | null;
+  lastError: string | null;
+  message: string;
+  checkedAt: string;
+};
+
 export type BotAppDispatcherHealth = {
   ok: boolean;
   status: BotAppDispatcherStatus;

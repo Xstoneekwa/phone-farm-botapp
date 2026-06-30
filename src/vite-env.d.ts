@@ -58,6 +58,7 @@ type BotAppDeviceViewResult = {
 type BotAppRuntimeIntegrationStatus = import("./api/types").BotAppRuntimeIntegrationStatus;
 type BotAppDispatcherHealth = import("./api/types").BotAppDispatcherHealth;
 type BotAppDeviceHeartbeatHealth = import("./api/types").BotAppDeviceHeartbeatHealth;
+type BotAppSchedulerRuntimeHealth = import("./api/types").BotAppSchedulerRuntimeHealth;
 type BotAppRelayHealth = import("./api/types").BotAppRelayHealth;
 type BotAppDispatcherHealthAction = "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
 type BotAppDeviceHeartbeatHealthAction = "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
@@ -101,6 +102,10 @@ interface Window {
     status: () => Promise<BotAppDeviceHeartbeatHealth>;
     action: (action: BotAppDeviceHeartbeatHealthAction) => Promise<BotAppDeviceHeartbeatHealth>;
     ensure: () => Promise<BotAppDeviceHeartbeatHealth>;
+  };
+  schedulerRuntime?: {
+    status: () => Promise<BotAppSchedulerRuntimeHealth>;
+    ensure: () => Promise<BotAppSchedulerRuntimeHealth>;
   };
     compass?: {
       status: () => Promise<CompassAiRuntimeStatus>;
