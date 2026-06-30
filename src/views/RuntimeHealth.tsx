@@ -124,6 +124,19 @@ export function RuntimeHealth() {
   const [health, setHealth] = useState<BotAppDispatcherHealth>(fallbackDispatcherHealth);
   const [deviceHeartbeatHealth, setDeviceHeartbeatHealth] = useState<BotAppDeviceHeartbeatHealth>(fallbackDeviceHeartbeatHealth);
   const [relayHealth, setRelayHealth] = useState<BotAppRelayHealth>(fallbackRelayHealth);
+  const [schedulerRuntimeHealth, setSchedulerRuntimeHealth] = useState({
+    ok: false,
+    status: "unknown",
+    worker_id: "",
+    runtime_host: "",
+    scheduler_available: false,
+    voluntary_shutdown: false,
+    dispatcher_observed_status: "",
+    lastPublishedAt: null as string | null,
+    lastError: null as string | null,
+    message: "Scheduler runtime status unavailable.",
+    checkedAt: new Date().toISOString(),
+  });
   const [loading, setLoading] = useState(true);
   const [deviceHeartbeatLoading, setDeviceHeartbeatLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<DispatcherAction | DeviceHeartbeatAction | "refresh" | null>(null);
@@ -132,14 +145,16 @@ export function RuntimeHealth() {
   async function refresh() {
     setBusyAction("refresh");
     try {
-      const [result, relayResult, heartbeatResult] = await Promise.all([
+      const [result, relayResult, heartbeatResult, schedulerResult] = await Promise.all([
         window.botappDesktop?.dispatcher?.status?.(),
         window.botappDesktop?.relay?.health?.(),
         window.botappDesktop?.deviceHeartbeat?.status?.(),
+        window.botappDesktop?.schedulerRuntime?.status?.(),
       ]);
       setHealth(result ?? fallbackDispatcherHealth);
       setRelayHealth(relayResult ?? fallbackRelayHealth);
       setDeviceHeartbeatHealth(heartbeatResult ?? fallbackDeviceHeartbeatHealth);
+      if (schedulerResult) setSchedulerRuntimeHealth(schedulerResult);
       setMessage(result?.message ?? fallbackDispatcherHealth.message);
     } catch {
       setHealth(fallbackDispatcherHealth);
@@ -248,6 +263,39 @@ export function RuntimeHealth() {
             <Detail label="last error / reason" value={health.lastError || "none"} />
           </div>
         )}
+      </Card>
+
+      <Card
+        title="Scheduler runtime"
+        subtitle="Published only while BotApp is open. Server-side schedule-session cron enqueues growth runs only when this runtime is active."
+        actions={
+          <div className="runtime-actions">
+            <Button variant="ghost" onClick={() => void refresh()} disabled={Boolean(busyAction)}>Refresh</Button>
+            <Button variant="primary" onClick={() => void window.botappDesktop?.schedulerRuntime?.ensure?.().then((result) => {
+              if (result) setSchedulerRuntimeHealth(result);
+              setMessage(result?.message || "Scheduler runtime refreshed.");
+            })} disabled={Boolean(busyAction)}>Ensure runtime</Button>
+          </div>
+        }
+      >
+        <div className={`runtime-device-heartbeat-banner ${schedulerRuntimeHealth.status === "active" ? "operational" : "degraded"}`}>
+          <div>
+            <strong>{schedulerRuntimeHealth.status}</strong>
+            <span>{schedulerRuntimeHealth.message}</span>
+          </div>
+          <Badge tone={schedulerRuntimeHealth.scheduler_available ? "success" : "warning"} dot={schedulerRuntimeHealth.scheduler_available}>
+            {schedulerRuntimeHealth.scheduler_available ? "active" : "unavailable"}
+          </Badge>
+        </div>
+        <div className="runtime-health-grid">
+          <Detail label="runtime_host" value={schedulerRuntimeHealth.runtime_host || "unknown"} />
+          <Detail label="worker_id" value={schedulerRuntimeHealth.worker_id || "unknown"} />
+          <Detail label="scheduler_available" value={boolLabel(schedulerRuntimeHealth.scheduler_available)} />
+          <Detail label="voluntary_shutdown" value={boolLabel(schedulerRuntimeHealth.voluntary_shutdown)} />
+          <Detail label="dispatcher observed" value={schedulerRuntimeHealth.dispatcher_observed_status || "unknown"} />
+          <Detail label="last published at" value={formatDate(schedulerRuntimeHealth.lastPublishedAt)} />
+          <Detail label="last error" value={schedulerRuntimeHealth.lastError || "none"} />
+        </div>
       </Card>
 
       <Card

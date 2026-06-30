@@ -25,6 +25,7 @@ const {
   resolveRepairState,
   writeBootstrapStatus,
 } = require("./relay-runtime-bootstrap.cjs");
+const botappSchedulerRuntime = require("./botapp-scheduler-runtime.cjs");
 
 // Electron default userData follows package.json name (botapp-mac-foundation).
 // macOS requires overriding userData before the ready event.
@@ -650,6 +651,28 @@ const botappEndpointRegistry = [
     authRequired: true,
     status: "active",
     testStrategy: "fetch",
+  },
+  {
+    id: "botapp_scheduler_runtime_health",
+    name: "BotApp scheduler runtime health",
+    method: "GET",
+    path: "/api/instagram-dashboard/botapp/scheduler-runtime-health",
+    usedBy: ["Runtime Health", "Schedule session cron gate"],
+    purpose: "Read BotApp scheduler runtime heartbeat projection",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "botapp_scheduler_runtime_heartbeat",
+    name: "BotApp scheduler runtime heartbeat",
+    method: "POST",
+    path: "/api/instagram-dashboard/botapp/scheduler-runtime-health",
+    usedBy: ["BotApp scheduler runtime"],
+    purpose: "Publish BotApp-open scheduler runtime heartbeat for server-side schedule gating",
+    authRequired: true,
+    status: "active",
+    testStrategy: "safe_post",
   },
   {
     id: "profiles_overview",
@@ -5316,6 +5339,27 @@ function runDispatcherWrapper(command, args = [], timeoutMs = 25000) {
   };
 }
 
+function schedulerRuntimeDeps() {
+  return {
+    dashboardPost,
+    getDispatcherStatus: dispatcherStatus,
+    ensureDispatcher: ensureDispatcherAutostart,
+    getRelayHealth: botappRelayHealth,
+  };
+}
+
+async function schedulerRuntimeStatus() {
+  return botappSchedulerRuntime.getSchedulerRuntimeStatus(schedulerRuntimeDeps());
+}
+
+async function ensureSchedulerRuntimeAutostart() {
+  return botappSchedulerRuntime.startSchedulerRuntime(schedulerRuntimeDeps());
+}
+
+async function stopSchedulerRuntimeVoluntarily() {
+  return botappSchedulerRuntime.stopSchedulerRuntime(schedulerRuntimeDeps(), { voluntary: true });
+}
+
 async function dispatcherStatus() {
   const result = runDispatcherWrapper("status", ["--json"]);
   if (!result.ok && !result.stdout) {
@@ -5496,6 +5540,18 @@ function registerRuntimeIpc() {
   })));
   ipcMain.handle("botapp:connect:open-device-view", (_event, input) => openDeviceViewFromClientIntent(input?.intent_token || input?.intentToken || input));
   ipcMain.handle("botapp:dispatcher:ensure", () => ensureDispatcherAutostart().catch((error) => dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed."))));
+  ipcMain.handle("botapp:scheduler-runtime:status", () => schedulerRuntimeStatus().catch((error) => ({
+    ok: false,
+    status: "unknown",
+    message: safeRuntimeError(error, "Scheduler runtime status unavailable."),
+    checkedAt: new Date().toISOString(),
+  })));
+  ipcMain.handle("botapp:scheduler-runtime:ensure", () => ensureSchedulerRuntimeAutostart().catch((error) => ({
+    ok: false,
+    status: "unknown",
+    message: safeRuntimeError(error, "Scheduler runtime autostart failed."),
+    checkedAt: new Date().toISOString(),
+  })));
   ipcMain.handle("botapp:device-heartbeat:status", () => deviceHeartbeatStatus().catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat status failed."))));
   ipcMain.handle("botapp:device-heartbeat:ensure", () => ensureDeviceHeartbeatAutostart().catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat autostart failed."))));
   ipcMain.handle("botapp:device-heartbeat:action", (_event, action) => deviceHeartbeatAction(action).catch((error) => deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat action crashed safely."))));
@@ -5654,6 +5710,7 @@ app.whenReady().then(async () => {
       dispatcher = await ensureDispatcherAutostart().catch((error) => ({
         ...dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed.")),
       }));
+      await ensureSchedulerRuntimeAutostart().catch(() => undefined);
     }
 
     writeBootstrapStatus(userDataDir(), {
@@ -5768,4 +5825,5 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   cancelActiveHeartbeatRecovery();
   closeAllDeviceViews();
+  void stopSchedulerRuntimeVoluntarily().catch(() => undefined);
 });

@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     action: (action) => ipcRenderer.invoke("botapp:device-heartbeat:action", action),
     ensure: () => ipcRenderer.invoke("botapp:device-heartbeat:ensure"),
   },
+  schedulerRuntime: {
+    status: () => ipcRenderer.invoke("botapp:scheduler-runtime:status"),
+    ensure: () => ipcRenderer.invoke("botapp:scheduler-runtime:ensure"),
+  },
   compass: {
     status: () => ipcRenderer.invoke("botapp:compass:ai-status"),
     saveRelayConfig: (input) => ipcRenderer.invoke("botapp:compass:save-relay-config", input),
