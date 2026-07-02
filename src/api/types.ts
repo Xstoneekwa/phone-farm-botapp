@@ -2460,7 +2460,7 @@ export type AppSettings = {
   runtimeState: Record<string, string | boolean | number>;
 };
 
-export type AutoRestartMode = "disabled" | "dry_run" | "active" | "backend_pending";
+export type AutoRestartMode = "production" | "active" | "disabled" | "backend_pending";
 export type AutoRestartStatus = "enabled" | "disabled" | "backend_pending" | "unavailable";
 export type AutoRestartSafetyStatus = "safe" | "watch" | "blocked" | "backend_pending";
 export type AutoRestartControlAction =

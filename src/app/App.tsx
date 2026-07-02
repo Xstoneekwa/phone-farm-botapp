@@ -349,7 +349,7 @@ export function App() {
   else if (active === "runtime") view = <RuntimeHealth />;
   else if (active === "incident-notifications") view = <IncidentNotificationsSettingsView />;
   else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
-  else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} relayHealth={relayHealth} dispatcherHealth={dispatcherHealth} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onPreviewControl={previewAutoRestartControl} onExecuteControl={executeAutoRestartControl} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;
+  else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} relayHealth={relayHealth} dispatcherHealth={dispatcherHealth} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;
   else if (active === "api") view = <APIKeys apiKeys={data.apiKeys} webhooks={data.webhooks} onAction={requestAction} />;
   else view = data.settings ? <Settings settings={data.settings} onAction={requestAction} /> : null;
 

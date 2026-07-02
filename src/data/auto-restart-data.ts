@@ -14,7 +14,7 @@ export function buildAutoRestartOverview(): AutoRestartOverview {
     activeAccountsAffected: 0,
     safetyStatus: "backend_pending",
     backendSyncStatus: "backend_pending",
-    sourceSummary: "Shared backend Auto Restart exists as a dry-run preview. BotApp relay controls are prepared but backend activation/storage is pending.",
+    sourceSummary: "Auto Restart production controls are available when the relay backend connection is ready.",
     sessionResume: {
       pausedDueToQuota: 0,
       eligibleToResume: 0,
@@ -59,7 +59,7 @@ export function buildAutoRestartOverview(): AutoRestartOverview {
       },
       {
         action: "dry_run_preview",
-        label: "Run dry-run preview",
+        label: "Run dry-run check",
         detail: "Recompute candidates and safety gates without enqueueing work.",
         requestId: requestId("dry-run"),
         dryRun: true,

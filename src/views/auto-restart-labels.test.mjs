@@ -3,7 +3,7 @@ import test from "node:test";
 import { formatBlockedCandidatesReason, humanizeDeviceRestReason } from "./auto-restart-labels.ts";
 
 test("humanizeDeviceRestReason hides raw backend token", () => {
-  assert.equal(humanizeDeviceRestReason("no_rest_configured", true), "No rest configured (backend preview)");
+  assert.equal(humanizeDeviceRestReason("no_rest_configured", true), "No rest configured");
 });
 
 test("formatBlockedCandidatesReason returns backend reason unchanged", () => {

@@ -35,8 +35,8 @@ function readOperationalState(overview: AutoRestartOverview): AutoRestartOperati
   const raw = (overview as AutoRestartOverview & { operationalState?: AutoRestartOperationalState }).operationalState
     || (overview as AutoRestartOverview & { status?: { operationalState?: AutoRestartOperationalState } }).status?.operationalState;
   if (raw === "active" || raw === "blocked" || raw === "ready" || raw === "disabled") return raw;
-  if (!overview.enabled || overview.mode === "disabled") return "disabled";
-  if (overview.mode === "active") return "active";
+  if (!overview.enabled) return "disabled";
+  if (overview.mode === "production" || overview.mode === "active") return "active";
   return "ready";
 }
 

@@ -17,7 +17,7 @@ const CONTROL_LABELS: Partial<Record<AutoRestartControlAction, string>> = {
   view_candidates: "View candidates",
   export_preview: "Export preview",
   refresh_overview: "Refresh overview",
-  dry_run_preview: "Run dry-run preview",
+  dry_run_preview: "Run dry-run check",
 };
 
 const DEVICE_REST_REASONS: Record<string, string> = {
@@ -42,12 +42,12 @@ export function deviceStatusLabel(status: string) {
 /** @deprecated Use deviceStatusLabel */
 export const frenchDeviceStatus = deviceStatusLabel;
 
-export function humanizeDeviceRestReason(reason: string, isPreview: boolean) {
+export function humanizeDeviceRestReason(reason: string, _isPreview = false) {
   const normalized = String(reason || "").trim().toLowerCase();
-  if (!normalized) return isPreview ? "No rest configured (backend preview)" : "No rest configured";
+  if (!normalized) return "No rest configured";
   const mapped = DEVICE_REST_REASONS[normalized];
-  if (mapped) return isPreview ? `${mapped} (backend preview)` : mapped;
-  if (/^no[_\s-]?rest/i.test(normalized)) return isPreview ? "No rest configured (backend preview)" : "No rest configured";
+  if (mapped) return mapped;
+  if (/^no[_\s-]?rest/i.test(normalized)) return "No rest configured";
   return reason;
 }
 
