@@ -122,7 +122,7 @@ export function AutoRestart({
 
       <section className="auto-restart-kpis" aria-label="Auto Restart summary">
         <Kpi label="Current mode" value={modeLabel} detail={truth.operationalState} tone={statusTone(overview.status)} />
-        <Kpi label="Pilot account" value={overview.rules.pilotUsername ? `@${overview.rules.pilotUsername}` : "Not set"} detail={overview.rules.pilotAccountId || "Required before activation"} tone={overview.rules.pilotAccountId ? "warning" : "neutral"} />
+        <Kpi label="Schedule eligibility" value="Active schedules" detail="Eligible accounts are determined by active schedules." tone="neutral" />
         <Kpi label="Check interval" value={`${overview.rules.checkEveryMinutes} min`} detail="Scheduler cadence" tone="neutral" />
         <Kpi label="Restart delay" value={`${overview.rules.restartDelayMinutes} min`} detail="Between attempts" tone="neutral" />
         <Kpi label="Affected accounts" value={overview.activeAccountsAffected} detail="Eligible or blocked" tone={overview.activeAccountsAffected ? "warning" : "neutral"} />

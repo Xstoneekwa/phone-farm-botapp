@@ -2527,8 +2527,6 @@ export type AutoRestartSafetyRule = {
 
 export type AutoRestartRuleSettings = {
   enabled: boolean;
-  pilotAccountId: string | null;
-  pilotUsername: string | null;
   restartYellowAccounts: boolean;
   restartRedAccounts: boolean;
   respectFixedBlackouts: boolean;

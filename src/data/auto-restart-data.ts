@@ -290,8 +290,6 @@ export function buildAutoRestartOverview(): AutoRestartOverview {
     ],
     rules: {
       enabled: false,
-      pilotAccountId: null,
-      pilotUsername: null,
       restartYellowAccounts: false,
       restartRedAccounts: false,
       respectFixedBlackouts: true,

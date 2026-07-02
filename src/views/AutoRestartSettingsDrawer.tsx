@@ -5,7 +5,6 @@ import { Modal } from "../design/components";
 type SettingsPatch = {
   auto_restart_enabled: boolean;
   mode: "disabled" | "dry_run" | "active";
-  pilot_account_id: string | null;
   check_every_minutes: number;
   restart_delay_minutes: number;
   max_attempts_per_session: number;
@@ -28,7 +27,6 @@ function toPatch(overview: AutoRestartOverview): SettingsPatch {
   return {
     auto_restart_enabled: overview.rules.enabled,
     mode: overview.mode === "active" || overview.mode === "dry_run" ? overview.mode : "disabled",
-    pilot_account_id: overview.rules.pilotAccountId,
     check_every_minutes: overview.rules.checkEveryMinutes,
     restart_delay_minutes: overview.rules.restartDelayMinutes,
     max_attempts_per_session: overview.rules.maxAttemptsPerSession,
@@ -61,12 +59,6 @@ export function AutoRestartSettingsDrawer({
 }) {
   const [patch, setPatch] = useState<SettingsPatch>(() => toPatch(overview));
   const [saving, setSaving] = useState(false);
-  const accountOptions = overview.affectedAccounts.length
-    ? overview.affectedAccounts
-    : overview.quotaCandidates.map((candidate) => ({
-      accountId: candidate.accountId,
-      username: candidate.username,
-    }));
 
   useEffect(() => {
     if (open) setPatch(toPatch(overview));
@@ -97,6 +89,7 @@ export function AutoRestartSettingsDrawer({
   return (
     <Modal title="Edit Auto Restart" onClose={onClose}>
       <div className="auto-restart-settings-drawer">
+        <p className="auto-restart-compact-note">Eligible accounts are determined by active schedules.</p>
         <label>
           <span>Enabled</span>
           <input type="checkbox" checked={patch.auto_restart_enabled} onChange={(event) => setPatch((current) => ({ ...current, auto_restart_enabled: event.target.checked }))} />
@@ -107,15 +100,6 @@ export function AutoRestartSettingsDrawer({
             <option value="disabled">Disabled</option>
             <option value="dry_run">Dry-run</option>
             <option value="active">Active</option>
-          </select>
-        </label>
-        <label>
-          <span>Pilot account</span>
-          <select value={patch.pilot_account_id || ""} onChange={(event) => setPatch((current) => ({ ...current, pilot_account_id: event.target.value || null }))}>
-            <option value="">Select pilot account</option>
-            {accountOptions.map((account) => (
-              <option key={account.accountId} value={account.accountId}>@{account.username}</option>
-            ))}
           </select>
         </label>
         <label><span>Check every (min)</span><input type="number" min={1} max={1440} value={patch.check_every_minutes} onChange={(event) => setPatch((current) => ({ ...current, check_every_minutes: Number(event.target.value) }))} /></label>
