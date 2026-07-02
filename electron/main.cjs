@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, ipcMain, session, shell } = require("electron");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
@@ -26,6 +27,9 @@ const {
   writeBootstrapStatus,
 } = require("./relay-runtime-bootstrap.cjs");
 const botappSchedulerRuntime = require("./botapp-scheduler-runtime.cjs");
+const { findNonCloneablePath, serializeIpcPayload, toRedactedIpcError } = require("./ipc-structured-clone.cjs");
+
+let pendingIpcBridgeProbeMainReport = null;
 
 // Electron default userData follows package.json name (botapp-mac-foundation).
 // macOS requires overriding userData before the ready event.
@@ -56,6 +60,7 @@ let compassLastSafeError = null;
 let compassLastProviderErrorCode = null;
 let compassServerKeyStatus = "unknown";
 let runtimeConfigCache = null;
+const captureSessionId = process.env.BOTAPP_INTEGRATION_CAPTURE_SESSION_ID || crypto.randomUUID();
 
 function safeUrl(value, fallback) {
   try {
@@ -184,23 +189,1096 @@ function repairRelayClientMessage(bootstrap, relay, overview) {
     return "Keychain indisponible sur ce Mac. Relancez BotApp ou utilisez Copy diagnostics.";
   }
   if (bootstrap.repairState === "initial_association_required") {
-    return "Association initiale requise pour ce Mac. Contactez l'équipe technique avec Copy diagnostics.";
+    return "Initial association required for this Mac. Contact the technical team with Copy diagnostics.";
   }
   if (!relay?.ok || !relay?.relay_authenticated) {
     if (bootstrap.repairState === "backend_unavailable") {
-      return "Backend relay indisponible pour le moment.";
+      return "Backend relay is temporarily unavailable.";
     }
-    return relay?.message || "Connexion BotApp indisponible.";
+    return relay?.message || "BotApp connection unavailable.";
   }
   if (overview?.ok) {
-    return `Connexion BotApp opérationnelle (${Number(overview?.profilesMeta?.accountsCount || 0)} comptes).`;
+    return `BotApp connection operational (${Number(overview?.profilesMeta?.accountsCount || 0)} accounts).`;
   }
-  return overview?.error || "Backend joignable mais Profiles indisponibles.";
+  return overview?.error || "Backend reachable but Profiles unavailable.";
+}
+
+function isIntegrationLocalMode() {
+  return process.env.BOTAPP_INTEGRATION_LOCAL === "1";
+}
+
+function integrationLocalBanner() {
+  return "LOCAL TEST MODE — no phone or production activity";
+}
+
+function integrationLocalCaptureDir() {
+  if (!isIntegrationLocalMode()) return null;
+  const dir = String(process.env.BOTAPP_INTEGRATION_CAPTURE_DIR || "").trim();
+  return dir || null;
+}
+
+function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForCaptureSelector(mainWindow, selector, timeoutMs = 45000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const ready = await executeCaptureJavaScript(
+      mainWindow,
+      "capture_selector_wait",
+      "webContents.executeJavaScript",
+      `Boolean(document.querySelector(${JSON.stringify(selector)}))`,
+    );
+    if (ready) return;
+    await sleepMs(500);
+  }
+  throw new Error(`Capture selector not ready: ${selector}`);
+}
+
+function captureIpcTraceEnabled() {
+  return isIntegrationLocalMode() && process.env.BOTAPP_INTEGRATION_CAPTURE_IPC_TRACE === "1";
+}
+
+function captureReadyOnlyMode() {
+  return isIntegrationLocalMode() && process.env.BOTAPP_INTEGRATION_CAPTURE_READY_ONLY === "1";
+}
+
+function captureRehearsalOnlyMode() {
+  return isIntegrationLocalMode() && process.env.BOTAPP_INTEGRATION_CAPTURE_REHEARSAL_ONLY === "1";
+}
+
+function captureReadyMarkerName() {
+  return String(process.env.BOTAPP_CAPTURE_READY_MARKER || "botapp-capture-ready.json").trim()
+    || "botapp-capture-ready.json";
+}
+
+function captureReadyTargetFile() {
+  return String(process.env.BOTAPP_CAPTURE_READY_TARGET_FILE || "").trim();
+}
+
+function valueShape(value, depth = 0) {
+  if (value === null) return { type: "null" };
+  if (Array.isArray(value)) return { type: "array", length: value.length };
+  const type = typeof value;
+  if (type !== "object") return { type };
+  const constructorName = value?.constructor?.name || "Object";
+  const keys = Object.keys(value).slice(0, 20);
+  if (depth > 0) return { type: "object", constructorName, keys };
+  return {
+    type: "object",
+    constructorName,
+    keys,
+    fields: Object.fromEntries(keys.map((key) => [key, valueShape(value[key], depth + 1)])),
+  };
+}
+
+function appendCaptureIpcTrace(entry) {
+  if (!captureIpcTraceEnabled()) return;
+  const outDir = integrationLocalCaptureDir();
+  if (!outDir) return;
+  const tracePath = path.join(outDir, "botapp-capture-ipc-trace.jsonl");
+  const safe = serializeIpcPayload({
+    at: new Date().toISOString(),
+    ...entry,
+  });
+  try {
+    fs.writeFileSync(tracePath, `${JSON.stringify(safe)}\n`, { flag: "a", mode: 0o600 });
+  } catch {
+    // Trace must never affect capture execution.
+  }
+}
+
+async function executeCaptureJavaScript(mainWindow, phase, channel, script, preloadMethod = null) {
+  const started = Date.now();
+  appendCaptureIpcTrace({
+    phase,
+    channel,
+    direction: "main_to_renderer",
+    preloadMethod,
+    argumentCount: 1,
+    payloadShape: { script: { type: "string", length: script.length } },
+    structuredCloneOk: true,
+  });
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(script);
+    const nonCloneable = findNonCloneablePath(result);
+    appendCaptureIpcTrace({
+      phase,
+      channel,
+      direction: "renderer_to_main",
+      preloadMethod,
+      argumentCount: 1,
+      payloadShape: valueShape(result),
+      structuredCloneOk: !nonCloneable,
+      nonCloneable: nonCloneable ? { path: nonCloneable.path, kind: nonCloneable.kind } : null,
+      durationMs: Date.now() - started,
+    });
+    return result;
+  } catch (error) {
+    appendCaptureIpcTrace({
+      phase,
+      channel,
+      direction: "renderer_to_main",
+      preloadMethod,
+      argumentCount: 1,
+      structuredCloneOk: false,
+      error: toRedactedIpcError(error, "capture_execute_javascript_failed"),
+      durationMs: Date.now() - started,
+    });
+    throw error;
+  }
+}
+
+async function readCaptureSurfaceDiagnostics(mainWindow) {
+  return executeCaptureJavaScript(mainWindow, "surface_diagnostics", "webContents.executeJavaScript", `(() => {
+    const activeView = document.querySelector("[data-testid^='botapp-active-view-']")?.getAttribute("data-testid") || null;
+    const routeObserved = activeView ? activeView.replace("botapp-active-view-", "") : null;
+    const topBarLabel = document.querySelector(".main h1")?.textContent?.trim() || null;
+    return {
+      routeObserved,
+      topBarLabel,
+      overviewVisible: Boolean(document.querySelector('[data-testid="overview-view"]')),
+      runtimeHealthVisible: Boolean(document.querySelector('[data-testid="runtime-health-view"]')),
+      integrationBanner: Boolean(document.querySelector('[data-testid="integration-local-banner"]')),
+      needsHumanReviewCount: Boolean(document.querySelector('[data-testid="needs-human-review-count"]')),
+      incidentRow: Boolean(document.querySelector('[data-testid="runtime-health-incident-row"]')),
+      incidentScopeHost: document.querySelector('[data-testid="incident-scope-host"]')?.textContent?.trim() || null,
+      scopeSelectorVisible: Boolean(document.querySelector('[data-testid="runtime-scope-selector"]')),
+      scopeMyMacVisible: Boolean(document.querySelector('[data-testid="runtime-scope-option-my-mac"]')),
+      scopeAllMacsVisible: Boolean(document.querySelector('[data-testid="runtime-scope-option-all-macs"]')),
+      scopeAllMacsActive: document.querySelector('[data-testid="runtime-scope-option-all-macs"]')?.getAttribute("data-active") === "true",
+      incidentHosts: Array.from(document.querySelectorAll('[data-testid="runtime-health-incident-host"]')).map((node) => node.textContent?.trim()).filter(Boolean),
+      openCountText: document.querySelector('[data-testid="needs-human-review-count"]')?.textContent?.trim() || null,
+      drawerOpen: Boolean(document.querySelector('[data-testid="incident-drawer"]')),
+      drawerLoaded: Boolean(document.querySelector('[data-testid="incident-drawer-loaded"]')),
+      drawerDetailReady: Boolean(document.querySelector('[data-testid="incident-drawer-detail-ready"]')),
+      drawerLoadingText: /Loading incident detail\\.\\.\\./i.test(document.body?.innerText || ""),
+      actionProof: (() => {
+        const proof = document.querySelector('[data-testid="botapp-incident-action-proof"]');
+        return proof ? {
+          present: true,
+          action: proof.getAttribute("data-action") || null,
+          status: proof.getAttribute("data-status") || null,
+          text: proof.textContent?.trim() || "",
+        } : null;
+      })(),
+      notificationProofs: ["slack", "discord"].map((channel) => ({
+        channel,
+        proof: document.querySelector('[data-testid="botapp-incident-notification-' + channel + '-proof"]')?.textContent?.trim() || "",
+        lastTest: document.querySelector('[data-testid="botapp-incident-notification-' + channel + '-last-test"]')?.textContent?.trim() || "",
+      })),
+      notificationOutboxItemCount: document.querySelectorAll('[data-testid="botapp-incident-notification-outbox-item"]').length,
+      notificationMessage: document.querySelector('[data-testid="botapp-incident-notification-message"]')?.textContent?.trim() || "",
+      drawerAuditItems: Array.from(document.querySelectorAll('[data-testid="incident-drawer-audit-timeline"] li')).map((node) => node.textContent?.trim()).filter(Boolean),
+      devicesViewVisible: Boolean(document.querySelector('[data-testid="devices-view"]')),
+      deviceRowCount: document.querySelectorAll('[data-testid="device-row"]').length,
+      deviceIncidentBadgeCount: document.querySelectorAll('[data-testid="device-incident-badge"]').length,
+      devicesDataCount: Number(document.querySelector('[data-testid="devices-view"]')?.getAttribute("data-device-count") || 0),
+      devicesIncidentCount: Number(document.querySelector('[data-testid="devices-view"]')?.getAttribute("data-incident-count") || 0),
+      relayOperational: /BotApp connection:\\s*operational/i.test(document.body?.innerText || ""),
+      connectionUnavailableText: /BotApp connection unavailable|Local relay is not authenticated/i.test(document.body?.innerText || ""),
+      loadingBackendDataText: /Loading backend data/i.test(document.body?.innerText || ""),
+    };
+  })()`);
+}
+
+async function navigateCaptureRoute(mainWindow, routeId, timeoutMs = 45000) {
+  await executeCaptureJavaScript(
+    mainWindow,
+    "capture_route_navigation",
+    "webContents.executeJavaScript",
+    `window.dispatchEvent(new CustomEvent('botapp-capture-nav', { detail: { route: ${JSON.stringify(routeId)} } }));`,
+  );
+  const selector = `[data-testid="botapp-active-view-${routeId}"]`;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const diagnostics = await readCaptureSurfaceDiagnostics(mainWindow);
+    if (diagnostics.routeObserved === routeId) {
+      return diagnostics;
+    }
+    await sleepMs(400);
+  }
+  const last = await readCaptureSurfaceDiagnostics(mainWindow);
+  throw new Error(`Route ${routeId} not mounted (observed=${last.routeObserved || "none"} label=${last.topBarLabel || "none"})`);
+}
+
+async function waitForRuntimeHealthCaptureSurface(mainWindow) {
+  await navigateCaptureRoute(mainWindow, "runtime");
+  const start = Date.now();
+  while (Date.now() - start < 45000) {
+    const diagnostics = await readCaptureSurfaceDiagnostics(mainWindow);
+    if (diagnostics.overviewVisible) {
+      throw new Error("Overview surface active — Runtime Health capture blocked");
+    }
+    if (
+      diagnostics.runtimeHealthVisible
+      && diagnostics.integrationBanner
+      && diagnostics.needsHumanReviewCount
+      && diagnostics.incidentRow
+    ) {
+      return diagnostics;
+    }
+    await sleepMs(500);
+  }
+  const last = await readCaptureSurfaceDiagnostics(mainWindow);
+  throw new Error(`Runtime Health capture surface incomplete: ${JSON.stringify(last)}`);
+}
+
+async function waitForDevicesIncidentBadgeSurface(mainWindow, timeoutMs = 45000) {
+  await navigateCaptureRoute(mainWindow, "devices");
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    last = await readCaptureSurfaceDiagnostics(mainWindow);
+    if (
+      last.devicesViewVisible
+      && Number(last.devicesDataCount || 0) > 0
+      && Number(last.deviceRowCount || 0) > 0
+      && Number(last.devicesIncidentCount || 0) > 0
+      && Number(last.deviceIncidentBadgeCount || 0) > 0
+    ) {
+      return last;
+    }
+    await sleepMs(500);
+  }
+  throw new Error(`Devices incident badge surface incomplete: ${JSON.stringify(last)}`);
+}
+
+async function assertCaptureReady(mainWindow, step) {
+  if (step.assert === "runtime_health") {
+    const diagnostics = await waitForRuntimeHealthCaptureSurface(mainWindow);
+    const hosts = Array.isArray(diagnostics.incidentHosts) ? diagnostics.incidentHosts : [];
+    if (!diagnostics.scopeMyMacVisible || !/my mac/i.test(String(diagnostics.incidentScopeHost || ""))) {
+      throw new Error(`host_bound scope selector mismatch: ${JSON.stringify(diagnostics)}`);
+    }
+    if (hosts.includes("integration-mac-b")) {
+      throw new Error(`host_bound leaked Host B incident: ${JSON.stringify(diagnostics)}`);
+    }
+    return diagnostics;
+  }
+  if (step.assert === "global_admin_scope") {
+    const start = Date.now();
+    while (Date.now() - start < 45000) {
+      const diagnostics = await waitForRuntimeHealthCaptureSurface(mainWindow);
+      const hosts = Array.isArray(diagnostics.incidentHosts) ? diagnostics.incidentHosts : [];
+      if (
+        diagnostics.scopeSelectorVisible
+        && diagnostics.scopeMyMacVisible
+        && diagnostics.scopeAllMacsVisible
+        && diagnostics.scopeAllMacsActive
+        && /all macs/i.test(String(diagnostics.incidentScopeHost || ""))
+        && hosts.includes("integration-mac-a")
+        && hosts.includes("integration-mac-b")
+      ) {
+        return diagnostics;
+      }
+      await sleepMs(500);
+    }
+    const last = await readCaptureSurfaceDiagnostics(mainWindow);
+    throw new Error(`global_admin scope selector mismatch: ${JSON.stringify(last)}`);
+  }
+  if (step.assert === "profiles_badge") {
+    await waitForCaptureSelector(mainWindow, '[data-testid="profile-incident-badge"]');
+    await waitForCaptureSelector(mainWindow, '[data-testid="incident-drawer-loaded"]');
+    return readCaptureSurfaceDiagnostics(mainWindow);
+  }
+  if (step.assert === "devices_badge") {
+    await waitForDevicesIncidentBadgeSurface(mainWindow);
+    await waitForCaptureSelector(mainWindow, '[data-testid="incident-drawer-loaded"]');
+    return readCaptureSurfaceDiagnostics(mainWindow);
+  }
+  if (step.assert === "incident_drawer") {
+    await waitForCaptureSelector(mainWindow, '[data-testid="incident-drawer-loaded"]');
+    return readCaptureSurfaceDiagnostics(mainWindow);
+  }
+  if (step.assert === "incident_notifications") {
+    await navigateCaptureRoute(mainWindow, "incident-notifications");
+    await waitForCaptureSelector(mainWindow, '[data-testid="botapp-incident-notifications-settings"]');
+    await waitForCaptureSelector(mainWindow, '[data-testid="botapp-incident-notification-slack"]');
+    await waitForCaptureSelector(mainWindow, '[data-testid="botapp-incident-notification-discord"]');
+    return readCaptureSurfaceDiagnostics(mainWindow);
+  }
+  if (step.route) {
+    return navigateCaptureRoute(mainWindow, step.route);
+  }
+  return readCaptureSurfaceDiagnostics(mainWindow);
+}
+
+async function waitForDrawerLoaded(mainWindow, timeoutMs = 45000) {
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    const ready = await executeCaptureJavaScript(
+      mainWindow,
+      "capture_drawer_loaded_wait",
+      "webContents.executeJavaScript",
+      `Boolean(document.querySelector('[data-testid="incident-drawer-loaded"]'))
+        && Boolean(document.querySelector('[data-testid="incident-drawer-detail-ready"]'))
+        && !/Loading incident detail\\.\\.\\./i.test(document.body?.innerText || "")`,
+    );
+    if (ready) return;
+    last = await executeCaptureJavaScript(
+      mainWindow,
+      "capture_drawer_loaded_diagnostics",
+      "webContents.executeJavaScript",
+      `(() => ({
+        drawer: Boolean(document.querySelector('[data-testid="incident-drawer"]')),
+        drawerLoaded: Boolean(document.querySelector('[data-testid="incident-drawer-loaded"]')),
+        runtimeRow: Boolean(document.querySelector('[data-testid="runtime-health-incident-row"]')),
+        topBarLabel: document.querySelector('[data-testid="topbar-active-route"]')?.textContent?.trim() || null,
+        bodyText: (document.body?.innerText || "").slice(0, 500),
+      }))()`,
+    ).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
+    await sleepMs(500);
+  }
+  writeCaptureDiagnostic("botapp-drawer-timeout-diagnostics.json", {
+    at: new Date().toISOString(),
+    last,
+  });
+  throw new Error(`Incident drawer detail did not load in time: ${JSON.stringify(last)}`);
+}
+
+async function waitForActionProof(mainWindow, step, timeoutMs = 45000) {
+  if (!step.expectedAction) return null;
+  const expectedStatus = step.expectActionError ? "error" : "ok";
+  const expectedAuditText = step.expectedAuditText || (
+    step.expectedAction === "acknowledge" ? "incident_acknowledged"
+      : step.expectedAction === "keep_paused" ? "incident_keep_paused"
+        : step.expectedAction === "manual_retry" ? "incident_manual_retry_blocked"
+          : null
+  );
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    last = await executeCaptureJavaScript(
+      mainWindow,
+      "capture_action_proof_wait",
+      "webContents.executeJavaScript",
+      `(() => {
+        const proof = document.querySelector('[data-testid="botapp-incident-action-proof"]');
+        return {
+          present: Boolean(proof),
+          action: proof?.getAttribute("data-action") || null,
+          status: proof?.getAttribute("data-status") || null,
+          text: proof?.textContent?.trim() || "",
+          loading: /Loading incident detail\\.\\.\\./i.test(document.body?.innerText || ""),
+          auditItems: Array.from(document.querySelectorAll('[data-testid="incident-drawer-audit-timeline"] li')).map((node) => node.textContent?.trim()).filter(Boolean),
+        };
+      })()`,
+    );
+    const auditText = Array.isArray(last?.auditItems) ? last.auditItems.join("\\n") : "";
+    if (
+      last?.present
+      && last.action === step.expectedAction
+      && last.status === expectedStatus
+      && !last.loading
+      && (!expectedAuditText || auditText.includes(expectedAuditText))
+    ) {
+      return last;
+    }
+    await sleepMs(500);
+  }
+  throw new Error(`Incident action proof missing: ${JSON.stringify({ expectedAction: step.expectedAction, expectedStatus, last })}`);
+}
+
+async function waitForActionButtonEnabled(mainWindow, testId, timeoutMs = 45000) {
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    last = await executeCaptureJavaScript(
+      mainWindow,
+      "capture_action_button_enabled_wait",
+      "webContents.executeJavaScript",
+      `(() => {
+        const button = document.querySelector('[data-testid="${testId}"]');
+        return {
+          present: Boolean(button),
+          disabled: Boolean(button?.disabled),
+          text: button?.textContent?.trim() || "",
+        };
+      })()`,
+    );
+    if (last?.present && !last.disabled) return last;
+    await sleepMs(250);
+  }
+  throw new Error(`Incident action button not enabled: ${JSON.stringify({ testId, last })}`);
+}
+
+async function waitForNotificationButtonEnabled(mainWindow, channel, timeoutMs = 45000) {
+  const testId = `botapp-incident-notification-${channel}-test`;
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    last = await executeCaptureJavaScript(
+      mainWindow,
+      "capture_notification_button_enabled_wait",
+      "webContents.executeJavaScript",
+      `(() => {
+        const button = document.querySelector('[data-testid="${testId}"]');
+        return {
+          present: Boolean(button),
+          disabled: Boolean(button?.disabled),
+          text: button?.textContent?.trim() || "",
+        };
+      })()`,
+    );
+    if (last?.present && !last.disabled) return last;
+    await sleepMs(250);
+  }
+  throw new Error(`Notification test button not enabled: ${JSON.stringify({ channel, last })}`);
+}
+
+async function waitForNotificationProof(mainWindow, channels, beforeState, timeoutMs = 60000) {
+  const expected = Array.isArray(channels) && channels.length ? channels : ["slack"];
+  const beforeByChannel = new Map(
+    (Array.isArray(beforeState?.notificationProofs) ? beforeState.notificationProofs : [])
+      .map((item) => [item.channel, item.lastTest || ""]),
+  );
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    last = await readCaptureSurfaceDiagnostics(mainWindow);
+    const proofs = new Map((last.notificationProofs || []).map((item) => [item.channel, item]));
+    const allPassed = expected.every((channel) => {
+      const proof = proofs.get(channel);
+      const previous = beforeByChannel.get(channel) || "";
+      return proof
+        && /local loopback/i.test(proof.proof || "")
+        && proof.lastTest
+        && !/not configured/i.test(proof.lastTest)
+        && proof.lastTest !== previous;
+    });
+    if (allPassed && Number(last.notificationOutboxItemCount || 0) >= expected.length) {
+      return last;
+    }
+    await sleepMs(500);
+  }
+  throw new Error(`Notification test proof missing: ${JSON.stringify({ expected, last })}`);
+}
+
+function writeCaptureStepMeta(outDir, fileName, meta) {
+  const base = fileName.replace(/\.png$/i, "");
+  const metaPath = path.join(outDir, `${base}.meta.json`);
+  fs.writeFileSync(metaPath, `${JSON.stringify({ ...meta, metaPath }, null, 2)}\n`);
+  return metaPath;
+}
+
+function captureOwnership(mainWindow) {
+  if (!mainWindow || mainWindow.isDestroyed?.() || mainWindow.webContents?.isDestroyed?.()) {
+    throw new Error("capture_window_destroyed");
+  }
+  return {
+    captureSessionId,
+    browserWindowId: mainWindow.id,
+    webContentsId: mainWindow.webContents.id,
+    processId: typeof mainWindow.webContents.getOSProcessId === "function" ? mainWindow.webContents.getOSProcessId() : null,
+    userDataDir: app.getPath("userData"),
+    captureDir: integrationLocalCaptureDir() || null,
+    isFocused: mainWindow.isFocused?.() === true,
+    isVisible: mainWindow.isVisible?.() === true,
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+function sameCaptureSource(before, after) {
+  return before
+    && after
+    && before.captureSessionId === after.captureSessionId
+    && before.browserWindowId === after.browserWindowId
+    && before.webContentsId === after.webContentsId
+    && before.processId === after.processId
+    && before.userDataDir === after.userDataDir;
+}
+
+function validateStepVisualState(step, diagnostics, phase) {
+  if (!step || !diagnostics) throw new Error(`capture_state_missing:${phase}`);
+  if (step.assert === "runtime_health") {
+    if (diagnostics.routeObserved !== "runtime") throw new Error(`runtime_capture_route_mismatch:${phase}:${diagnostics.routeObserved || "none"}`);
+    if (diagnostics.topBarLabel !== "Runtime Health") throw new Error(`runtime_capture_topbar_mismatch:${phase}:${diagnostics.topBarLabel || "none"}`);
+    if (diagnostics.overviewVisible) throw new Error(`runtime_capture_overview_visible:${phase}`);
+    if (!diagnostics.runtimeHealthVisible) throw new Error(`runtime_capture_surface_missing:${phase}`);
+    if (!diagnostics.relayOperational || diagnostics.connectionUnavailableText) throw new Error(`runtime_capture_relay_not_operational:${phase}`);
+    if (diagnostics.loadingBackendDataText) throw new Error(`runtime_capture_backend_loading:${phase}`);
+    if (!diagnostics.integrationBanner || !diagnostics.needsHumanReviewCount || !diagnostics.incidentRow) {
+      throw new Error(`runtime_capture_required_dom_missing:${phase}`);
+    }
+    if (!diagnostics.scopeMyMacVisible || !/my mac/i.test(String(diagnostics.incidentScopeHost || ""))) {
+      throw new Error(`runtime_capture_host_bound_scope_mismatch:${phase}`);
+    }
+  }
+}
+
+async function captureBoundWebContentsPng(mainWindow) {
+  const webContents = mainWindow.webContents;
+  const wasAttached = webContents.debugger.isAttached();
+  if (!wasAttached) webContents.debugger.attach("1.3");
+  try {
+    await webContents.debugger.sendCommand("Page.enable").catch(() => undefined);
+    const result = await webContents.debugger.sendCommand("Page.captureScreenshot", {
+      format: "png",
+      fromSurface: true,
+      captureBeyondViewport: false,
+    });
+    const png = Buffer.from(String(result?.data || ""), "base64");
+    if (!Buffer.isBuffer(png) || png.length === 0) throw new Error("capture_png_empty_buffer");
+    return png;
+  } finally {
+    if (!wasAttached && webContents.debugger.isAttached()) {
+      webContents.debugger.detach();
+    }
+  }
+}
+
+async function captureVerifiedPng(mainWindow, outDir, fileName, { step = null, diagnostics = null } = {}) {
+  if (!fileName || !/\.png$/i.test(fileName)) {
+    throw new Error("capture_artifact_invalid_file");
+  }
+  const targetPath = path.join(outDir, fileName);
+  const resolvedOutDir = path.resolve(outDir);
+  const resolvedTarget = path.resolve(targetPath);
+  if (!resolvedTarget.startsWith(`${resolvedOutDir}${path.sep}`)) {
+    throw new Error("capture_artifact_outside_run_dir");
+  }
+  if (fs.existsSync(resolvedTarget)) {
+    throw new Error(`capture_artifact_preexists:${fileName}`);
+  }
+  const ownershipBefore = captureOwnership(mainWindow);
+  validateStepVisualState(step, diagnostics, "before_png");
+  await executeCaptureJavaScript(
+    mainWindow,
+    "capture_wait_renderer_paint",
+    "webContents.executeJavaScript",
+    `new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))`,
+  );
+  const diagnosticsBeforePng = await readCaptureSurfaceDiagnostics(mainWindow);
+  validateStepVisualState(step, diagnosticsBeforePng, "after_paint");
+  const png = await captureBoundWebContentsPng(mainWindow);
+  const ownershipAfter = captureOwnership(mainWindow);
+  if (!sameCaptureSource(ownershipBefore, ownershipAfter)) {
+    throw new Error(`capture_webcontents_ownership_changed:${fileName}`);
+  }
+  const diagnosticsAfterPng = await readCaptureSurfaceDiagnostics(mainWindow);
+  validateStepVisualState(step, diagnosticsAfterPng, "after_png");
+  fs.writeFileSync(resolvedTarget, png);
+  const stats = fs.statSync(resolvedTarget);
+  if (!stats.isFile() || stats.size <= 0) {
+    throw new Error(`capture_png_missing_or_empty:${fileName}`);
+  }
+  const sha256 = crypto.createHash("sha256").update(fs.readFileSync(resolvedTarget)).digest("hex");
+  return {
+    path: resolvedTarget,
+    size: stats.size,
+    sha256,
+    ownership: {
+      before: ownershipBefore,
+      after: ownershipAfter,
+      screenshotSource: "webContents.debugger.Page.captureScreenshot",
+      sameWebContents: true,
+    },
+    diagnosticsBeforePng,
+    diagnosticsAfterPng,
+  };
+}
+
+async function invokeRendererBridge(mainWindow, bridge, invokeJs) {
+  const started = Date.now();
+  try {
+    appendCaptureIpcTrace({
+      phase: "capture_preflight_bridge",
+      channel: bridge,
+      direction: "renderer_to_main",
+      preloadMethod: bridge,
+      argumentCount: invokeJs.includes("({") ? 1 : 0,
+      payloadShape: { request: { type: "preload_method_call" } },
+      structuredCloneOk: true,
+    });
+    const payload = await mainWindow.webContents.executeJavaScript(`(async () => (${invokeJs}))()`);
+    const nonCloneable = findNonCloneablePath(payload);
+    appendCaptureIpcTrace({
+      phase: "capture_preflight_bridge",
+      channel: bridge,
+      direction: "main_to_renderer",
+      preloadMethod: bridge,
+      argumentCount: 1,
+      payloadShape: valueShape(payload),
+      structuredCloneOk: !nonCloneable,
+      nonCloneable: nonCloneable ? { path: nonCloneable.path, kind: nonCloneable.kind } : null,
+      durationMs: Date.now() - started,
+    });
+    return { bridge, ok: true, summary: summarizeProbeBridgeResult(bridge, payload) };
+  } catch (error) {
+    const message = sanitizeProbeMessage(error instanceof Error ? error.message : String(error));
+    appendCaptureIpcTrace({
+      phase: "capture_preflight_bridge",
+      channel: bridge,
+      direction: "main_to_renderer",
+      preloadMethod: bridge,
+      argumentCount: 1,
+      structuredCloneOk: false,
+      error: toRedactedIpcError(error, "capture_preflight_bridge_failed"),
+      durationMs: Date.now() - started,
+    });
+    return {
+      bridge,
+      ok: false,
+      error: message,
+      failureDirection: message === "structured_clone_failed" ? "main_to_renderer_ipc_return" : "renderer_invoke",
+    };
+  }
+}
+
+async function waitForBotAppCapturePreflight(mainWindow) {
+  const bridgeChecks = [
+    { bridge: "relay.health", invokeJs: "window.botappDesktop?.relay?.health?.()" },
+    { bridge: "incidents.list", invokeJs: "window.botappDesktop?.incidents?.list?.({ status: \"open,acknowledged\", limit: 20 })" },
+    { bridge: "data.overview", invokeJs: "window.botappDesktop?.data?.overview?.()" },
+  ];
+  let last = null;
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    const bridgeResults = {};
+    let failedBridge = null;
+    for (const check of bridgeChecks) {
+      const result = await invokeRendererBridge(mainWindow, check.bridge, check.invokeJs);
+      bridgeResults[check.bridge] = result;
+      if (!result.ok) {
+        failedBridge = result;
+        break;
+      }
+    }
+    const relay = bridgeResults["relay.health"];
+    const incidents = bridgeResults["incidents.list"];
+    const overview = bridgeResults["data.overview"];
+    last = {
+      relayOk: Boolean(relay?.summary?.ok && relay?.summary?.relay_authenticated),
+      incidentCount: Number(incidents?.summary?.incidentCount || 0),
+      accountCount: Number(overview?.summary?.accountsCount || 0),
+      syncError: overview?.summary?.syncError || null,
+      failedBridge: failedBridge?.bridge || null,
+      bridgeResults,
+    };
+    if (!failedBridge && last.relayOk && last.incidentCount > 0 && last.accountCount > 0 && !last.syncError) {
+      return last;
+    }
+    if (failedBridge) {
+      writeCaptureDiagnostic("botapp-capture-preflight-bridge.json", {
+        at: new Date().toISOString(),
+        failedBridge: failedBridge.bridge,
+        error: failedBridge.error || null,
+        failureDirection: failedBridge.failureDirection || null,
+        bridgeResults,
+      });
+      throw new Error(`BotApp capture preflight bridge failed: ${failedBridge.bridge} (${failedBridge.error || "unknown"})`);
+    }
+    await sleepMs(2000);
+  }
+  writeCaptureDiagnostic("botapp-capture-preflight-last.json", last);
+  throw new Error(`BotApp capture preflight failed: ${JSON.stringify(last)}`);
+}
+
+function writeCaptureDiagnostic(fileName, payload) {
+  const outDir = integrationLocalCaptureDir();
+  if (!outDir) return;
+  try {
+    fs.writeFileSync(path.join(outDir, fileName), `${JSON.stringify(payload, null, 2)}\n`);
+  } catch {
+    // best effort
+  }
+}
+
+function loadIntegrationCaptureSteps(outDir) {
+  const planPath = String(process.env.BOTAPP_INTEGRATION_CAPTURE_PLAN || "").trim()
+    || path.join(outDir, "botapp-capture-plan.json");
+  if (fs.existsSync(planPath)) {
+    const parsed = JSON.parse(fs.readFileSync(planPath, "utf8"));
+    if (Array.isArray(parsed?.steps)) return parsed.steps;
+  }
+  return [
+    { file: "06-botapp-runtime-health.png", route: "runtime", assert: "runtime_health", waitDrawer: false },
+    { file: "10-botapp-profiles-badge.png", route: "profiles", assert: "profiles_badge", click: '[data-testid="profile-incident-badge"]', waitDrawer: true, closeDrawer: true },
+    { file: "11-botapp-devices-badge.png", route: "devices", assert: "devices_badge", click: '[data-testid="device-incident-badge"]', waitDrawer: true, closeDrawer: true },
+    { file: "12-botapp-incident-drawer.png", route: "runtime", assert: "incident_drawer", openDrawerFromRuntime: true, waitDrawer: true },
+  ];
+}
+
+async function runIntegrationLocalCapture(mainWindow) {
+  const outDir = integrationLocalCaptureDir();
+  if (!outDir || !mainWindow) return;
+  fs.mkdirSync(outDir, { recursive: true });
+
+  try {
+    await executeCaptureJavaScript(
+      mainWindow,
+      "capture_dialog_shims",
+      "webContents.executeJavaScript",
+      `(() => { window.confirm = () => true; window.alert = () => undefined; return { ok: true }; })()`,
+    );
+    await sleepMs(3000);
+    const preflight = await waitForBotAppCapturePreflight(mainWindow);
+    console.log("[BotApp integration capture] preflight ok", preflight);
+
+    const steps = loadIntegrationCaptureSteps(outDir);
+    const rehearsalOnly = captureRehearsalOnlyMode();
+    const rehearsalSteps = [];
+
+    for (const step of steps) {
+      if (step.route) {
+        await navigateCaptureRoute(mainWindow, step.route);
+      }
+      if (step.prepare) {
+        await executeCaptureJavaScript(
+          mainWindow,
+          "capture_prepare",
+          "webContents.executeJavaScript",
+          `(() => { document.querySelector(${JSON.stringify(step.prepare)})?.scrollIntoView?.({ block: "center" }); return true; })()`,
+        ).catch(() => undefined);
+        await sleepMs(800);
+      }
+      if (step.click) {
+        if (step.assert === "profiles_badge") {
+          await waitForCaptureSelector(mainWindow, '[data-testid="profile-incident-badge"]');
+        }
+        if (step.assert === "devices_badge") {
+          await waitForDevicesIncidentBadgeSurface(mainWindow);
+        }
+        const clicked = await executeCaptureJavaScript(
+          mainWindow,
+          "capture_click",
+          "webContents.executeJavaScript",
+          `(() => {
+            const target = document.querySelector(${JSON.stringify(step.click)});
+            if (!target) return { ok: false, reason: "capture_click_target_missing" };
+            target.click?.();
+            return { ok: true };
+          })()`,
+        );
+        if (!clicked?.ok) {
+          const clickDiagnostics = await executeCaptureJavaScript(
+            mainWindow,
+            "capture_click_missing_diagnostics",
+            "webContents.executeJavaScript",
+            `(() => ({
+              route: document.querySelector("[data-testid^='botapp-active-view-']")?.getAttribute("data-testid") || null,
+              profileBadgeCount: document.querySelectorAll('[data-testid="profile-incident-badge"]').length,
+              deviceBadgeCount: document.querySelectorAll('[data-testid="device-incident-badge"]').length,
+              profileRows: Array.from(document.querySelectorAll('[data-testid="profile-incident-badge"], .account-row, .profile-row, [data-profile-id], [data-username]')).slice(0, 20).map((node) => ({
+                testId: node.getAttribute("data-testid"),
+                profileId: node.getAttribute("data-profile-id"),
+                username: node.getAttribute("data-username"),
+                text: node.textContent?.trim().slice(0, 240) || "",
+              })),
+              bodyText: document.body?.innerText?.slice(0, 1200) || "",
+            }))()`,
+          ).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
+          writeCaptureDiagnostic(`botapp-click-missing-${String(step.assert || "unknown")}.json`, clickDiagnostics);
+          throw new Error(`Capture click failed: ${step.click}:${clicked?.reason || "unknown"}`);
+        }
+      }
+      if (step.openDrawerFromRuntime) {
+        await waitForRuntimeHealthCaptureSurface(mainWindow);
+        const clickResult = await executeCaptureJavaScript(
+          mainWindow,
+          "capture_open_runtime_drawer",
+          "webContents.executeJavaScript",
+          `(() => {
+            const row = document.querySelector('[data-testid="runtime-health-incident-row"]');
+            if (!row) return { ok: false, reason: "runtime_incident_row_missing" };
+            row.click();
+            return {
+              ok: true,
+              text: row.textContent?.trim() || "",
+              drawerAfterClick: Boolean(document.querySelector('[data-testid="incident-drawer"]')),
+            };
+          })()`,
+        );
+        if (!clickResult?.ok) {
+          throw new Error(`Runtime incident row click failed: ${clickResult?.reason || "unknown"}`);
+        }
+        await waitForDrawerLoaded(mainWindow);
+      }
+      if (step.testNotificationChannel || step.testNotificationChannels) {
+        await navigateCaptureRoute(mainWindow, "incident-notifications");
+        await waitForCaptureSelector(mainWindow, '[data-testid="botapp-incident-notifications-settings"]');
+        const beforeNotificationState = await readCaptureSurfaceDiagnostics(mainWindow);
+        const channels = Array.isArray(step.testNotificationChannels) && step.testNotificationChannels.length
+          ? step.testNotificationChannels
+          : [step.testNotificationChannel];
+        for (const channel of channels) {
+          let lastNotificationError = null;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              await waitForNotificationButtonEnabled(mainWindow, channel);
+              const testSelector = `[data-testid="botapp-incident-notification-${channel}-test"]`;
+              const clicked = await executeCaptureJavaScript(
+                mainWindow,
+                "capture_notification_test",
+                "webContents.executeJavaScript",
+                `(() => {
+                  const button = document.querySelector(${JSON.stringify(testSelector)});
+                  if (!button) return { ok: false, reason: "notification_button_missing" };
+                  if (button.disabled) return { ok: false, reason: "notification_button_disabled" };
+                  button.click();
+                  return { ok: true };
+                })()`,
+              );
+              if (!clicked?.ok) throw new Error(`Notification test click failed: ${channel}:${clicked?.reason || "unknown"}`);
+              await waitForNotificationProof(mainWindow, [channel], beforeNotificationState, 25000);
+              lastNotificationError = null;
+              break;
+            } catch (error) {
+              lastNotificationError = error;
+              if (attempt < 2) await sleepMs(800);
+            }
+          }
+          if (lastNotificationError) throw lastNotificationError;
+        }
+        step.observedNotificationProof = await waitForNotificationProof(mainWindow, channels, beforeNotificationState);
+      }
+      if (step.fillNote !== undefined) {
+        await executeCaptureJavaScript(
+          mainWindow,
+          "capture_fill_note",
+          "webContents.executeJavaScript",
+          `(() => {
+            const el = document.querySelector('[data-testid="botapp-incident-resolution-note"]');
+            if (!el) return false;
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            setter?.call(el, ${JSON.stringify(step.fillNote)});
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            return true;
+          })()`,
+        );
+      }
+      if (step.actionClick) {
+        step.initialDiagnostics = await readCaptureSurfaceDiagnostics(mainWindow);
+        await waitForActionButtonEnabled(mainWindow, step.actionClick);
+        const clicked = await executeCaptureJavaScript(
+          mainWindow,
+          "capture_action_click",
+          "webContents.executeJavaScript",
+          `(() => {
+            const button = document.querySelector('[data-testid="${step.actionClick}"]');
+            if (!button) return { ok: false, reason: "action_button_missing" };
+            if (button.disabled) return { ok: false, reason: "action_button_disabled" };
+            button.click();
+            return { ok: true };
+          })()`,
+        );
+        if (clicked?.ok === false) throw new Error(`Incident action click failed: ${clicked.reason || "unknown"}`);
+        const actionProof = await waitForActionProof(mainWindow, step);
+        if (!step.expectActionError && step.expectActionSuccess) {
+          const hasError = await executeCaptureJavaScript(
+            mainWindow,
+            "capture_action_error_check",
+            "webContents.executeJavaScript",
+            `Boolean(document.querySelector('[data-testid="botapp-incident-action-error"]'))`,
+          );
+          if (hasError) {
+            const errText = await executeCaptureJavaScript(
+              mainWindow,
+              "capture_action_error_text",
+              "webContents.executeJavaScript",
+              `document.querySelector('[data-testid="botapp-incident-action-error"]')?.textContent?.trim() || ""`,
+            );
+            throw new Error(`Unexpected action error for ${step.actionClick}: ${errText}`);
+          }
+        }
+        step.observedActionProof = actionProof;
+      }
+      if (step.reloadDrawer) {
+        await executeCaptureJavaScript(
+          mainWindow,
+          "capture_reload_drawer_close",
+          "webContents.executeJavaScript",
+          `(() => { document.querySelector('[data-testid="incident-drawer"] button')?.click?.(); return true; })()`,
+        ).catch(() => undefined);
+        await sleepMs(600);
+        await waitForRuntimeHealthCaptureSurface(mainWindow);
+        await executeCaptureJavaScript(
+          mainWindow,
+          "capture_reload_drawer_open",
+          "webContents.executeJavaScript",
+          `(() => { document.querySelector('[data-testid="runtime-health-incident-row"]')?.click?.(); return true; })()`,
+        ).catch(() => undefined);
+        await waitForDrawerLoaded(mainWindow);
+      }
+      if (step.waitDrawer) {
+        const drawerOpen = await executeCaptureJavaScript(
+          mainWindow,
+          "capture_drawer_open_check",
+          "webContents.executeJavaScript",
+          `Boolean(document.querySelector('[data-testid="incident-drawer"]'))`,
+        );
+        if (!drawerOpen) {
+          throw new Error(`Incident drawer not open before capture ${step.file}`);
+        }
+        await waitForDrawerLoaded(mainWindow);
+      }
+      const diagnostics = await assertCaptureReady(mainWindow, step);
+      if (step.waitDrawer && diagnostics?.drawerLoadingText) {
+        throw new Error(`Refusing drawer capture while incident detail is loading (${step.file})`);
+      }
+      if (step.route === "runtime" && step.assert === "runtime_health" && diagnostics?.overviewVisible) {
+        throw new Error(`Refusing Runtime Health capture while Overview is visible (${step.file})`);
+      }
+      if (captureReadyOnlyMode()) {
+        const targetFile = captureReadyTargetFile();
+        if (targetFile && step.file !== targetFile) {
+          continue;
+        }
+        writeCaptureDiagnostic(captureReadyMarkerName(), {
+          readyAt: new Date().toISOString(),
+          stepFile: step.file,
+          expectedRoute: step.route || null,
+          expectedView: step.assert || step.route || null,
+          observedRoute: diagnostics?.routeObserved || null,
+          observedTopBarLabel: diagnostics?.topBarLabel || null,
+          integrationMode: true,
+          relayKeyConfigured: true,
+        });
+        if (process.env.BOTAPP_INTEGRATION_CAPTURE_QUIT === "1") {
+          app.quit();
+        }
+        return;
+      }
+      if (rehearsalOnly) {
+        const ownershipBeforeRehearsal = captureOwnership(mainWindow);
+        const diagnosticsBeforeRehearsal = await readCaptureSurfaceDiagnostics(mainWindow);
+        validateStepVisualState(step, diagnosticsBeforeRehearsal, "rehearsal");
+        const ownershipAfterRehearsal = captureOwnership(mainWindow);
+        if (!sameCaptureSource(ownershipBeforeRehearsal, ownershipAfterRehearsal)) {
+          throw new Error(`capture_rehearsal_webcontents_ownership_changed:${step.file}`);
+        }
+        rehearsalSteps.push({
+          stepFile: step.file,
+          expectedRoute: step.route || null,
+          expectedView: step.assert || step.route || null,
+          observedRoute: diagnostics?.routeObserved || null,
+          observedTopBarLabel: diagnostics?.topBarLabel || null,
+          hostScope: diagnostics?.incidentScopeHost || null,
+          drawerLoaded: Boolean(step.waitDrawer),
+          captureOwnership: {
+            before: ownershipBeforeRehearsal,
+            after: ownershipAfterRehearsal,
+            sameWebContents: true,
+          },
+          checkedAt: new Date().toISOString(),
+        });
+        console.log(`[BotApp integration capture] rehearsal ok ${step.file}`);
+        if (step.closeDrawer) {
+          await executeCaptureJavaScript(
+            mainWindow,
+            "capture_rehearsal_close_drawer",
+            "webContents.executeJavaScript",
+            `(() => { document.querySelector('[data-testid="incident-drawer"] button')?.click?.(); return true; })()`,
+          ).catch(() => undefined);
+          await sleepMs(800);
+        }
+        continue;
+      }
+      const artifact = await captureVerifiedPng(mainWindow, outDir, step.file, { step, diagnostics });
+      writeCaptureStepMeta(outDir, step.file, {
+        generatedAt: new Date().toISOString(),
+        pngPath: artifact.path,
+        pngSizeBytes: artifact.size,
+        sha256: artifact.sha256,
+        expectedRoute: step.route || null,
+        expectedView: step.assert || step.route || null,
+        observedRoute: diagnostics?.routeObserved || null,
+        observedTopBarLabel: diagnostics?.topBarLabel || null,
+        validatedTestIds: {
+          integrationLocalBanner: Boolean(diagnostics?.integrationBanner),
+          needsHumanReviewCount: Boolean(diagnostics?.needsHumanReviewCount),
+          runtimeHealthIncidentRow: Boolean(diagnostics?.incidentRow),
+          incidentScopeHost: diagnostics?.incidentScopeHost || null,
+        },
+        hostScope: diagnostics?.incidentScopeHost || null,
+        incidentOpenCountText: diagnostics?.openCountText || null,
+        drawerLoaded: Boolean(diagnostics?.drawerLoaded),
+        drawerDetailReady: Boolean(diagnostics?.drawerDetailReady),
+        drawerLoadingText: Boolean(diagnostics?.drawerLoadingText),
+        devicesDataCount: Number(diagnostics?.devicesDataCount || 0),
+        deviceRowCount: Number(diagnostics?.deviceRowCount || 0),
+        deviceIncidentBadgeCount: Number(diagnostics?.deviceIncidentBadgeCount || 0),
+        devicesIncidentCount: Number(diagnostics?.devicesIncidentCount || 0),
+        requestedAction: step.expectedAction || null,
+        initialState: step.initialDiagnostics || null,
+        actionProof: step.observedActionProof || null,
+        notificationProof: step.observedNotificationProof || null,
+        drawerAuditItems: diagnostics?.drawerAuditItems || [],
+        captureOwnership: artifact.ownership,
+        diagnosticsBeforePng: artifact.diagnosticsBeforePng || null,
+        diagnosticsAfterPng: artifact.diagnosticsAfterPng || null,
+        assertionCompletedBeforeScreenshotAt: new Date().toISOString(),
+        integrationMode: true,
+        relayKeyConfigured: true,
+      });
+      console.log(`[BotApp integration capture] saved ${step.file}`);
+      if (step.closeDrawer) {
+        await executeCaptureJavaScript(
+          mainWindow,
+          "capture_close_drawer",
+          "webContents.executeJavaScript",
+          `(() => { document.querySelector('[data-testid="incident-drawer"] button')?.click?.(); return true; })()`,
+        ).catch(() => undefined);
+        await sleepMs(800);
+      }
+    }
+
+    if (rehearsalOnly) {
+      writeCaptureDiagnostic(String(process.env.BOTAPP_CAPTURE_REHEARSAL_REPORT || "botapp-capture-rehearsal.json").trim()
+        || "botapp-capture-rehearsal.json", {
+        ok: true,
+        completedAt: new Date().toISOString(),
+        mode: "capture-rehearsal",
+        stepCount: rehearsalSteps.length,
+        expectedStepCount: steps.length,
+        steps: rehearsalSteps,
+      });
+    }
+
+    if (process.env.BOTAPP_INTEGRATION_CAPTURE_QUIT === "1") {
+      const marker = String(process.env.BOTAPP_CAPTURE_COMPLETION_MARKER || "botapp-capture-complete.json").trim()
+        || "botapp-capture-complete.json";
+      writeCaptureDiagnostic(marker, {
+        ok: true,
+        completedAt: new Date().toISOString(),
+        rehearsalOnly,
+        stepCount: steps.length,
+        lastFile: steps.length ? steps[steps.length - 1].file : null,
+      });
+      app.quit();
+    }
+  } catch (error) {
+    writeCaptureDiagnostic("botapp-capture-error.json", {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : null,
+      at: new Date().toISOString(),
+    });
+    console.error("[BotApp integration capture] failed", error);
+    if (process.env.BOTAPP_INTEGRATION_CAPTURE_QUIT === "1") {
+      app.quit();
+    }
+  }
+}
+
+function assertIntegrationLocalRelayUrl(urlValue) {
+  if (!isIntegrationLocalMode()) return;
+  let hostname = "";
+  try {
+    hostname = new URL(String(urlValue || "").trim()).hostname.toLowerCase();
+  } catch {
+    hostname = "";
+  }
+  if (!hostname || !["127.0.0.1", "localhost", "::1"].includes(hostname)) {
+    throw new Error("BOTAPP_INTEGRATION_LOCAL refuses non-loopback relay URL.");
+  }
 }
 
 function compassConfig() {
   const stored = readRuntimeConfig();
   const relayUrl = normalizeRelayUrl(process.env.BOTAPP_COMPASS_AI_RELAY_URL || stored.compassAiRelayUrl || "");
+  assertIntegrationLocalRelayUrl(relayUrl);
   const relayKey = readRelayKeyFromSources(stored);
   return {
     relayUrl,
@@ -504,6 +1582,8 @@ function attachRelayHeadersForDashboardAvatars() {
 
 const endpointTestState = new Map();
 const botappBuildCommit = "dm-drawer-emoji-assets-v10";
+const botappIpcProbeBuildId = "ipc-probe-v11-notification-audit";
+const INTEGRATION_HOST_MACHINE = "integration-mac-a";
 const runtimeIpcHandlers = [
   "botapp:runtime:status",
   "botapp:dispatcher:status",
@@ -526,6 +1606,16 @@ const runtimeIpcHandlers = [
   "botapp:auto-restart:overview",
   "botapp:auto-restart:dry-run",
   "botapp:auto-restart:action-preview",
+  "botapp:auto-restart:settings-load",
+  "botapp:auto-restart:settings-save",
+  "botapp:auto-restart:execute",
+  "botapp:incidents:list",
+  "botapp:incidents:detail",
+  "botapp:incidents:action",
+  "botapp:incidents:notification-settings",
+  "botapp:incidents:notification-settings-patch",
+  "botapp:incidents:notification-test",
+  "botapp:incidents:notification-outbox",
   "botapp:data:overview",
   "botapp:relay:health",
   "botapp:relay:repair",
@@ -983,6 +2073,83 @@ const botappEndpointRegistry = [
     testStrategy: "fetch",
   },
   {
+    id: "incidents_overview",
+    name: "Incidents overview",
+    method: "GET",
+    path: "/api/instagram-dashboard/incidents",
+    usedBy: ["Runtime Health", "Compass"],
+    purpose: "Load redacted account incidents for local Mac scope and human-review actions",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "incidents_detail",
+    name: "Incident detail",
+    method: "GET",
+    path: "/api/instagram-dashboard/incidents/:incidentId",
+    usedBy: ["Runtime Health", "Profiles", "Devices"],
+    purpose: "Load redacted incident detail scoped by relay host binding",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "incidents_action",
+    name: "Incidents action",
+    method: "POST",
+    path: "/api/instagram-dashboard/incidents/action",
+    usedBy: ["Runtime Health"],
+    purpose: "Acknowledge, resolve, keep paused, or manual retry through audited incident actions",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "incidents_notification_settings",
+    name: "Incident notification settings",
+    method: "GET",
+    path: "/api/instagram-dashboard/incidents/notifications/settings",
+    usedBy: ["Runtime Health", "API / Webhooks / Keys"],
+    purpose: "Load redacted Slack/Discord incident notification settings",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "incidents_notification_settings_patch",
+    name: "Incident notification settings patch",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/incidents/notifications/settings",
+    usedBy: ["Runtime Health", "API / Webhooks / Keys"],
+    purpose: "Update Slack/Discord incident notification settings through write-only webhook fields",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "incidents_notification_test",
+    name: "Incident notification test",
+    method: "POST",
+    path: "/api/instagram-dashboard/incidents/notifications/test",
+    usedBy: ["Runtime Health", "API / Webhooks / Keys"],
+    purpose: "Send a loopback-safe incident notification test without creating incidents",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "incidents_notification_outbox",
+    name: "Incident notification outbox",
+    method: "GET",
+    path: "/api/instagram-dashboard/incidents/notifications/outbox",
+    usedBy: ["Runtime Health"],
+    purpose: "Read redacted incident notification delivery rows",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
     id: "email_templates",
     name: "Email templates",
     method: "GET",
@@ -1231,6 +2398,39 @@ const botappEndpointRegistry = [
     path: "/api/instagram-dashboard/auto-restart/action-preview",
     usedBy: ["Auto Restart"],
     purpose: "Validate Auto Restart action contracts without runtime mutation",
+    authRequired: true,
+    status: "active",
+    testStrategy: "safe_post",
+  },
+  {
+    id: "auto_restart_settings",
+    name: "Auto Restart settings",
+    method: "GET",
+    path: "/api/instagram-dashboard/auto-restart/settings",
+    usedBy: ["Auto Restart"],
+    purpose: "Load and persist canonical Auto Restart settings",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
+  {
+    id: "auto_restart_settings_patch",
+    name: "Auto Restart settings save",
+    method: "PATCH",
+    path: "/api/instagram-dashboard/auto-restart/settings",
+    usedBy: ["Auto Restart"],
+    purpose: "Persist Auto Restart settings",
+    authRequired: true,
+    status: "active",
+    testStrategy: "safe_post",
+  },
+  {
+    id: "auto_restart_execute",
+    name: "Auto Restart execute",
+    method: "POST",
+    path: "/api/instagram-dashboard/auto-restart/execute",
+    usedBy: ["Auto Restart"],
+    purpose: "Execute confirmed Auto Restart mutations",
     authRequired: true,
     status: "active",
     testStrategy: "safe_post",
@@ -1508,12 +2708,19 @@ function normalizeAutoRestartOverview(data) {
   }));
   const resting = candidates.filter((candidate) => /rest/i.test(String(candidate.phoneRestStatus || ""))).length;
   const active = candidates.filter((candidate) => /active|ok|none|not active/i.test(String(candidate.phoneRestStatus || ""))).length;
-  const control = (action, label, detail, confirmationRequired, impact, backendStatus = "relay_ready") => ({
+  const schedulerMode = status.mode === "active" || status.mode === "disabled" || status.mode === "dry_run"
+    ? status.mode
+    : "disabled";
+  const autoRestartEnabled = Boolean(status.enabled);
+  const schedulerExecutable = autoRestartEnabled && schedulerMode === "active";
+  const backendWritable = sourceStatus.every((source) => source.status !== "pending");
+  const mutationBackendStatus = schedulerExecutable ? "relay_ready" : "backend_pending";
+  const control = (action, label, detail, confirmationRequired, impact, backendStatus = "relay_ready", dryRun = false) => ({
     action,
     label,
     detail,
     requestId: `botapp-auto-restart-${action}-${Date.now().toString(36)}`,
-    dryRun: true,
+    dryRun,
     confirmationRequired,
     impact,
     affectedAccountsCount: candidateAccounts.length,
@@ -1521,15 +2728,17 @@ function normalizeAutoRestartOverview(data) {
     backendStatus,
   });
   return {
-    status: status.enabled ? "enabled" : "disabled",
-    enabled: Boolean(status.enabled),
-    mode: status.mode === "active" || status.mode === "dry_run" || status.mode === "disabled" ? status.mode : "dry_run",
+    status: schedulerExecutable ? "enabled" : "disabled",
+    enabled: autoRestartEnabled,
+    mode: schedulerMode,
+    operationalState: status.operationalState || (schedulerExecutable ? "active" : autoRestartEnabled ? "ready" : "disabled"),
+    blockReasons: Array.isArray(status.blockReasons) ? status.blockReasons : [],
     lastRestartAt: status.lastSchedulerCheck || null,
-    nextEligibleRestartAt: status.nextSchedulerCheck || null,
+    nextEligibleRestartAt: schedulerExecutable ? (status.nextSchedulerCheck || null) : null,
     activeAccountsAffected: Number(status.activeRestartCandidates || 0),
-    safetyStatus: Number(status.blockedCandidates || 0) > 0 ? "watch" : "safe",
-    backendSyncStatus: "relay_ready",
-    sourceSummary: status.statusLabel || "Shared backend Auto Restart overview loaded.",
+    safetyStatus: Number(status.blockedCandidates || 0) > 0 ? "watch" : schedulerExecutable ? "safe" : "backend_pending",
+    backendSyncStatus: backendWritable ? "relay_ready" : "backend_pending",
+    sourceSummary: status.statusLabel || "Auto Restart overview loaded from shared backend.",
     sessionResume: {
       pausedDueToQuota: candidates.filter((candidate) => /quota/i.test(String(candidate.blockReason || ""))).length,
       eligibleToResume: Number(status.activeRestartCandidates || 0),
@@ -1568,13 +2777,13 @@ function normalizeAutoRestartOverview(data) {
     affectedAccounts: candidateAccounts,
     controls: [
       control("refresh_overview", "Refresh overview", "Reload latest backend overview", false, "Reloads overview only."),
-      control("dry_run_preview", "Run dry-run preview", "Recompute candidates", false, "No mutation."),
-      control("enable_auto_restart", "Enable Auto Restart", "Preview enable contract", true, "Would enable scheduler after backend settings are writable.", "backend_pending"),
-      control("disable_auto_restart", "Disable Auto Restart", "Preview disable contract", true, "Would disable scheduler.", "backend_pending"),
-      control("restart_eligible_sessions", "Restart eligible sessions", "Preview restart contract", true, "Would enqueue eligible sessions only.", "backend_pending"),
-      control("resume_quota_paused", "Resume quota-paused accounts", "Preview quota resume", true, "Would resume quota-paused eligible accounts.", "backend_pending"),
-      control("pause_device_rest", "Pause device rest", "Preview rest override", true, "Would pause a rest window under backend policy.", "backend_pending"),
-      control("resume_phone", "Resume phone", "Preview phone resume", true, "Would resume a phone after gates pass.", "backend_pending"),
+      control("dry_run_preview", "Run dry-run check", "Evaluate candidates without enqueue", false, "No mutation."),
+      control("enable_auto_restart", "Enable Auto Restart", "Enable scheduler after confirmation", true, "Enables scheduler mode in backend settings.", mutationBackendStatus, !backendWritable),
+      control("disable_auto_restart", "Disable Auto Restart", "Disable scheduler after confirmation", true, "Disables scheduler mode; existing runs continue.", mutationBackendStatus, !backendWritable),
+      control("restart_eligible_sessions", "Restart eligible sessions", "Manual scheduler tick", true, "Enqueues eligible sessions only.", mutationBackendStatus, !schedulerExecutable),
+      control("resume_quota_paused", "Resume quota-paused accounts", "Manual quota resume tick", true, "Resumes quota-paused accounts with runtime support.", mutationBackendStatus, !schedulerExecutable),
+      control("pause_device_rest", "Pause device rest", "Pause rest for selected phone", true, "Overrides rest window for selected phone.", mutationBackendStatus, !backendWritable),
+      control("resume_phone", "Resume phone", "Resume selected phone", true, "Ends phone rest override after confirmation.", mutationBackendStatus, !backendWritable),
       control("open_affected_accounts", "Open affected accounts", "Open affected accounts", false, "Read-only navigation."),
       control("open_device", "Open device", "Open Devices", false, "Read-only navigation."),
       control("open_compass_issue", "Open Compass issue", "Open Compass", false, "Read-only navigation."),
@@ -1598,14 +2807,25 @@ function normalizeAutoRestartOverview(data) {
     })),
     rules: {
       enabled: Boolean(rules.enabled),
+      pilotAccountId: rules.pilotAccountId || null,
+      pilotUsername: rules.pilotUsername || null,
       restartYellowAccounts: Boolean(rules.restartYellowAccounts),
       restartRedAccounts: Boolean(rules.restartRedAccounts),
       respectFixedBlackouts: Boolean(rules.respectPhoneRest),
       respectSixHourWindow: Boolean(rules.respectSixHourWindow),
       checkEveryMinutes: Number(rules.checkEveryMinutes || 15),
-      maxRestartsPerAccountPerDay: Number(rules.maxRestartsPerAccountPerDay || 2),
-      maxRestartsPerAccountPerWindow: Number(rules.maxRestartsPerAccountPerWindow || 1),
-      writable: false,
+      restartDelayMinutes: Number(rules.restartDelayMinutes || 20),
+      maxAttemptsPerSession: Number(rules.maxAttemptsPerSession || 2),
+      maxRestartsPerAccountPerDay: Number(rules.maxRestartsPerDayPerAccount || rules.maxRestartsPerAccountPerDay || 2),
+      maxRestartsPerAccountPerWindow: Number(rules.maxRestartsPerWindowPerAccount || rules.maxRestartsPerAccountPerWindow || 1),
+      resumeFollowIfQuotaRemaining: Boolean(rules.resumeFollowIfQuotaRemaining),
+      resumeUnfollowIfQuotaRemaining: Boolean(rules.resumeUnfollowIfQuotaRemaining),
+      blockOnChallenge: Boolean(rules.blockOnChallenge),
+      blockOnRestriction: Boolean(rules.blockOnRestriction),
+      blockOnAccountMismatch: Boolean(rules.blockOnAccountMismatch),
+      blockOnDeviceOffline: Boolean(rules.blockOnDeviceOffline),
+      notifyOnBlockedRestart: Boolean(rules.notifyOnBlockedRestart),
+      writable: backendWritable,
     },
     quotaCandidates: candidates.map((candidate) => ({
       accountId: candidate.accountId || "",
@@ -1645,6 +2865,132 @@ async function autoRestartOverview() {
   }
 }
 
+async function incidentsOverview(input = {}) {
+  const hostHint = String(input?.host_machine || input?.client_host_hint || os.hostname() || "").trim();
+  try {
+    const data = await dashboardGetWithQuery("incidents_overview", {
+      status: String(input?.status || "open,acknowledged"),
+      client_host_hint: hostHint,
+      device_id: String(input?.device_id || "").trim() || undefined,
+      account_id: String(input?.account_id || "").trim() || undefined,
+      limit: String(input?.limit || 50),
+    });
+    const incidents = Array.isArray(data?.incidents) ? data.incidents.map((item) => serializeIpcPayload(item)) : [];
+    return serializeIpcPayload({
+      ok: true,
+      hostMachine: data?.scope?.authorizedHostMachine || hostHint,
+      authorizedHostMachine: data?.scope?.authorizedHostMachine || null,
+      scopeMode: data?.scope?.mode === "relay_global_admin" ? "global_admin" : "host_bound",
+      openCount: Number(data?.summary?.openCount || incidents.filter((item) => item.status === "open" || item.status === "acknowledged").length),
+      incidents,
+      generatedAt: data?.generatedAt || new Date().toISOString(),
+    });
+  } catch (error) {
+    return serializeIpcPayload({
+      ok: false,
+      hostMachine: hostHint,
+      authorizedHostMachine: null,
+      openCount: 0,
+      incidents: [],
+      message: safeRuntimeError(error, "Incidents overview unavailable."),
+      generatedAt: new Date().toISOString(),
+    });
+  }
+}
+
+async function incidentsDetail(incidentId) {
+  const id = String(incidentId || "").trim();
+  if (!id) return { ok: false, message: "incident_id_required" };
+  try {
+    const data = await dashboardGetWithQuery("incidents_detail", {}, { incidentId: id });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, message: safeRuntimeError(error, "Incident detail unavailable.") };
+  }
+}
+
+async function performIncidentAction(input = {}) {
+  const action = String(input?.action || "").trim();
+  const incidentId = String(input?.incident_id || input?.incidentId || "").trim();
+  if (!incidentId || !action) {
+    return { ok: false, error: "incident_action_payload_invalid" };
+  }
+  try {
+    const data = await dashboardPost("incidents_action", {
+      incident_id: incidentId,
+      action,
+      source: "botapp_relay",
+      resolution_note: String(input?.resolution_note || "").trim(),
+      resume_scheduling: Boolean(input?.resume_scheduling),
+      requested_run_type: String(input?.requested_run_type || "account_session"),
+      idempotency_key: String(input?.idempotency_key || "").trim() || undefined,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Incident action failed.") };
+  }
+}
+
+async function incidentsNotificationSettings() {
+  try {
+    const data = await dashboardGetWithQuery("incidents_notification_settings", {});
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, message: safeRuntimeError(error, "Notification settings unavailable.") };
+  }
+}
+
+async function patchIncidentsNotificationSettings(input = {}) {
+  try {
+    const result = await dashboardRequestResult("PATCH", "incidents_notification_settings_patch", input || {});
+    if (!result.ok) {
+      return {
+        ok: false,
+        status: result.status,
+        error: result.error || "Notification settings update failed.",
+        reason: result.data?.reason || null,
+        channel: result.data?.channel || null,
+      };
+    }
+    return { ok: true, status: result.status, data: result.data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Notification settings update failed.") };
+  }
+}
+
+async function testIncidentsNotification(input = {}) {
+  try {
+    const result = await dashboardRequestResult("POST", "incidents_notification_test", input || {});
+    const statusText = String(result.data?.status || result.data?.reason || result.error || "");
+    if (!result.ok || /unavailable|not_configured|disabled|failed/i.test(statusText)) {
+      return {
+        ok: false,
+        status: result.status,
+        error: result.error || statusText || "Notification test failed.",
+        reason: result.data?.reason || result.data?.status || null,
+        channel: result.data?.channel || input?.channel || null,
+        data: result.data || null,
+      };
+    }
+    return { ok: true, status: result.status, data: result.data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Notification test failed.") };
+  }
+}
+
+async function incidentsNotificationOutbox(input = {}) {
+  try {
+    const data = await dashboardGetWithQuery("incidents_notification_outbox", {
+      channel: String(input?.channel || "").trim() || undefined,
+      limit: String(input?.limit || 20),
+      offset: String(input?.offset || 0),
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, message: safeRuntimeError(error, "Notification outbox unavailable.") };
+  }
+}
+
 async function autoRestartDryRun() {
   const cfg = compassConfig();
   const url = autoRestartUrl("dry-run");
@@ -1679,6 +3025,29 @@ async function autoRestartActionPreview(input) {
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Auto Restart action preview failed.") };
   }
+}
+
+async function autoRestartSettingsLoad() {
+  const result = await dashboardRequestResult("GET", "auto_restart_settings");
+  if (!result.ok) return { ok: false, error: result.error || "Auto Restart settings unavailable." };
+  return { ok: true, data: result.data };
+}
+
+async function autoRestartSettingsSave(patch) {
+  const result = await dashboardRequestResult("PATCH", "auto_restart_settings_patch", sanitizeCompassValue(patch || {}));
+  if (!result.ok) return { ok: false, error: result.error || "Could not save Auto Restart settings." };
+  return { ok: true, data: result.data };
+}
+
+async function autoRestartExecute(input) {
+  const result = await dashboardRequestResult("POST", "auto_restart_execute", {
+    action: input?.action,
+    request_id: input?.requestId || `botapp-auto-restart-${Date.now().toString(36)}`,
+    target: sanitizeCompassValue(input?.target || {}),
+    confirmed: input?.confirmed !== false,
+  });
+  if (!result.ok) return { ok: false, error: result.error || "Auto Restart action failed." };
+  return { ok: true, data: result.data };
 }
 
 function dashboardApiUrl(pathnameSuffix) {
@@ -3883,7 +5252,7 @@ async function botappOverviewData() {
     : overviewError
       || (!relayConfigured ? "Configure the relay URL in API / Webhooks / Keys to load shared backend data." : null)
       || "No accounts returned from the shared backend API. Check relay URL, relay credential, and deployed endpoints.";
-  return {
+  return serializeIpcPayload({
     ok: !syncError,
     error: syncError,
     profilesMeta: {
@@ -3905,7 +5274,423 @@ async function botappOverviewData() {
       webhooks: listIntegrationConfig().webhooks,
       settings: emptySettings(),
     },
+  });
+}
+
+function probeRelayUrlRedacted() {
+  const origin = dashboardOrigin(compassConfig());
+  return origin || maskUrl(process.env.BOTAPP_COMPASS_AI_RELAY_URL || "");
+}
+
+function isCaptureExactPreflightMode() {
+  return process.env.BOTAPP_CAPTURE_PREFLIGHT_EXACT === "1";
+}
+
+function captureExactPreflightOutDir() {
+  if (!isIntegrationLocalMode() || !isCaptureExactPreflightMode()) return null;
+  const dir = String(process.env.BOTAPP_CAPTURE_PREFLIGHT_EXACT_DIR || "").trim();
+  if (!dir || dir.includes(`${path.sep}captures${path.sep}incidents${path.sep}run-`)) return null;
+  return dir;
+}
+
+function captureExactPreflightScopeMode() {
+  return process.env.BOTAPP_CAPTURE_PREFLIGHT_SCOPE === "global_admin" ? "global_admin" : "host_bound";
+}
+
+function writeCaptureExactPreflightReport(report) {
+  const outDir = captureExactPreflightOutDir();
+  if (!outDir) return null;
+  fs.mkdirSync(outDir, { recursive: true });
+  const scope = captureExactPreflightScopeMode();
+  const outPath = path.join(outDir, `capture-preflight-exact-${scope}.json`);
+  fs.writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`);
+  return outPath;
+}
+
+const CAPTURE_EXACT_PREFLIGHT_BRIDGES = [
+  {
+    step: "relay.health",
+    bridge: "relay.health",
+    channel: "botapp:relay:health",
+    preloadPath: "window.botappDesktop.relay.health",
+    invokeJs: "window.botappDesktop?.relay?.health?.()",
+  },
+  {
+    step: "incidents.list",
+    bridge: "incidents.list",
+    channel: "botapp:incidents:list",
+    preloadPath: "window.botappDesktop.incidents.list",
+    invokeJs: "window.botappDesktop?.incidents?.list?.({ status: \"open,acknowledged\", limit: 20 })",
+  },
+  {
+    step: "data.overview",
+    bridge: "data.overview",
+    channel: "botapp:data:overview",
+    preloadPath: "window.botappDesktop.data.overview",
+    invokeJs: "window.botappDesktop?.data?.overview?.()",
+  },
+];
+
+async function runCaptureExactPreflightDiagnostic(mainWindow) {
+  await waitForBotappDesktopBridge(mainWindow);
+  const scopeMode = captureExactPreflightScopeMode();
+  const steps = [];
+  for (const bridge of CAPTURE_EXACT_PREFLIGHT_BRIDGES) {
+    const started = Date.now();
+    const entry = {
+      step: bridge.step,
+      bridge: bridge.bridge,
+      channel: bridge.channel,
+      preloadPath: bridge.preloadPath,
+      phase: "before_invoke",
+      scopeMode,
+      buildMarker: botappIpcProbeBuildId,
+      relayUrl: probeRelayUrlRedacted(),
+      autostartSkipped: shouldSkipIntegrationAutostart(),
+      durationMs: null,
+      returnType: null,
+      summary: null,
+      error: null,
+      nonCloneablePath: null,
+      failureDirection: null,
+    };
+    const invokeStarted = Date.now();
+    try {
+      const payload = await mainWindow.webContents.executeJavaScript(`(async () => (${bridge.invokeJs}))()`);
+      entry.durationMs = Date.now() - invokeStarted;
+      entry.returnType = Array.isArray(payload) ? "array" : payload === null ? "null" : typeof payload;
+      entry.phase = "invoke_ok";
+      try {
+        structuredClone(payload);
+        entry.phase = "return_clone_ok";
+        entry.summary = summarizeProbeBridgeResult(bridge.bridge, payload);
+      } catch (cloneError) {
+        entry.phase = "return_clone_error";
+        entry.error = sanitizeProbeMessage(cloneError instanceof Error ? cloneError.message : String(cloneError));
+        entry.nonCloneablePath = findNonCloneablePath(payload);
+        entry.failureDirection = "main_to_renderer_ipc_return";
+      }
+    } catch (error) {
+      entry.durationMs = Date.now() - invokeStarted;
+      entry.phase = "invoke_error";
+      entry.error = sanitizeProbeMessage(error instanceof Error ? error.message : String(error));
+      entry.failureDirection = entry.error === "structured_clone_failed" ? "main_to_renderer_ipc_return" : "renderer_invoke";
+    }
+    entry.totalStepMs = Date.now() - started;
+    steps.push(entry);
+    if (entry.phase !== "return_clone_ok") break;
+    await sleepMs(300);
+  }
+
+  const hostBoundOnly = scopeMode === "host_bound"
+    ? steps.find((step) => step.step === "incidents.list")?.summary?.scopeMode === "host_bound"
+    : null;
+  const globalAdminBreadth = scopeMode === "global_admin"
+    ? steps.find((step) => step.step === "incidents.list")?.summary?.scopeMode === "global_admin"
+      && Number(steps.find((step) => step.step === "incidents.list")?.summary?.incidentCount || 0) >= 2
+    : null;
+
+  return {
+    mode: "capture_preflight_exact",
+    generatedAt: new Date().toISOString(),
+    packaged: app.isPackaged,
+    integrationLocal: true,
+    scopeMode,
+    authorizedHostMachine: scopeMode === "host_bound" ? INTEGRATION_HOST_MACHINE : null,
+    buildMarker: botappIpcProbeBuildId,
+    relayUrl: probeRelayUrlRedacted(),
+    autostartSkipped: shouldSkipIntegrationAutostart(),
+    sameApiAsCapturePreflight: true,
+    sameInvokeArgumentsAsCapturePreflight: true,
+    rendererPreloadIpcPath: true,
+    steps,
+    hostBoundOnly,
+    globalAdminBreadth,
+    ok: steps.length === CAPTURE_EXACT_PREFLIGHT_BRIDGES.length
+      && steps.every((step) => step.phase === "return_clone_ok")
+      && steps.every((step) => step.summary?.ok !== false)
+      && (scopeMode !== "host_bound" || hostBoundOnly === true)
+      && (scopeMode !== "global_admin" || globalAdminBreadth === true),
   };
+}
+
+async function finishCaptureExactPreflight(mainWindow) {
+  try {
+    await sleepMs(3000);
+    const report = await runCaptureExactPreflightDiagnostic(mainWindow);
+    const outPath = writeCaptureExactPreflightReport(report);
+    console.log("[capture-preflight-exact] complete", outPath || "(no out dir)", report.ok ? "ok" : "failed");
+    if (!report.ok) {
+      writeCaptureExactPreflightReport({
+        ...report,
+        failureCode: report.steps.find((step) => step.phase !== "return_clone_ok")?.phase || "preflight_failed",
+      });
+    }
+  } catch (error) {
+    writeCaptureExactPreflightReport({
+      mode: "capture_preflight_exact",
+      generatedAt: new Date().toISOString(),
+      ok: false,
+      failureCode: "capture_preflight_exact_exception",
+      error: sanitizeProbeMessage(error instanceof Error ? error.message : String(error)),
+      steps: [],
+    });
+    console.error("[capture-preflight-exact] failed", sanitizeProbeMessage(error instanceof Error ? error.message : String(error)));
+  } finally {
+    if (process.env.BOTAPP_INTEGRATION_CAPTURE_QUIT === "1") {
+      app.quit();
+    }
+  }
+}
+
+function isIpcBridgeProbeMode() {
+  return process.env.BOTAPP_IPC_BRIDGE_PROBE === "1";
+}
+
+function shouldSkipIntegrationAutostart() {
+  return isIpcBridgeProbeMode() || isCaptureExactPreflightMode() || process.env.BOTAPP_INTEGRATION_SKIP_AUTOSTART === "1";
+}
+
+function ipcBridgeProbeOutDir() {
+  if (!isIntegrationLocalMode() || !isIpcBridgeProbeMode()) return null;
+  const dir = String(process.env.BOTAPP_IPC_BRIDGE_PROBE_DIR || "").trim();
+  if (!dir || dir.includes(`${path.sep}captures${path.sep}incidents${path.sep}run-`)) return null;
+  return dir;
+}
+
+function writeProbeDiagnostic(fileName, payload) {
+  const outDir = ipcBridgeProbeOutDir();
+  if (!outDir) return;
+  try {
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, fileName), `${JSON.stringify(payload, null, 2)}\n`);
+  } catch {
+    // best effort
+  }
+}
+
+function sanitizeProbeMessage(message) {
+  const raw = String(message || "").trim();
+  if (!raw) return "unknown_error";
+  if (/could not be cloned/i.test(raw)) return "structured_clone_failed";
+  if (/fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT/i.test(raw)) return "backend_unreachable";
+  return raw.slice(0, 240);
+}
+
+function summarizeProbeBridgeResult(bridge, result) {
+  if (bridge === "relay.health") {
+    return {
+      ok: Boolean(result?.ok),
+      relay_authenticated: Boolean(result?.relay_authenticated),
+    };
+  }
+  if (bridge === "incidents.list") {
+    return {
+      ok: Boolean(result?.ok),
+      incidentCount: Array.isArray(result?.incidents)
+        ? result.incidents.length
+        : Number(result?.openCount || 0),
+      scopeMode: result?.scopeMode || null,
+    };
+  }
+  if (bridge === "data.overview") {
+    return {
+      ok: Boolean(result?.ok),
+      accountsCount: Number(result?.profilesMeta?.accountsCount || 0),
+      syncError: result?.error ? "present" : null,
+    };
+  }
+  return { ok: Boolean(result?.ok) };
+}
+
+const IPC_BRIDGE_PROBE_DEFINITIONS = [
+  {
+    bridge: "relay.health",
+    channel: "botapp:relay:health",
+    preloadPath: "window.botappDesktop.relay.health",
+    invokeArgs: [],
+    runMain: () => botappRelayHealth(),
+    rendererInvokeJs: "window.botappDesktop?.relay?.health?.()",
+  },
+  {
+    bridge: "incidents.list",
+    channel: "botapp:incidents:list",
+    preloadPath: "window.botappDesktop.incidents.list",
+    invokeArgs: [{ status: "open,acknowledged", limit: 20 }],
+    runMain: () => incidentsOverview({ status: "open,acknowledged", limit: 20 }),
+    rendererInvokeJs: "window.botappDesktop?.incidents?.list?.({ status: \"open,acknowledged\", limit: 20 })",
+  },
+  {
+    bridge: "data.overview",
+    channel: "botapp:data:overview",
+    preloadPath: "window.botappDesktop.data.overview",
+    invokeArgs: [],
+    runMain: () => botappOverviewData(),
+    rendererInvokeJs: "window.botappDesktop?.data?.overview?.()",
+  },
+];
+
+function withProbeTimeout(promise, bridge, timeoutMs = 30000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`probe_timeout_${bridge}`)), timeoutMs);
+    }),
+  ]);
+}
+
+async function runIpcBridgeProbeMain() {
+  const bridges = {};
+  for (const probe of IPC_BRIDGE_PROBE_DEFINITIONS) {
+    const entry = {
+      bridge: probe.bridge,
+      channel: probe.channel,
+      preloadPath: probe.preloadPath,
+      invokeArgs: probe.invokeArgs,
+      mainProcess: { ok: false },
+    };
+    try {
+      const payload = await withProbeTimeout(probe.runMain(), probe.bridge);
+      entry.mainProcess.handlerOk = true;
+      entry.mainProcess.summary = summarizeProbeBridgeResult(probe.bridge, payload);
+      try {
+        structuredClone(payload);
+        entry.mainProcess.structuredCloneOk = true;
+      } catch (cloneError) {
+        entry.mainProcess.structuredCloneOk = false;
+        entry.mainProcess.failureDirection = "main_handler_return";
+        entry.mainProcess.error = sanitizeProbeMessage(cloneError instanceof Error ? cloneError.message : String(cloneError));
+        entry.mainProcess.nonCloneablePath = findNonCloneablePath(payload);
+        entry.mainProcess.nonCloneableKind = entry.mainProcess.nonCloneablePath?.kind || null;
+      }
+      entry.mainProcess.ok = entry.mainProcess.structuredCloneOk === true;
+    } catch (error) {
+      entry.mainProcess.handlerOk = false;
+      entry.mainProcess.error = sanitizeProbeMessage(error instanceof Error ? error.message : String(error));
+    }
+    bridges[probe.bridge] = entry;
+  }
+  return {
+    phase: "main_process",
+    packaged: app.isPackaged,
+    generatedAt: new Date().toISOString(),
+    bridges,
+  };
+}
+
+async function waitForBotappDesktopBridge(mainWindow, timeoutMs = 30000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const ready = await mainWindow.webContents.executeJavaScript(
+      "Boolean(window.botappDesktop?.relay?.health && window.botappDesktop?.incidents?.list && window.botappDesktop?.data?.overview)",
+    );
+    if (ready) return;
+    await sleepMs(250);
+  }
+  throw new Error("botappDesktop bridge not ready");
+}
+
+async function runIpcBridgeProbeRenderer(mainWindow) {
+  await waitForBotappDesktopBridge(mainWindow);
+  const bridges = {};
+  for (const probe of IPC_BRIDGE_PROBE_DEFINITIONS) {
+    const entry = {
+      bridge: probe.bridge,
+      channel: probe.channel,
+      preloadPath: probe.preloadPath,
+      rendererProcess: { ok: false },
+    };
+    try {
+      const payload = await mainWindow.webContents.executeJavaScript(
+        `(async () => (${probe.rendererInvokeJs}))()`,
+      );
+      entry.rendererProcess.invokeOk = true;
+      entry.rendererProcess.summary = summarizeProbeBridgeResult(probe.bridge, payload);
+      try {
+        structuredClone(payload);
+        entry.rendererProcess.structuredCloneOk = true;
+      } catch (cloneError) {
+        entry.rendererProcess.structuredCloneOk = false;
+        entry.rendererProcess.failureDirection = "main_to_renderer_ipc_return";
+        entry.rendererProcess.error = sanitizeProbeMessage(cloneError instanceof Error ? cloneError.message : String(cloneError));
+        entry.rendererProcess.nonCloneablePath = findNonCloneablePath(payload);
+        entry.rendererProcess.nonCloneableKind = entry.rendererProcess.nonCloneablePath?.kind || null;
+      }
+      entry.rendererProcess.ok = entry.rendererProcess.structuredCloneOk === true;
+    } catch (error) {
+      entry.rendererProcess.invokeOk = false;
+      const message = sanitizeProbeMessage(error instanceof Error ? error.message : String(error));
+      entry.rendererProcess.error = message;
+      if (message === "structured_clone_failed") {
+        entry.rendererProcess.failureDirection = "main_to_renderer_ipc_return";
+      }
+    }
+    bridges[probe.bridge] = entry;
+    await sleepMs(300);
+  }
+  return {
+    phase: "renderer_invoke",
+    generatedAt: new Date().toISOString(),
+    bridges,
+  };
+}
+
+function writeIpcBridgeProbeReport(report, fileName = "botapp-ipc-bridge-probe.json") {
+  const outDir = ipcBridgeProbeOutDir();
+  if (!outDir) return null;
+  fs.mkdirSync(outDir, { recursive: true });
+  const outPath = path.join(outDir, fileName);
+  fs.writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`);
+  return outPath;
+}
+
+async function finishIpcBridgeProbe(mainWindow) {
+  const rendererTimeoutMs = 60000;
+  try {
+    const renderer = await withProbeTimeout(runIpcBridgeProbeRenderer(mainWindow), "renderer_invoke", rendererTimeoutMs);
+    const report = {
+      mode: "packaged_ipc_bridge_probe",
+      integrationLocal: true,
+      relayUrl: probeRelayUrlRedacted(),
+      relayKeyConfigured: true,
+      autostartSkipped: shouldSkipIntegrationAutostart(),
+      ipcProbeBuildId: botappIpcProbeBuildId,
+      completedAt: new Date().toISOString(),
+      main: pendingIpcBridgeProbeMainReport,
+      renderer,
+    };
+    const outPath = writeIpcBridgeProbeReport(report);
+    console.log("[ipc-bridge-probe] complete", outPath || "(no out dir)");
+  } catch (error) {
+    const report = {
+      mode: "packaged_ipc_bridge_probe",
+      integrationLocal: true,
+      relayUrl: probeRelayUrlRedacted(),
+      relayKeyConfigured: true,
+      autostartSkipped: shouldSkipIntegrationAutostart(),
+      ipcProbeBuildId: botappIpcProbeBuildId,
+      completedAt: new Date().toISOString(),
+      main: pendingIpcBridgeProbeMainReport,
+      renderer: {
+        phase: "renderer_invoke",
+        error: sanitizeProbeMessage(error instanceof Error ? error.message : String(error)),
+      },
+    };
+    writeIpcBridgeProbeReport(report);
+    writeCaptureDiagnostic("botapp-ipc-bridge-probe-error.json", {
+      message: sanitizeProbeMessage(error instanceof Error ? error.message : String(error)),
+      at: new Date().toISOString(),
+    });
+    writeProbeDiagnostic("botapp-ipc-bridge-probe-error.json", {
+      message: sanitizeProbeMessage(error instanceof Error ? error.message : String(error)),
+      at: new Date().toISOString(),
+    });
+    console.error("[ipc-bridge-probe] failed", sanitizeProbeMessage(error instanceof Error ? error.message : String(error)));
+  } finally {
+    if (process.env.BOTAPP_INTEGRATION_CAPTURE_QUIT === "1") {
+      app.quit();
+    }
+  }
 }
 
 async function botappRelayHealth() {
@@ -3913,7 +5698,7 @@ async function botappRelayHealth() {
   const checkedAt = new Date().toISOString();
   const localRelay = localRelayDiagnostics(cfg);
   if (!cfg.relayUrl) {
-    return {
+    return serializeIpcPayload({
       ok: false,
       relay_authenticated: false,
       backend_configured: false,
@@ -3926,7 +5711,7 @@ async function botappRelayHealth() {
       message: "Relay URL is not configured in BotApp.",
       checkedAt,
       localRelay,
-    };
+    });
   }
 
   try {
@@ -3934,8 +5719,8 @@ async function botappRelayHealth() {
     const data = result.ok ? result.data : (result.data?.data || result.data || {});
     const backendKey = data?.backend_key && typeof data.backend_key === "object" ? data.backend_key : {};
     const providedKey = data?.provided_key && typeof data.provided_key === "object" ? data.provided_key : {};
-    const routes = data?.routes && typeof data.routes === "object" ? data.routes : {};
-    return {
+    const routes = data?.routes && typeof data.routes === "object" ? serializeIpcPayload(data.routes) : {};
+    return serializeIpcPayload({
       ok: Boolean(data?.ok),
       relay_authenticated: Boolean(data?.relay_authenticated),
       backend_configured: Boolean(data?.backend_configured),
@@ -3954,13 +5739,13 @@ async function botappRelayHealth() {
         sha256_prefix: typeof providedKey.sha256_prefix === "string" ? providedKey.sha256_prefix : localRelay.sha256_prefix,
       },
       routes,
-      route_paths: data?.route_paths && typeof data.route_paths === "object" ? data.route_paths : {},
-      message: data?.relay_authenticated ? "BotApp relay auth OK." : result.error || readRelayError(data, "BotApp relay auth failed."),
+      route_paths: data?.route_paths && typeof data.route_paths === "object" ? serializeIpcPayload(data.route_paths) : {},
+      message: data?.relay_authenticated ? "BotApp relay auth OK." : String(result.error || readRelayError(data, "BotApp relay auth failed.")),
       checkedAt,
       localRelay,
-    };
+    });
   } catch (error) {
-    return {
+    return serializeIpcPayload({
       ok: false,
       relay_authenticated: false,
       backend_configured: false,
@@ -3973,7 +5758,7 @@ async function botappRelayHealth() {
       message: safeRuntimeError(error, "BotApp relay health unavailable."),
       checkedAt,
       localRelay,
-    };
+    });
   }
 }
 
@@ -4396,6 +6181,9 @@ async function deviceHeartbeatStatus() {
 }
 
 async function ensureDeviceHeartbeatAutostart() {
+  if (shouldSkipIntegrationAutostart()) {
+    return deviceHeartbeatFallbackStatus("deferred", "Integration autostart skipped.");
+  }
   let status = await deviceHeartbeatStatus();
   if (status.status === "running" && status.processRunning && !status.duplicateProcess) {
     return status;
@@ -5037,9 +6825,11 @@ async function repairRelayConnection() {
   runtimeConfigCache = null;
   const relay = await botappRelayHealth();
   let overview = null;
-  if (relay.ok && relay.relay_authenticated) {
+  if (relay.ok && relay.relay_authenticated && !shouldSkipIntegrationAutostart()) {
     overview = await botappOverviewData();
     await ensureDispatcherAutostart();
+  } else if (relay.ok && relay.relay_authenticated) {
+    overview = await botappOverviewData();
   }
   const ok = Boolean(relay.ok && relay.relay_authenticated && overview?.ok);
   const result = {
@@ -5185,6 +6975,8 @@ function runtimeIntegrationStatus() {
       relayEndpoint: "/api/instagram-dashboard/compass/analyze",
     },
     environment: app.isPackaged ? "production" : "development",
+    integrationLocal: isIntegrationLocalMode(),
+    integrationLocalBanner: isIntegrationLocalMode() ? integrationLocalBanner() : null,
   };
 }
 
@@ -5353,6 +7145,9 @@ async function schedulerRuntimeStatus() {
 }
 
 async function ensureSchedulerRuntimeAutostart() {
+  if (shouldSkipIntegrationAutostart()) {
+    return { ok: false, status: "deferred", message: "Integration autostart skipped." };
+  }
   return botappSchedulerRuntime.startSchedulerRuntime(schedulerRuntimeDeps());
 }
 
@@ -5377,6 +7172,9 @@ async function dispatcherStatus() {
 }
 
 async function ensureDispatcherAutostart() {
+  if (shouldSkipIntegrationAutostart()) {
+    return dispatcherFallbackStatus("deferred", "Integration autostart skipped.");
+  }
   const relay = await botappRelayHealth();
   if (!relay.ok || !relay.relay_authenticated) {
     const current = await dispatcherStatus();
@@ -5527,8 +7325,18 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:email:save-delivery-settings", (_event, input) => emailDeliverySettingsSave(input));
   ipcMain.handle("botapp:email:send-test-delivery", (_event, input) => emailSendTestDelivery(input));
   ipcMain.handle("botapp:auto-restart:overview", () => autoRestartOverview());
+  ipcMain.handle("botapp:incidents:list", (_event, input) => incidentsOverview(input || {}));
+  ipcMain.handle("botapp:incidents:detail", (_event, incidentId) => incidentsDetail(incidentId));
+  ipcMain.handle("botapp:incidents:action", (_event, input) => performIncidentAction(input || {}));
+  ipcMain.handle("botapp:incidents:notification-settings", () => incidentsNotificationSettings());
+  ipcMain.handle("botapp:incidents:notification-settings-patch", (_event, input) => patchIncidentsNotificationSettings(input || {}));
+  ipcMain.handle("botapp:incidents:notification-test", (_event, input) => testIncidentsNotification(input || {}));
+  ipcMain.handle("botapp:incidents:notification-outbox", (_event, input) => incidentsNotificationOutbox(input || {}));
   ipcMain.handle("botapp:auto-restart:dry-run", () => autoRestartDryRun());
   ipcMain.handle("botapp:auto-restart:action-preview", (_event, input) => autoRestartActionPreview(input));
+  ipcMain.handle("botapp:auto-restart:settings-load", () => autoRestartSettingsLoad());
+  ipcMain.handle("botapp:auto-restart:settings-save", (_event, patch) => autoRestartSettingsSave(patch));
+  ipcMain.handle("botapp:auto-restart:execute", (_event, input) => autoRestartExecute(input));
   ipcMain.handle("botapp:data:overview", () => botappOverviewData());
   ipcMain.handle("botapp:relay:health", () => botappRelayHealth());
   ipcMain.handle("botapp:relay:repair", () => repairRelayConnection().catch((error) => ({
@@ -5609,6 +7417,7 @@ function logBuildMarker() {
   const cfg = compassConfig();
   console.log("[botapp] build_marker", {
     buildCommit: process.env.BOTAPP_BUILD_COMMIT || botappBuildCommit,
+    ipcProbeBuildId: botappIpcProbeBuildId,
     packaged: app.isPackaged,
     appPath: app.getAppPath(),
     relayOrigin: dashboardOrigin(cfg) || null,
@@ -5622,7 +7431,7 @@ function logBuildMarker() {
 function createMainWindow() {
   const mainWindow = new BrowserWindow({
     width: 1440,
-    height: 960,
+    height: integrationLocalCaptureDir() ? 1280 : 960,
     minWidth: 1180,
     minHeight: 760,
     title: "BotApp",
@@ -5667,10 +7476,34 @@ function createMainWindow() {
   } else {
     mainWindow.loadFile(indexPath);
   }
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    if (isIpcBridgeProbeMode()) {
+      void finishIpcBridgeProbe(mainWindow);
+      return;
+    }
+    if (isCaptureExactPreflightMode()) {
+      void finishCaptureExactPreflight(mainWindow);
+      return;
+    }
+    if (integrationLocalCaptureDir()) {
+      void runIntegrationLocalCapture(mainWindow).catch((error) => {
+        console.error("[BotApp integration capture] unhandled", error);
+        writeCaptureDiagnostic("botapp-capture-error.json", {
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : null,
+          at: new Date().toISOString(),
+        });
+        if (process.env.BOTAPP_INTEGRATION_CAPTURE_QUIT === "1") {
+          app.quit();
+        }
+      });
+    }
+  });
 }
 
 let pendingOpenDeviceDeepLink = findOpenDeviceViewDeepLink(process.argv);
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const hasSingleInstanceLock = isIntegrationLocalMode() || app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) {
   app.quit();
@@ -5700,17 +7533,39 @@ app.whenReady().then(async () => {
     });
     logBuildMarker();
 
+    if (isIpcBridgeProbeMode()) {
+      writeStartupTrace("ipc_probe_main_begin");
+      pendingIpcBridgeProbeMainReport = await runIpcBridgeProbeMain();
+      writeStartupTrace("ipc_probe_main_done");
+      writeIpcBridgeProbeReport({
+        mode: "packaged_ipc_bridge_probe",
+        phase: "main_only_partial",
+        integrationLocal: true,
+        relayUrl: probeRelayUrlRedacted(),
+        relayKeyConfigured: true,
+        autostartSkipped: shouldSkipIntegrationAutostart(),
+        ipcProbeBuildId: botappIpcProbeBuildId,
+        completedAt: new Date().toISOString(),
+        main: pendingIpcBridgeProbeMainReport,
+        renderer: null,
+      }, "botapp-ipc-bridge-probe.partial.json");
+      createMainWindow();
+      return;
+    }
+
     const relay = await botappRelayHealth();
     let dispatcher = null;
     let deviceHeartbeat = null;
-    deviceHeartbeat = await ensureDeviceHeartbeatAutostart().catch((error) => ({
-      ...deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat autostart failed.")),
-    }));
-    if (relay.ok && relay.relay_authenticated) {
-      dispatcher = await ensureDispatcherAutostart().catch((error) => ({
-        ...dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed.")),
+    if (!shouldSkipIntegrationAutostart()) {
+      deviceHeartbeat = await ensureDeviceHeartbeatAutostart().catch((error) => ({
+        ...deviceHeartbeatFallbackStatus("unknown", safeRuntimeError(error, "Device heartbeat autostart failed.")),
       }));
-      await ensureSchedulerRuntimeAutostart().catch(() => undefined);
+      if (relay.ok && relay.relay_authenticated) {
+        dispatcher = await ensureDispatcherAutostart().catch((error) => ({
+          ...dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher autostart failed.")),
+        }));
+        await ensureSchedulerRuntimeAutostart().catch(() => undefined);
+      }
     }
 
     writeBootstrapStatus(userDataDir(), {

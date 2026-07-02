@@ -1,6 +1,22 @@
 import { useState } from "react";
 import type { AutoRestartControl, AutoRestartOverview, AutoRestartSafetyStatus, AutoRestartStatus } from "../api/types";
+import type { BotAppDispatcherHealth, BotAppRelayHealth } from "../api/types";
 import { Badge, Card, Modal, type BadgeTone } from "../design/components";
+import {
+  formatAutoRestartDisplayValue,
+  formatBlockedCandidatesReason,
+  formatUnavailableValue,
+  controlLabel,
+  deviceStatusLabel,
+  safetyStatusLabel,
+  humanizeDeviceRestReason,
+} from "./auto-restart-labels";
+import {
+  isRuntimeMutationControl,
+  projectAutoRestartTruth,
+  runtimeControlDisabled,
+} from "./auto-restart-status";
+import { AutoRestartSettingsDrawer } from "./AutoRestartSettingsDrawer";
 import "./auto-restart.css";
 
 function statusTone(status: AutoRestartStatus | AutoRestartSafetyStatus): BadgeTone {
@@ -10,29 +26,33 @@ function statusTone(status: AutoRestartStatus | AutoRestartSafetyStatus): BadgeT
   return "neutral";
 }
 
-function valueOrPending(value: string | number | null) {
-  if (value === null || value === "") return "No data";
-  return String(value);
-}
-
 type AutoRestartNavTarget = "accounts" | "devices" | "credentials" | "activity" | "compass" | "safety" | "candidates";
 
 export function AutoRestart({
   overview,
+  relayHealth,
+  dispatcherHealth,
   onAction,
   onRefresh,
   onDryRun,
   onPreviewControl,
+  onExecuteControl,
   onNavigate,
 }: {
   overview: AutoRestartOverview;
+  relayHealth: BotAppRelayHealth | null;
+  dispatcherHealth: BotAppDispatcherHealth | null;
   onAction: (action: string, target: string, danger?: boolean) => void;
   onRefresh: () => void;
   onDryRun: () => void;
   onPreviewControl: (control: AutoRestartControl) => void;
+  onExecuteControl: (control: AutoRestartControl) => Promise<void>;
   onNavigate: (target: AutoRestartNavTarget) => void;
 }) {
   const [pendingControl, setPendingControl] = useState<AutoRestartControl | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedPhoneDeviceId, setSelectedPhoneDeviceId] = useState("");
+  const truth = projectAutoRestartTruth({ overview, relayHealth, dispatcherHealth });
 
   function requestControl(control: AutoRestartControl) {
     if (control.action === "refresh_overview") {
@@ -50,64 +70,84 @@ export function AutoRestart({
       return;
     }
     if (control.confirmationRequired) {
-      setPendingControl(control);
+      setPendingControl({
+        ...control,
+        targetDeviceId: selectedPhoneDeviceId || control.targetDeviceId,
+      });
       return;
     }
     onPreviewControl(control);
   }
 
-  function confirmControl() {
+  async function confirmControl() {
     if (!pendingControl) return;
-    onPreviewControl(pendingControl);
-    onAction(pendingControl.label, `${pendingControl.action} · ${pendingControl.requestId}`, true);
+    await onExecuteControl(pendingControl);
     setPendingControl(null);
   }
+
+  const modeLabel = overview.mode === "dry_run"
+    ? "Dry-run preview"
+    : overview.mode === "backend_pending"
+      ? "Backend pending"
+      : overview.mode === "active"
+        ? "Active"
+        : "Disabled";
 
   return (
     <div className="auto-restart-screen">
       <header className="auto-restart-hero">
-        <div>
+        <div className="auto-restart-hero-copy">
           <span>Automation runtime</span>
           <h2>Auto Restart</h2>
-          <p>{overview.sourceSummary || "Shared-backend restart preview and scheduler controls."}</p>
+          <p>{overview.sourceSummary || "Automatic resume preview and controls via the shared backend."}</p>
         </div>
         <div className="auto-restart-hero-status">
-          <Badge tone={statusTone(overview.status)} dot>{overview.status.replaceAll("_", " ")}</Badge>
-          <strong>{overview.enabled ? "Enabled" : "Disabled"}</strong>
-          <small>{overview.mode.replaceAll("_", " ")} · {overview.backendSyncStatus.replaceAll("_", " ")}</small>
+          <Badge tone={truth.autoRestartTone} dot>{truth.heroBadgeLabel}</Badge>
+          <strong>{truth.autoRestartTitle}</strong>
+          <small>{truth.autoRestartDetail}</small>
         </div>
       </header>
 
+      {truth.blockReasons.length ? (
+        <p className="auto-restart-compact-note" role="status">{truth.blockReasons.join(", ")}</p>
+      ) : null}
+
       <section className="auto-restart-action-bar" aria-label="Auto Restart actions">
-        <button type="button" onClick={onRefresh}>Refresh overview</button>
-        <button type="button" onClick={onDryRun}>Run dry-run preview</button>
+        <button type="button" onClick={onRefresh}>Refresh</button>
+        <button type="button" onClick={onDryRun}>Run dry-run check</button>
         <button type="button" onClick={() => onNavigate("candidates")}>View candidates</button>
-        <button type="button" onClick={() => copySafeSummary(overview)}>Copy safe summary</button>
+        <button type="button" onClick={() => copySafeSummary(overview, truth)}>Copy safe summary</button>
+        {overview.rules.writable ? <button type="button" onClick={() => setSettingsOpen(true)}>Edit Auto Restart</button> : null}
       </section>
 
-      <section className="auto-restart-kpis" aria-label="Auto Restart overview">
-        <Kpi label="Current mode" value={overview.mode.replaceAll("_", " ")} detail={overview.backendSyncStatus.replaceAll("_", " ")} tone={statusTone(overview.status)} />
-        <Kpi label="Last check" value={valueOrPending(overview.lastRestartAt)} detail="Scheduler heartbeat" tone="neutral" />
-        <Kpi label="Next check" value={valueOrPending(overview.nextEligibleRestartAt)} detail="Next scheduler pass" tone="warning" />
+      <section className="auto-restart-kpis" aria-label="Auto Restart summary">
+        <Kpi label="Current mode" value={modeLabel} detail={truth.operationalState} tone={statusTone(overview.status)} />
+        <Kpi label="Pilot account" value={overview.rules.pilotUsername ? `@${overview.rules.pilotUsername}` : "Not set"} detail={overview.rules.pilotAccountId || "Required before activation"} tone={overview.rules.pilotAccountId ? "warning" : "neutral"} />
+        <Kpi label="Check interval" value={`${overview.rules.checkEveryMinutes} min`} detail="Scheduler cadence" tone="neutral" />
+        <Kpi label="Restart delay" value={`${overview.rules.restartDelayMinutes} min`} detail="Between attempts" tone="neutral" />
         <Kpi label="Affected accounts" value={overview.activeAccountsAffected} detail="Eligible or blocked" tone={overview.activeAccountsAffected ? "warning" : "neutral"} />
-        <Kpi label="Safety" value={overview.safetyStatus.replaceAll("_", " ")} detail="Gates summary" tone={statusTone(overview.safetyStatus)} />
+        <Kpi label="Safety" value={safetyStatusLabel(overview.safetyStatus)} detail="Safety gates summary" tone={statusTone(overview.safetyStatus)} />
       </section>
 
       <section className="auto-restart-grid">
         <Card title="Rules">
           <div className="auto-restart-toggle-grid">
             <ToggleCard label="Auto Restart" checked={overview.rules.enabled} disabled={!overview.rules.writable} />
-            <ToggleCard label="Restart Yellow Accounts" checked={overview.rules.restartYellowAccounts} disabled={!overview.rules.writable} />
-            <ToggleCard label="Restart Red Accounts" checked={overview.rules.restartRedAccounts} disabled={!overview.rules.writable} />
-            <ToggleCard label="Respect Fixed Blackouts" checked={overview.rules.respectFixedBlackouts} disabled={!overview.rules.writable} />
-            <ToggleCard label="Respect 6h Session Window" checked={overview.rules.respectSixHourWindow} disabled={!overview.rules.writable} />
+            <ToggleCard label="Restart yellow accounts" checked={overview.rules.restartYellowAccounts} disabled={!overview.rules.writable} />
+            <ToggleCard label="Restart red accounts" checked={overview.rules.restartRedAccounts} disabled={!overview.rules.writable} />
+            <ToggleCard label="Respect fixed blackouts" checked={overview.rules.respectFixedBlackouts} disabled={!overview.rules.writable} />
+            <ToggleCard label="Respect 6-hour window" checked={overview.rules.respectSixHourWindow} disabled={!overview.rules.writable} />
           </div>
-          {!overview.rules.writable ? <p className="auto-restart-compact-note">Read-only until scheduler settings are wired.</p> : null}
+          {!overview.rules.writable ? (
+            <p className="auto-restart-compact-note">Read-only — backend migration required before editing.</p>
+          ) : (
+            <p className="auto-restart-compact-note">Settings persisted in Supabase via authenticated relay.</p>
+          )}
         </Card>
 
         <Card title="Limits">
           <div className="auto-restart-number-grid">
-            <NumberCard label="Check every" value={overview.rules.checkEveryMinutes} suffix="min" />
+            <NumberCard label="Max attempts/session" value={overview.rules.maxAttemptsPerSession} suffix="per session" />
             <NumberCard label="Max restarts/day" value={overview.rules.maxRestartsPerAccountPerDay} suffix="per account" />
             <NumberCard label="Max restarts/window" value={overview.rules.maxRestartsPerAccountPerWindow} suffix="per window" />
           </div>
@@ -115,63 +155,83 @@ export function AutoRestart({
       </section>
 
       <section className="auto-restart-grid">
-        <Card title="Quota Resume">
+        <Card title="Quota resume">
           <div className="resume-grid">
-            <Metric label="Paused due to quota" value={overview.sessionResume.pausedDueToQuota} />
-            <Metric label="Eligible to resume" value={overview.sessionResume.eligibleToResume} />
-            <Metric label="Follows left" value={valueOrPending(overview.sessionResume.remainingDailyQuota.follows)} />
-            <Metric label="Unfollows left" value={valueOrPending(overview.sessionResume.remainingDailyQuota.unfollows)} />
-            <Metric label="DMs left" value={valueOrPending(overview.sessionResume.remainingDailyQuota.dms)} />
-            <Metric label="Next window" value={valueOrPending(overview.sessionResume.nextResumeWindow)} />
+            <MetricDisplay label="Paused (quota)" value={overview.sessionResume.pausedDueToQuota} truth={truth} />
+            <MetricDisplay label="Eligible to resume" value={overview.sessionResume.eligibleToResume} truth={truth} />
+            <MetricDisplay label="Follows remaining" value={overview.sessionResume.remainingDailyQuota.follows} truth={truth} />
+            <MetricDisplay label="Unfollows remaining" value={overview.sessionResume.remainingDailyQuota.unfollows} truth={truth} />
+            <MetricDisplay label="DMs remaining" value={overview.sessionResume.remainingDailyQuota.dms} truth={truth} />
+            <MetricUnavailable label="Next window" value={overview.sessionResume.nextResumeWindow} />
           </div>
-          {overview.sessionResume.resumeBlockedReason ? <InfoLine label="Blocked reason" value={overview.sessionResume.resumeBlockedReason} /> : null}
+          {overview.sessionResume.resumeBlockedReason ? (
+            <InfoLine label="Block reason" value={formatBlockedCandidatesReason(overview.sessionResume.resumeBlockedReason, truth) ?? overview.sessionResume.resumeBlockedReason} />
+          ) : null}
         </Card>
 
-        <Card title="Runtime Controls">
-          <div className="auto-restart-button-grid">
-            {runtimeControls(overview.controls).map((control) => (
-              <button key={control.action} type="button" disabled={control.backendStatus !== "relay_ready"} onClick={() => requestControl(control)} title={control.backendStatus !== "relay_ready" ? "Scheduler not wired" : control.detail}>
-                <strong>{control.label}</strong>
-                <small>{control.backendStatus === "relay_ready" ? control.detail : "Scheduler not wired"}</small>
-              </button>
-            ))}
+        <Card title="Runtime controls">
+          <p className="auto-restart-compact-note">{truth.controlsUnavailableReason}</p>
+          <div className="auto-restart-button-grid auto-restart-runtime-grid">
+            {runtimeControls(overview.controls).map((control) => {
+              const disabled = runtimeControlDisabled(control, truth);
+              const disabledReason = disabled ? truth.controlsUnavailableReason : control.detail;
+              return (
+                <button
+                  key={control.action}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => requestControl(control)}
+                  title={disabledReason}
+                >
+                  <strong>{controlLabel(control)}</strong>
+                  <small>{disabledReason}</small>
+                </button>
+              );
+            })}
           </div>
         </Card>
       </section>
 
       <section className="auto-restart-grid">
         <Card title="Navigation">
-          <div className="auto-restart-button-grid">
+          <div className="auto-restart-button-grid auto-restart-navigation-grid">
             {navigationControls(overview.controls).map((control) => (
               <button key={control.action} type="button" onClick={() => requestControl(control)}>
-                <strong>{control.label}</strong>
+                <strong>{controlLabel(control)}</strong>
                 <small>{control.detail}</small>
               </button>
             ))}
           </div>
         </Card>
 
-        <Card title="Phone / Device Rest">
-          <div className="rest-summary">
-            <Metric label="Phones resting" value={overview.phoneRest.phonesResting} />
-            <Metric label="Phones active" value={overview.phoneRest.phonesActive} />
-            <Metric label="Next rest" value={valueOrPending(overview.phoneRest.nextRestWindow)} />
-          </div>
+        <Card title="Phone rest">
+          <label className="auto-restart-device-picker">
+            <span>Target phone for pause/resume</span>
+            <select
+              value={selectedPhoneDeviceId}
+              onChange={(event) => setSelectedPhoneDeviceId(event.target.value)}
+            >
+              <option value="">Select a phone</option>
+              {overview.phoneRest.devices.map((device) => (
+                <option key={device.deviceId} value={device.deviceId}>{device.deviceLabel}</option>
+              ))}
+            </select>
+          </label>
           {overview.phoneRest.devices.length ? (
             <div className="device-rest-list">
               {overview.phoneRest.devices.map((device) => (
                 <button key={device.deviceId} type="button" onClick={() => onNavigate("devices")}>
                   <strong>{device.deviceLabel}</strong>
-                  <Badge tone={device.status === "active" ? "success" : device.status === "offline" ? "error" : "warning"}>{device.status}</Badge>
-                  <small>{device.reason}</small>
+                  <Badge tone={device.status === "active" ? "success" : device.status === "offline" ? "error" : "warning"}>{deviceStatusLabel(device.status)}</Badge>
+                  <small>{humanizeDeviceRestReason(device.reason, false)}</small>
                 </button>
               ))}
             </div>
-          ) : <Empty title="No device gates." detail="No data" />}
+          ) : <Empty title="No devices listed." detail="Unavailable" secondary="Scheduler is not connected to runtime yet." />}
         </Card>
       </section>
 
-      <Card title="Candidate Accounts">
+      <Card title="Candidate accounts">
         {overview.quotaCandidates.length ? (
           <div className="auto-restart-table-wrap">
             <table>
@@ -234,10 +294,10 @@ export function AutoRestart({
               </tbody>
             </table>
           </div>
-        ) : <Empty title="No candidates." detail="No data" />}
+        ) : <Empty title="No candidates." detail="Unavailable" secondary="Scheduler is not connected to runtime yet." />}
       </Card>
 
-      <Card title="Safety Gates">
+      <Card title="Safety gates">
         <div className="safety-rules">
           {overview.safetyRules.map((rule) => (
             <article key={rule.id}>
@@ -249,7 +309,7 @@ export function AutoRestart({
         </div>
       </Card>
 
-      <Card title="Last Decisions">
+      <Card title="Recent decisions">
         {overview.decisions.length ? (
           <div className="auto-restart-table-wrap">
             <table>
@@ -257,7 +317,7 @@ export function AutoRestart({
               <tbody>
                 {overview.decisions.map((decision) => (
                   <tr key={decision.id}>
-                    <td>{decision.decisionTime ?? "No time"}</td>
+                    <td>{decision.decisionTime ?? truth.emptyValueLabel}</td>
                     <td>{decision.account}</td>
                     <td>{decision.action}</td>
                     <td>{decision.reason}</td>
@@ -267,7 +327,7 @@ export function AutoRestart({
               </tbody>
             </table>
           </div>
-        ) : <Empty title="No decisions." detail="No data" />}
+        ) : <Empty title="No decisions." detail="Unavailable" secondary="Scheduler is not connected to runtime yet." />}
       </Card>
 
       {pendingControl ? (
@@ -283,11 +343,31 @@ export function AutoRestart({
             <p>Affected accounts: <strong>{pendingControl.affectedAccountsCount}</strong></p>
             <p>Affected devices: <strong>{pendingControl.affectedDevicesCount}</strong></p>
             <p>Dry-run: <strong>{pendingControl.dryRun ? "Yes" : "No"}</strong></p>
-            <p>Request id: <code>{pendingControl.requestId}</code></p>
+            <p>Request id : <code>{pendingControl.requestId}</code></p>
           </div>
         </Modal>
       ) : null}
+
+      <AutoRestartSettingsDrawer
+        open={settingsOpen}
+        overview={overview}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={(message, tone) => {
+          onAction(message, "auto-restart-settings", tone === "error");
+          if (tone === "success") onRefresh();
+        }}
+      />
     </div>
+  );
+}
+
+function InfraStatus({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: BadgeTone }) {
+  return (
+    <article className={`auto-restart-infra-card ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </article>
   );
 }
 
@@ -303,15 +383,7 @@ function navigationTarget(action: AutoRestartControl["action"]): AutoRestartNavT
 }
 
 function runtimeControls(controls: AutoRestartControl[]) {
-  const actions = new Set<AutoRestartControl["action"]>([
-    "enable_auto_restart",
-    "disable_auto_restart",
-    "restart_eligible_sessions",
-    "resume_quota_paused",
-    "pause_device_rest",
-    "resume_phone",
-  ]);
-  return controls.filter((control) => actions.has(control.action));
+  return controls.filter((control) => isRuntimeMutationControl(control.action));
 }
 
 function navigationControls(controls: AutoRestartControl[]) {
@@ -328,11 +400,13 @@ function navigationControls(controls: AutoRestartControl[]) {
   return controls.filter((control) => actions.has(control.action));
 }
 
-function copySafeSummary(overview: AutoRestartOverview) {
+function copySafeSummary(overview: AutoRestartOverview, truth: ReturnType<typeof projectAutoRestartTruth>) {
   const summary = [
-    `Auto Restart: ${overview.enabled ? "enabled" : "disabled"}`,
+    `Relay: ${truth.relayLabel}`,
+    `Dispatcher: ${truth.dispatcherLabel}`,
+    `Auto Restart: ${truth.autoRestartTitle}`,
     `Mode: ${overview.mode}`,
-    `Eligible: ${overview.activeAccountsAffected}`,
+    `Operational state: ${truth.operationalState}`,
     `Safety: ${overview.safetyStatus}`,
   ].join("\n");
   void navigator.clipboard?.writeText(summary);
@@ -358,6 +432,55 @@ function NumberCard({ label, value, suffix }: { label: string; value: number; su
   );
 }
 
+function KpiUnavailable({ label, value, detail, tone }: { label: string; value: string | null; detail: string; tone: BadgeTone }) {
+  if (!value) {
+    const unavailable = formatUnavailableValue();
+    return (
+      <article className={`auto-restart-kpi ${tone}`}>
+        <span>{label}</span>
+        <strong>{unavailable.primary}</strong>
+        <small>{unavailable.secondary}</small>
+      </article>
+    );
+  }
+  return <Kpi label={label} value={value} detail={detail} tone={tone} />;
+}
+
+function MetricDisplay({
+  label,
+  value,
+  truth,
+  previewMetric = false,
+}: {
+  label: string;
+  value: string | number | null;
+  truth: ReturnType<typeof projectAutoRestartTruth>;
+  previewMetric?: boolean;
+}) {
+  const display = formatAutoRestartDisplayValue(value, truth, { previewMetric });
+  return (
+    <div className="auto-restart-metric">
+      <span>{label}</span>
+      <strong>{display.primary}</strong>
+      {display.secondary ? <small className="auto-restart-metric-note">{display.secondary}</small> : null}
+    </div>
+  );
+}
+
+function MetricUnavailable({ label, value }: { label: string; value: string | null }) {
+  if (!value) {
+    const unavailable = formatUnavailableValue();
+    return (
+      <div className="auto-restart-metric">
+        <span>{label}</span>
+        <strong>{unavailable.primary}</strong>
+        <small className="auto-restart-metric-note">{unavailable.secondary}</small>
+      </div>
+    );
+  }
+  return <Metric label={label} value={value} />;
+}
+
 function Kpi({ label, value, detail, tone }: { label: string; value: string | number; detail: string; tone: BadgeTone }) {
   return <article className={`auto-restart-kpi ${tone}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
 }
@@ -370,6 +493,12 @@ function InfoLine({ label, value }: { label: string; value: string | number }) {
   return <div className="auto-restart-info-line"><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function Empty({ title, detail }: { title: string; detail: string }) {
-  return <div className="empty-state"><strong>{title}</strong><span>{detail}</span></div>;
+function Empty({ title, detail, secondary }: { title: string; detail: string; secondary?: string }) {
+  return (
+    <div className="empty-state">
+      <strong>{title}</strong>
+      <span>{detail}</span>
+      {secondary ? <small className="auto-restart-metric-note">{secondary}</small> : null}
+    </div>
+  );
 }

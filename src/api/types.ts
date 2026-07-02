@@ -2324,6 +2324,8 @@ export type BotAppRuntimeIntegrationStatus = {
     relayEndpoint: "/api/instagram-dashboard/compass/analyze";
   };
   environment: "local" | "development" | "production";
+  integrationLocal?: boolean;
+  integrationLocalBanner?: string | null;
 };
 
 export type BotAppDeviceHeartbeatServiceStatus = "running" | "paused" | "stopped" | "degraded" | "starting" | "unhealthy" | "unknown";
@@ -2525,13 +2527,24 @@ export type AutoRestartSafetyRule = {
 
 export type AutoRestartRuleSettings = {
   enabled: boolean;
+  pilotAccountId: string | null;
+  pilotUsername: string | null;
   restartYellowAccounts: boolean;
   restartRedAccounts: boolean;
   respectFixedBlackouts: boolean;
   respectSixHourWindow: boolean;
   checkEveryMinutes: number;
+  restartDelayMinutes: number;
+  maxAttemptsPerSession: number;
   maxRestartsPerAccountPerDay: number;
   maxRestartsPerAccountPerWindow: number;
+  resumeFollowIfQuotaRemaining: boolean;
+  resumeUnfollowIfQuotaRemaining: boolean;
+  blockOnChallenge: boolean;
+  blockOnRestriction: boolean;
+  blockOnAccountMismatch: boolean;
+  blockOnDeviceOffline: boolean;
+  notifyOnBlockedRestart: boolean;
   writable: boolean;
 };
 
@@ -2577,6 +2590,8 @@ export type AutoRestartOverview = {
   status: AutoRestartStatus;
   enabled: boolean;
   mode: AutoRestartMode;
+  operationalState?: "disabled" | "blocked" | "ready" | "active";
+  blockReasons?: string[];
   lastRestartAt: string | null;
   nextEligibleRestartAt: string | null;
   activeAccountsAffected: number;

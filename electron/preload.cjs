@@ -38,6 +38,18 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     overview: () => ipcRenderer.invoke("botapp:auto-restart:overview"),
     dryRun: () => ipcRenderer.invoke("botapp:auto-restart:dry-run"),
     actionPreview: (input) => ipcRenderer.invoke("botapp:auto-restart:action-preview", input),
+    loadSettings: () => ipcRenderer.invoke("botapp:auto-restart:settings-load"),
+    saveSettings: (patch) => ipcRenderer.invoke("botapp:auto-restart:settings-save", patch),
+    execute: (input) => ipcRenderer.invoke("botapp:auto-restart:execute", input),
+  },
+  incidents: {
+    list: (input) => ipcRenderer.invoke("botapp:incidents:list", input),
+    detail: (incidentId) => ipcRenderer.invoke("botapp:incidents:detail", incidentId),
+    action: (input) => ipcRenderer.invoke("botapp:incidents:action", input),
+    notificationSettings: () => ipcRenderer.invoke("botapp:incidents:notification-settings"),
+    patchNotificationSettings: (input) => ipcRenderer.invoke("botapp:incidents:notification-settings-patch", input),
+    testNotification: (input) => ipcRenderer.invoke("botapp:incidents:notification-test", input),
+    notificationOutbox: (input) => ipcRenderer.invoke("botapp:incidents:notification-outbox", input),
   },
   data: {
     overview: () => ipcRenderer.invoke("botapp:data:overview"),

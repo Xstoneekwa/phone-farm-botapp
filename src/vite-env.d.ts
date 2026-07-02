@@ -123,6 +123,9 @@ interface Window {
       overview: () => Promise<AutoRestartOverview>;
       dryRun: () => Promise<{ ok: boolean; overview: AutoRestartOverview; error?: string; dryRun?: true }>;
       actionPreview: (input: { action: AutoRestartControlAction; requestId?: string; target?: Record<string, unknown> }) => Promise<{ ok: boolean; data?: unknown; error?: string }>;
+      loadSettings?: () => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
+      saveSettings?: (patch: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
+      execute?: (input: { action: AutoRestartControlAction; requestId?: string; target?: Record<string, unknown>; confirmed?: boolean }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string; overview?: AutoRestartOverview }>;
     };
     data?: {
       overview: () => Promise<{ ok: boolean; data: BotAppOverviewData; error?: string | null; profilesMeta?: { source: string; accountsCount: number; counts: Record<string, number> } | null }>;
@@ -227,6 +230,15 @@ interface Window {
       deliverySettingsAudit: () => Promise<{ ok: boolean; data?: BotAppEmailDeliverySettingsAudit; error?: string | null }>;
       refreshDeliverySenders: () => Promise<{ ok: boolean; data?: { projection?: BotAppEmailDeliverySettingsProjection; refreshedAt?: string; confirmedSenderCount?: number }; error?: string | null }>;
       saveDeliverySettings: (input: { supportEmail?: string; activeFromEmail?: string; configVersion?: number; confirmed?: boolean }) => Promise<{ ok: boolean; data?: { projection?: BotAppEmailDeliverySettingsProjection }; error?: string | null }>;
+    };
+    incidents?: {
+      list: (input?: { status?: string; limit?: number }) => Promise<{ ok: boolean; openCount?: number; incidents?: Array<Record<string, unknown>>; message?: string; authorizedHostMachine?: string | null; scopeMode?: string | null }>;
+      detail: (incidentId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
+      action: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
+      notificationSettings: () => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
+      patchNotificationSettings: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
+      testNotification: (input: { channel: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
+      notificationOutbox: (input?: { channel?: string; limit?: number; offset?: number }) => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
     };
     deviceViews?: {
       list: () => Promise<BotAppDeviceViewResult>;

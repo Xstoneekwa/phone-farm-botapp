@@ -11,6 +11,7 @@ import { Credentials } from "../views/Credentials";
 import { Devices } from "../views/Devices";
 import { ActivityLog } from "../views/ActivityLog";
 import { RuntimeHealth } from "../views/RuntimeHealth";
+import { IncidentNotificationsSettingsView } from "../views/IncidentNotificationsSettings";
 import { Compass } from "../views/Compass";
 import { AutoRestart } from "../views/AutoRestart";
 import { EmailHistory } from "../views/EmailHistory";
@@ -58,7 +59,15 @@ export function App() {
   async function loadOverviewData() {
     if (window.botappDesktop?.data?.overview) {
       const result = await window.botappDesktop.data.overview();
-      setData(result.data);
+      const nextData = result.data;
+      const hasUsableProjection = Boolean(
+        data.profiles.length
+        || data.profileGroups.length
+        || data.devices.length
+      );
+      if (result.ok || !hasUsableProjection) {
+        setData(nextData);
+      }
       setSyncError(result.error ?? null);
       setProfilesMeta(result.profilesMeta ?? null);
       void loadDispatcherHealth();
@@ -107,7 +116,7 @@ export function App() {
       if (result?.relay) setRelayHealth(result.relay);
       await loadOverviewData();
       await loadDispatcherHealth();
-      pushToast(result?.message || (result?.ok ? "Connexion BotApp opérationnelle." : "Réparation indisponible."), result?.ok ? "success" : "error");
+      pushToast(result?.message || (result?.ok ? "BotApp connection operational." : "Repair unavailable."), result?.ok ? "success" : "error");
     } finally {
       setRepairBusy(false);
     }
@@ -120,7 +129,7 @@ export function App() {
       const result = await window.botappDesktop?.dispatcher?.ensure?.();
       if (result) setDispatcherHealth(result);
       pushToast(
-        result?.status === "running" ? "Dispatcher : actif." : (result?.message || "Dispatcher indisponible."),
+        result?.status === "running" ? "Dispatcher: running." : (result?.message || "Dispatcher unavailable."),
         result?.status === "running" ? "success" : "error",
       );
     } finally {
@@ -189,6 +198,15 @@ export function App() {
     setActive(route);
     setCommandOpen(false);
   }
+
+  useEffect(() => {
+    function onCaptureNavigate(event: Event) {
+      const route = (event as CustomEvent<{ route?: RouteId }>).detail?.route;
+      if (route) navigate(route);
+    }
+    window.addEventListener("botapp-capture-nav", onCaptureNavigate as EventListener);
+    return () => window.removeEventListener("botapp-capture-nav", onCaptureNavigate as EventListener);
+  }, []);
 
   function navigateCompassTarget(target: CompassActionTarget) {
     if (target.context.profileId) setSelectedProfileId(target.context.profileId);
@@ -279,6 +297,25 @@ export function App() {
     await refreshAutoRestart();
   }
 
+  async function executeAutoRestartControl(control: AutoRestartControl) {
+    const result = await window.botappDesktop?.autoRestart?.execute?.({
+      action: control.action,
+      requestId: control.requestId,
+      target: {
+        targetAccountId: control.targetAccountId,
+        targetDeviceId: control.targetDeviceId,
+        device_id: control.targetDeviceId,
+      },
+      confirmed: true,
+    });
+    if (result?.ok) {
+      pushToast(`${control.label} : action exécutée.`, "success");
+      await refreshAutoRestart();
+      return;
+    }
+    pushToast(result?.error ?? `${control.label} : échec backend.`, "error");
+  }
+
   async function previewAutoRestartControl(control: AutoRestartControl) {
     const preview = await window.botappDesktop?.autoRestart?.actionPreview?.({
       action: control.action,
@@ -310,8 +347,9 @@ export function App() {
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
   else if (active === "email-history") view = <EmailHistory />;
   else if (active === "runtime") view = <RuntimeHealth />;
+  else if (active === "incident-notifications") view = <IncidentNotificationsSettingsView />;
   else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
-  else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onPreviewControl={previewAutoRestartControl} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;
+  else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} relayHealth={relayHealth} dispatcherHealth={dispatcherHealth} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onPreviewControl={previewAutoRestartControl} onExecuteControl={executeAutoRestartControl} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;
   else if (active === "api") view = <APIKeys apiKeys={data.apiKeys} webhooks={data.webhooks} onAction={requestAction} />;
   else view = data.settings ? <Settings settings={data.settings} onAction={requestAction} /> : null;
 
@@ -321,7 +359,7 @@ export function App() {
 
   return <div className="app-shell">
     <Sidebar active={active} onNavigate={navigate} counts={counts} />
-    <main className="main">
+    <main className="main" data-testid={`botapp-active-view-${active}`}>
       <TopBar active={active} onCommand={() => setCommandOpen(true)} />
       <div className={`relay-auth-banner${connectionBlocked ? " relay-auth-banner-blocked" : " relay-auth-banner-ok"}`}>
         <div>
@@ -329,31 +367,36 @@ export function App() {
             <>
               <strong>
                 {!relayOperational
-                  ? "Connexion BotApp indisponible."
-                  : "Dispatcher arrêté."}
+                  ? "BotApp connection unavailable."
+                  : "Dispatcher stopped."}
               </strong>
               <span>
                 {!relayOperational
-                  ? (relayHealth?.message || "Le relay local n'est pas authentifié.")
-                  : (dispatcherHealth?.message || "Le dispatcher n'est pas actif.")}
+                  ? (relayHealth?.message || "Local relay is not authenticated.")
+                  : (dispatcherHealth?.message || "Dispatcher is not active.")}
               </span>
             </>
           ) : (
             <>
-              <strong>Connexion BotApp : opérationnelle</strong>
-              <span>Dispatcher : actif</span>
+              <strong>BotApp connection: operational</strong>
+              <span>
+                {dispatcherOperational
+                  ? "Relay authenticated · dispatcher confirmed running."
+                  : "Relay authenticated · dispatcher is not confirmed running."}
+                {active === "auto-restart" ? " This does not mean Auto Restart is enabled." : ""}
+              </span>
             </>
           )}
         </div>
         <div className="relay-auth-actions">
           {!relayOperational ? (
             <button type="button" disabled={repairBusy} onClick={() => void repairConnection()}>
-              {repairBusy ? "Réparation…" : "Réparer la connexion"}
+              {repairBusy ? "Repairing..." : "Repair connection"}
             </button>
           ) : null}
           {relayOperational && !dispatcherOperational ? (
             <button type="button" disabled={dispatcherEnsureBusy} onClick={() => void ensureDispatcher()}>
-              {dispatcherEnsureBusy ? "Démarrage…" : "Démarrer le dispatcher"}
+              {dispatcherEnsureBusy ? "Starting..." : "Start dispatcher"}
             </button>
           ) : null}
           {connectionBlocked ? (
