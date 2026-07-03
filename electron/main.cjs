@@ -2589,6 +2589,18 @@ function readPayload(data) {
   return data && typeof data === "object" && data.ok === true && data.data ? data.data : data;
 }
 
+function normalizeAutoRestartSchedulerMode(mode) {
+  const normalized = String(mode || "").trim().toLowerCase();
+  if (normalized === "production" || normalized === "active") return "production";
+  if (normalized === "disabled" || normalized === "dry_run") return normalized;
+  return "disabled";
+}
+
+function isAutoRestartSchedulerExecutable(enabled, mode) {
+  if (!enabled) return false;
+  return normalizeAutoRestartSchedulerMode(mode) === "production";
+}
+
 function autoRestartFallback(sourceSummary = "Auto Restart backend overview is not available.") {
   const control = (action, label, detail, confirmationRequired, impact) => ({
     action,
@@ -2708,11 +2720,9 @@ function normalizeAutoRestartOverview(data) {
   }));
   const resting = candidates.filter((candidate) => /rest/i.test(String(candidate.phoneRestStatus || ""))).length;
   const active = candidates.filter((candidate) => /active|ok|none|not active/i.test(String(candidate.phoneRestStatus || ""))).length;
-  const schedulerMode = status.mode === "active" || status.mode === "disabled" || status.mode === "dry_run"
-    ? status.mode
-    : "disabled";
+  const schedulerMode = normalizeAutoRestartSchedulerMode(status.mode);
   const autoRestartEnabled = Boolean(status.enabled);
-  const schedulerExecutable = autoRestartEnabled && schedulerMode === "active";
+  const schedulerExecutable = isAutoRestartSchedulerExecutable(autoRestartEnabled, status.mode);
   const backendWritable = sourceStatus.every((source) => source.status !== "pending");
   const mutationBackendStatus = schedulerExecutable ? "relay_ready" : "backend_pending";
   const control = (action, label, detail, confirmationRequired, impact, backendStatus = "relay_ready", dryRun = false) => ({

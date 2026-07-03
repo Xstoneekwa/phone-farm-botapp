@@ -35,3 +35,19 @@ test("BotApp Auto Restart exposes production mode and dry-run action only", () =
   assert.match(source, /Run dry-run check/);
   assert.match(source, /Blocked — automation foundation is not available\./);
 });
+
+test("BotApp production enabled is not mapped to disabled scheduler mode", () => {
+  const mainSource = readFileSync(new URL("../../electron/main.cjs", import.meta.url), "utf8");
+  assert.match(mainSource, /normalizeAutoRestartSchedulerMode/);
+  assert.match(mainSource, /isAutoRestartSchedulerExecutable/);
+  assert.match(mainSource, /normalized === "production" \|\| normalized === "active"/);
+  assert.doesNotMatch(mainSource, /schedulerMode === "active"/);
+});
+
+test("BotApp Auto Restart shows honest last and next evaluation labels", () => {
+  const source = readFileSync(new URL("./AutoRestart.tsx", import.meta.url), "utf8");
+  assert.match(source, /formatNextEvaluationLabel/);
+  assert.match(source, /overview\.lastRestartAt \?\? "None"/);
+  assert.match(source, /return "None"/);
+  assert.match(source, /return "Not scheduled"/);
+});

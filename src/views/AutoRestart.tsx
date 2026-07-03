@@ -67,6 +67,17 @@ function operationalTitle(truth: ReturnType<typeof projectAutoRestartTruth>, fou
   return truth.autoRestartTitle;
 }
 
+function formatNextEvaluationLabel(
+  overview: AutoRestartOverview,
+  foundationBlocked: boolean,
+) {
+  if (foundationBlocked || !overview.enabled) return "Not scheduled";
+  const mode = String(overview.mode || "").trim().toLowerCase();
+  if (mode !== "production" && mode !== "active") return "Not scheduled";
+  if (overview.nextEligibleRestartAt) return overview.nextEligibleRestartAt;
+  return "None";
+}
+
 export function AutoRestart({
   overview,
   relayHealth,
@@ -200,7 +211,7 @@ export function AutoRestart({
             <div className="auto-restart-runtime-grid">
               <RuntimeStat label="Eligible accounts" value={String(eligibleCount)} />
               <RuntimeStat label="Blocked accounts" value={String(blockedCount)} />
-              <RuntimeStat label="Next evaluation" value={overview.nextEligibleRestartAt ?? "Not scheduled"} />
+              <RuntimeStat label="Next evaluation" value={formatNextEvaluationLabel(overview, foundationBlocked)} />
               <RuntimeStat label="Last evaluation" value={overview.lastRestartAt ?? "None"} />
             </div>
             <div className="auto-restart-actions">
