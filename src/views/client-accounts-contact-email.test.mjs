@@ -16,8 +16,10 @@ test("client accounts column is labeled Client email and uses canonical projecti
 test("botapp relay maps canonical client contact email instead of instagram emailDisplay", () => {
   assert.match(electronMain, /clientContactEmail/);
   assert.match(electronMain, /clientContactEmailDisplay/);
-  assert.match(electronMain, /Contact email missing/);
+  assert.match(electronMain, /Not provided/);
+  assert.match(electronMain, /overlayClientAccountNeedsMoreTargets/);
   assert.doesNotMatch(electronMain, /safeEmailDisplay: String\(account\?\.emailDisplay/);
+  assert.doesNotMatch(electronMain, /clientContactEmailDisplay: String\(account\?\.emailDisplay/);
 });
 
 test("botapp client account type exposes canonical client contact email fields", () => {

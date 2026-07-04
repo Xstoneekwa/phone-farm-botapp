@@ -4762,6 +4762,10 @@ function overlayClientAccountNeedsMoreTargets(items, clientAccountsPayload) {
       ...item,
       needsMoreTargets: Boolean(relay.needsMoreTargets ?? relay.needs_more_targets),
       eligibleTargetCount: Number(relay.eligibleTargetCount ?? relay.eligible_target_count ?? 0),
+      clientContactEmailDisplay: String(relay.clientContactEmail || relay.clientContactEmailDisplay || item.clientContactEmailDisplay || "Not provided"),
+      safeEmailDisplay: String(relay.clientContactEmail || relay.clientContactEmailDisplay || item.safeEmailDisplay || "Not provided"),
+      clientContactEmailSource: String(relay.clientContactEmailSource || item.clientContactEmailSource || "missing"),
+      clientContactEmailAvailable: Boolean(relay.clientContactEmailAvailable ?? item.clientContactEmailAvailable),
     };
   });
 }
@@ -4814,8 +4818,8 @@ function clientAccountFromManage(account, profile, devices) {
     needsMoreTargets: Boolean(account?.needsMoreTargets ?? account?.needs_more_targets),
     eligibleTargetCount: Number(account?.eligibleTargetCount ?? account?.eligible_target_count ?? 0),
     actionsNeeded,
-    safeEmailDisplay: String(account?.clientContactEmail || account?.clientContactEmailDisplay || "Contact email missing"),
-    clientContactEmailDisplay: String(account?.clientContactEmail || account?.clientContactEmailDisplay || "Contact email missing"),
+    safeEmailDisplay: String(account?.clientContactEmail || account?.clientContactEmailDisplay || "Not provided"),
+    clientContactEmailDisplay: String(account?.clientContactEmail || account?.clientContactEmailDisplay || "Not provided"),
     clientContactEmailSource: String(account?.clientContactEmailSource || "missing"),
     clientContactEmailAvailable: Boolean(account?.clientContactEmailAvailable),
     sourceLabel: "supabase_projection:manage_overview",
