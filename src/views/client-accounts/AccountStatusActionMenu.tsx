@@ -25,10 +25,10 @@ type AccountStatusActionMenuProps = {
 };
 
 const lifecycleDescriptions: Record<ClientAccountLifecycleAction, string> = {
-  pause: "Blocks runs but keeps the assigned slot and app instance.",
-  cancel: "Releases the slot and app instance when no run is active.",
+  pause: "Suspends billing and campaign activity. Slot and clone stay reserved.",
+  cancel: "Cancels Stripe billing and releases slot when runtime is terminal.",
   mark_needs_assistance: "Blocks runs but keeps assignment for support review.",
-  reactivate: "Requests reactivation; runtime gates still decide readiness.",
+  reactivate: "Resumes Stripe billing and campaign eligibility before pause expiry.",
 };
 
 export function AccountStatusActionMenu({
@@ -78,7 +78,11 @@ export function AccountStatusActionMenu({
             metadata: Record<string, string>;
           }) => {
             const response = await window.botappDesktop?.clientAccounts?.applyStatus?.(payload);
-            return { ok: Boolean(response?.ok), error: response?.error || null };
+            return {
+              ok: Boolean(response?.ok),
+              error: response?.error || null,
+              data: (response?.data && typeof response.data === "object") ? response.data as Record<string, unknown> : undefined,
+            };
           },
         },
       );
@@ -90,6 +94,15 @@ export function AccountStatusActionMenu({
 
       if (!result.ok) {
         onMessage(result.error || "Could not update account status.", "error");
+        return;
+      }
+
+      if ("pending" in result && result.pending) {
+        onMessage(
+          `${account.username}: ${result.label} — convergence en cours${result.reason ? ` (${result.reason})` : ""}.`,
+          "error",
+        );
+        await onRefresh();
         return;
       }
 

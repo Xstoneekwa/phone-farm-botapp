@@ -31,11 +31,6 @@ function operationsStatus(account: BotAppClientAccount) {
   return account.actionsNeeded.length > 0 ? "needs-assistance" : account.accountStatus;
 }
 
-function hasActiveRunSignal(account: BotAppClientAccount) {
-  const reason = `${account.eligibilityReason} ${account.reasonLabel}`.toLowerCase();
-  return ["running", "already_running", "active_run", "active request", "active_run"].some((term) => reason.includes(term));
-}
-
 export function relayActionsAvailable(relayHealth: RelayHealthLike, runtimeStatus: RuntimeStatusLike) {
   if (!runtimeStatus?.relayUrlConfigured || !runtimeStatus?.relayKeyConfigured) return false;
   if (!relayHealth?.ok) return false;
@@ -73,15 +68,10 @@ export function lifecycleActionAvailability(
   }
 
   if (action === "cancel") {
-    const runBlocked = hasActiveRunSignal(account);
     return {
       action,
-      disabled: status === "cancelled" || runBlocked,
-      disabledReason: status === "cancelled"
-        ? "Account is already cancelled."
-        : runBlocked
-          ? "Cannot cancel while a run or run request is active."
-          : null,
+      disabled: status === "cancelled",
+      disabledReason: status === "cancelled" ? "Account is already cancelled." : null,
       requiresConfirmation: true,
     };
   }
@@ -115,10 +105,10 @@ export function buildLifecycleAvailability(
 }
 
 export function lifecycleActionLabel(action: ClientAccountLifecycleAction) {
-  if (action === "pause") return "Pause account";
-  if (action === "cancel") return "Cancel account";
+  if (action === "pause") return "Suspendre la campagne";
+  if (action === "cancel") return "Résilier le service du compte";
   if (action === "mark_needs_assistance") return "Mark needs assistance";
-  return "Reactivate account";
+  return "Reprendre la campagne";
 }
 
 export type ApplyLifecycleActionInput = {
@@ -134,7 +124,7 @@ export type ApplyLifecycleActionDeps = {
     action: ClientAccountLifecycleAction;
     reason: string;
     metadata: Record<string, string>;
-  }) => Promise<{ ok: boolean; error?: string | null }>;
+  }) => Promise<{ ok: boolean; error?: string | null; data?: Record<string, unknown> }>;
 };
 
 export async function applyClientAccountLifecycleAction(
@@ -163,6 +153,18 @@ export async function applyClientAccountLifecycleAction(
 
   if (!result.ok) {
     return { ok: false as const, error: result.error || "Could not update account status." };
+  }
+
+  const data = result.data ?? {};
+  const actionRequired = data.action_required === true;
+  const converged = data.converged !== false;
+  if (actionRequired || !converged) {
+    return {
+      ok: true as const,
+      label: lifecycleActionLabel(input.action),
+      pending: true as const,
+      reason: typeof data.action_required_reason === "string" ? data.action_required_reason : null,
+    };
   }
 
   return { ok: true as const, label: lifecycleActionLabel(input.action) };
