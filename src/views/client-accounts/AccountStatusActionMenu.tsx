@@ -100,7 +100,7 @@ export function AccountStatusActionMenu({
       if ("pending" in result && result.pending) {
         onMessage(
           `${account.username}: ${result.label} — convergence en cours${result.reason ? ` (${result.reason})` : ""}.`,
-          "error",
+          "success",
         );
         await onRefresh();
         return;
