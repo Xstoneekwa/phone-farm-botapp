@@ -137,8 +137,9 @@ export function App() {
     }
   }
 
-  function copyRelayDiagnostics() {
+  async function copyRelayDiagnostics() {
     if (!relayHealth) return;
+    const provenance = await window.botappDesktop?.diagnostics?.provenance?.().catch(() => null);
     const payload = {
       ok: relayHealth.ok,
       reason: relayHealth.reason,
@@ -148,6 +149,7 @@ export function App() {
       provided_key: relayHealth.provided_key,
       routes: relayHealth.routes,
       checkedAt: relayHealth.checkedAt,
+      provenance,
     };
     void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
     pushToast("Relay diagnostics copied.", "success");

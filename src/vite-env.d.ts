@@ -60,6 +60,16 @@ type BotAppDispatcherHealth = import("./api/types").BotAppDispatcherHealth;
 type BotAppDeviceHeartbeatHealth = import("./api/types").BotAppDeviceHeartbeatHealth;
 type BotAppSchedulerRuntimeHealth = import("./api/types").BotAppSchedulerRuntimeHealth;
 type BotAppRelayHealth = import("./api/types").BotAppRelayHealth;
+type BotAppDiagnosticsProvenance = {
+  botAppCommit: string;
+  packageDate: string | null;
+  bundlePath: string;
+  appPath: string;
+  runtimeRoot: string | null;
+  runtimeCommit: string | null;
+  runtimeStatus: string | null;
+  checkedAt: string;
+};
 type BotAppDispatcherHealthAction = "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
 type BotAppDeviceHeartbeatHealthAction = "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
 type CompassAiRuntimeStatus = import("./api/types").CompassAiRuntimeStatus;
@@ -92,6 +102,9 @@ interface Window {
     mode: string;
     runtime?: {
       status: () => Promise<BotAppRuntimeIntegrationStatus>;
+    };
+    diagnostics?: {
+      provenance: () => Promise<BotAppDiagnosticsProvenance>;
     };
   dispatcher?: {
     status: () => Promise<BotAppDispatcherHealth>;

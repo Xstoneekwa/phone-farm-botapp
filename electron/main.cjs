@@ -6,7 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
-const { spawn, spawnSync } = require("node:child_process");
+const { spawnSync } = require("node:child_process");
 const { closeAllDeviceViews, registerDeviceViewIpc, runDeviceViewSelfTest, openDeviceView } = require("./device-view-manager.cjs");
 const {
   parseOpenDeviceViewDeepLink,
@@ -28,6 +28,11 @@ const {
 } = require("./relay-runtime-bootstrap.cjs");
 const botappSchedulerRuntime = require("./botapp-scheduler-runtime.cjs");
 const { findNonCloneablePath, serializeIpcPayload, toRedactedIpcError } = require("./ipc-structured-clone.cjs");
+const {
+  runtimeControllerPathFromEnv,
+  runtimeControllerCwd,
+  runRuntimeControllerCommand,
+} = require("./runtime-controller.cjs");
 
 let pendingIpcBridgeProbeMainReport = null;
 
@@ -1586,6 +1591,7 @@ const botappIpcProbeBuildId = "ipc-probe-v11-notification-audit";
 const INTEGRATION_HOST_MACHINE = "integration-mac-a";
 const runtimeIpcHandlers = [
   "botapp:runtime:status",
+  "botapp:diagnostics:provenance",
   "botapp:dispatcher:status",
   "botapp:dispatcher:action",
   "botapp:compass:ai-status",
@@ -1655,10 +1661,10 @@ const runtimeIpcHandlers = [
   "botapp:integrations:save-webhook",
   "botapp:integrations:remove-webhook",
 ];
-const runtimeControllerPath = process.env.BOTAPP_RUNTIME_CONTROLLER_PATH || "/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl";
-const runtimeControllerCwd = path.dirname(path.dirname(runtimeControllerPath));
+const runtimeControllerPath = runtimeControllerPathFromEnv(process.env);
+const runtimeControllerWorkingDirectory = runtimeControllerCwd(runtimeControllerPath);
 const dispatcherWrapperPath = runtimeControllerPath;
-const workerRootPath = runtimeControllerCwd;
+const workerRootPath = runtimeControllerWorkingDirectory;
 const deviceHeartbeatPublisherPath = process.env.BOTAPP_DEVICE_HEARTBEAT_PUBLISHER_PATH || "";
 const deviceHeartbeatServiceWrapperPath = runtimeControllerPath;
 const workerEnvFilePath = process.env.BOTAPP_WORKER_ENV_FILE || path.join(workerRootPath, ".env");
@@ -6038,99 +6044,17 @@ function normalizeDeviceHeartbeatStatus(raw, action) {
   };
 }
 
-function runDeviceHeartbeatWrapper(command, args = [], timeoutMs = 25000) {
-  if (!deviceHeartbeatAllowedActions.has(command)) {
-    return { ok: false, error: "device_heartbeat_action_not_allowed" };
-  }
-  if (!fs.existsSync(deviceHeartbeatServiceWrapperPath)) {
-    return { ok: false, error: "device_heartbeat_wrapper_missing" };
-  }
-  try {
-    fs.accessSync(deviceHeartbeatServiceWrapperPath, fs.constants.X_OK);
-  } catch {
-    return { ok: false, error: "device_heartbeat_wrapper_not_executable" };
-  }
-  const result = spawnSync(deviceHeartbeatServiceWrapperPath, ["heartbeat", command, ...args], {
-    cwd: runtimeControllerCwd,
-    encoding: "utf8",
-    shell: false,
-    timeout: timeoutMs,
-    maxBuffer: 1024 * 1024,
-  });
-  if (result.error) {
-    const reason = result.error.code === "ETIMEDOUT" ? "device_heartbeat_command_timeout" : safeRuntimeError(result.error, "Device heartbeat command failed.");
-    return { ok: false, error: reason, stdout: safeDispatcherText(result.stdout), stderr: safeDispatcherText(result.stderr), exitCode: result.status ?? null };
-  }
-  return {
-    ok: result.status === 0,
-    stdout: String(result.stdout || ""),
-    stderr: safeDispatcherText(result.stderr),
-    exitCode: result.status ?? 0,
-  };
-}
-
 function runDeviceHeartbeatWrapperAsync(command, args = [], timeoutMs = 25000) {
   if (!deviceHeartbeatAllowedActions.has(command)) {
     return Promise.resolve({ ok: false, error: "device_heartbeat_action_not_allowed" });
   }
-  if (!fs.existsSync(deviceHeartbeatServiceWrapperPath)) {
-    return Promise.resolve({ ok: false, error: "device_heartbeat_wrapper_missing" });
-  }
-  try {
-    fs.accessSync(deviceHeartbeatServiceWrapperPath, fs.constants.X_OK);
-  } catch {
-    return Promise.resolve({ ok: false, error: "device_heartbeat_wrapper_not_executable" });
-  }
-  return new Promise((resolve) => {
-    const child = spawn(deviceHeartbeatServiceWrapperPath, ["heartbeat", command, ...args], {
-      cwd: runtimeControllerCwd,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const finish = (payload) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(payload);
-    };
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      finish({
-        ok: false,
-        error: "device_heartbeat_command_timeout",
-        stdout: safeDispatcherText(stdout),
-        stderr: safeDispatcherText(stderr),
-        exitCode: null,
-      });
-    }, timeoutMs);
-    child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk || "");
-      if (stdout.length > 1024 * 1024) stdout = stdout.slice(-1024 * 1024);
-    });
-    child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk || "");
-      if (stderr.length > 256 * 1024) stderr = stderr.slice(-256 * 1024);
-    });
-    child.on("error", (error) => {
-      finish({
-        ok: false,
-        error: safeRuntimeError(error, "Device heartbeat command failed."),
-        stdout: safeDispatcherText(stdout),
-        stderr: safeDispatcherText(stderr),
-        exitCode: null,
-      });
-    });
-    child.on("close", (code) => {
-      finish({
-        ok: code === 0,
-        stdout: String(stdout || ""),
-        stderr: safeDispatcherText(stderr),
-        exitCode: code ?? 0,
-      });
-    });
+  return runRuntimeControllerCommand({
+    controllerPath: deviceHeartbeatServiceWrapperPath,
+    component: "heartbeat",
+    command,
+    args,
+    cwd: runtimeControllerWorkingDirectory,
+    timeoutMs,
   });
 }
 
@@ -6261,7 +6185,7 @@ async function deviceHeartbeatStatusAsync(options = {}) {
 }
 
 async function deviceHeartbeatStatus() {
-  const result = runDeviceHeartbeatWrapper("status", ["--json"]);
+  const result = await runDeviceHeartbeatWrapperAsync("status", ["--json"]);
   const normalized = normalizeDeviceHeartbeatWrapperResult(result, "status");
   return enrichDeviceHeartbeatStatus(normalized);
 }
@@ -6276,7 +6200,7 @@ async function ensureDeviceHeartbeatAutostart() {
   }
 
   if (status.duplicateProcess) {
-    runDeviceHeartbeatWrapper("fix-duplicate", [], 45000);
+    await runDeviceHeartbeatWrapperAsync("fix-duplicate", [], 45000);
     status = await deviceHeartbeatStatus();
     if (status.status === "running" && status.processRunning && !status.duplicateProcess) {
       return status;
@@ -6284,7 +6208,7 @@ async function ensureDeviceHeartbeatAutostart() {
   }
 
   if (!status.launchdLoaded) {
-    const install = runDeviceHeartbeatWrapper("install", [], 30000);
+    const install = await runDeviceHeartbeatWrapperAsync("install", [], 30000);
     if (!install.ok) {
       return {
         ...status,
@@ -6294,7 +6218,7 @@ async function ensureDeviceHeartbeatAutostart() {
     }
   }
 
-  const resume = runDeviceHeartbeatWrapper("resume", [], 45000);
+  const resume = await runDeviceHeartbeatWrapperAsync("resume", [], 45000);
   status = await deviceHeartbeatStatus();
   if (status.status === "running" && status.processRunning) {
     return status;
@@ -6316,7 +6240,7 @@ async function deviceHeartbeatAction(action) {
   }
   try {
     if (normalized === "logs") {
-      const result = runDeviceHeartbeatWrapper("logs", ["--path"], 8000);
+      const result = await runDeviceHeartbeatWrapperAsync("logs", ["--path"], 8000);
       const logPath = String(result.stdout || "").split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
       if (!result.ok || !logPath) {
         return deviceHeartbeatFallbackStatus("unknown", result.error || "Device heartbeat logs path unavailable.", { action: "logs" });
@@ -6335,7 +6259,7 @@ async function deviceHeartbeatAction(action) {
       };
     }
     const timeoutMs = normalized === "restart" || normalized === "fix-duplicate" ? 45000 : 25000;
-    const result = runDeviceHeartbeatWrapper(normalized, [], timeoutMs);
+    const result = await runDeviceHeartbeatWrapperAsync(normalized, [], timeoutMs);
     const current = await deviceHeartbeatStatus();
     return {
       ...current,
@@ -7189,35 +7113,18 @@ function parseDispatcherJson(stdout) {
   return null;
 }
 
-function runDispatcherWrapper(command, args = [], timeoutMs = 25000) {
+function runDispatcherWrapperAsync(command, args = [], timeoutMs = 25000) {
   if (!dispatcherAllowedActions.has(command)) {
-    return { ok: false, error: "dispatcher_action_not_allowed" };
+    return Promise.resolve({ ok: false, error: "dispatcher_action_not_allowed" });
   }
-  if (!fs.existsSync(dispatcherWrapperPath)) {
-    return { ok: false, error: "dispatcher_wrapper_missing" };
-  }
-  try {
-    fs.accessSync(dispatcherWrapperPath, fs.constants.X_OK);
-  } catch {
-    return { ok: false, error: "dispatcher_wrapper_not_executable" };
-  }
-  const result = spawnSync(dispatcherWrapperPath, ["dispatcher", command, ...args], {
-    cwd: runtimeControllerCwd,
-    encoding: "utf8",
-    shell: false,
-    timeout: timeoutMs,
-    maxBuffer: 1024 * 1024,
+  return runRuntimeControllerCommand({
+    controllerPath: dispatcherWrapperPath,
+    component: "dispatcher",
+    command,
+    args,
+    cwd: runtimeControllerWorkingDirectory,
+    timeoutMs,
   });
-  if (result.error) {
-    const reason = result.error.code === "ETIMEDOUT" ? "dispatcher_command_timeout" : safeRuntimeError(result.error, "Dispatcher command failed.");
-    return { ok: false, error: reason, stdout: safeDispatcherText(result.stdout), stderr: safeDispatcherText(result.stderr), exitCode: result.status ?? null };
-  }
-  return {
-    ok: result.status === 0,
-    stdout: String(result.stdout || ""),
-    stderr: safeDispatcherText(result.stderr),
-    exitCode: result.status ?? 0,
-  };
 }
 
 function schedulerRuntimeDeps() {
@@ -7245,7 +7152,7 @@ async function stopSchedulerRuntimeVoluntarily() {
 }
 
 async function dispatcherStatus() {
-  const result = runDispatcherWrapper("status", ["--json"]);
+  const result = await runDispatcherWrapperAsync("status", ["--json"]);
   if (!result.ok && !result.stdout) {
     const projection = await readRunControlProjection();
     return mergeRunControlProjection(dispatcherFallbackStatus("unknown", result.error || "Dispatcher status unavailable."), projection);
@@ -7288,7 +7195,7 @@ async function ensureDispatcherAutostart() {
   if (status.status === "running" && status.processRunning) return status;
 
   if (!status.launchdLoaded) {
-    const install = runDispatcherWrapper("install", [], 30000);
+    const install = await runDispatcherWrapperAsync("install", [], 30000);
     if (!install.ok) {
       return {
         ...status,
@@ -7298,7 +7205,7 @@ async function ensureDispatcherAutostart() {
     }
   }
 
-  const resume = runDispatcherWrapper("resume", [], 45000);
+  const resume = await runDispatcherWrapperAsync("resume", [], 45000);
   status = await dispatcherStatus();
   if (status.status === "running" && status.processRunning) return status;
 
@@ -7318,7 +7225,7 @@ async function dispatcherAction(action) {
   }
   try {
     if (normalized === "logs") {
-      const result = runDispatcherWrapper("logs", ["--path"], 8000);
+      const result = await runDispatcherWrapperAsync("logs", ["--path"], 8000);
       const logPath = String(result.stdout || "").split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
       if (!result.ok || !logPath) {
         return dispatcherFallbackStatus("unknown", result.error || "Dispatcher logs path unavailable.", { action: "logs" });
@@ -7335,7 +7242,7 @@ async function dispatcherAction(action) {
       };
     }
     const timeoutMs = normalized === "restart" || normalized === "fix-duplicate" ? 45000 : 25000;
-    const result = runDispatcherWrapper(normalized, [], timeoutMs);
+    const result = await runDispatcherWrapperAsync(normalized, [], timeoutMs);
     const current = await dispatcherStatus();
     return {
       ...current,
@@ -7387,8 +7294,38 @@ async function handleOpenDeviceViewDeepLink(rawUrl) {
   return openDeviceViewFromClientIntent(parsed.intent);
 }
 
+function resolveBundlePath() {
+  if (!app.isPackaged) return app.getAppPath();
+  const parts = process.execPath.split(path.sep);
+  const appIndex = parts.findIndex((part) => part.endsWith(".app"));
+  if (appIndex >= 0) return parts.slice(0, appIndex + 1).join(path.sep);
+  return process.execPath;
+}
+
+async function botappDiagnosticsProvenance() {
+  const appPath = app.getAppPath();
+  let packageDate = null;
+  try {
+    packageDate = fs.statSync(appPath).mtime.toISOString();
+  } catch {
+    packageDate = null;
+  }
+  const dispatcher = await dispatcherStatus().catch(() => null);
+  return {
+    botAppCommit: process.env.BOTAPP_BUILD_COMMIT || botappBuildCommit,
+    packageDate,
+    bundlePath: resolveBundlePath(),
+    appPath,
+    runtimeRoot: dispatcher?.activeRoot || dispatcher?.resolvedRoot || null,
+    runtimeCommit: dispatcher?.runtimeCommit || null,
+    runtimeStatus: dispatcher?.status || null,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
 function registerRuntimeIpc() {
   ipcMain.handle("botapp:runtime:status", () => runtimeIntegrationStatus());
+  ipcMain.handle("botapp:diagnostics:provenance", () => botappDiagnosticsProvenance());
   ipcMain.handle("botapp:dispatcher:status", () => dispatcherStatus());
   ipcMain.handle("botapp:dispatcher:action", (_event, action) => dispatcherAction(action).catch((error) => dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher action crashed safely."))));
   ipcMain.handle("botapp:compass:ai-status", () => compassHealth());

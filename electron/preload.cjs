@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   runtime: {
     status: () => ipcRenderer.invoke("botapp:runtime:status"),
   },
+  diagnostics: {
+    provenance: () => ipcRenderer.invoke("botapp:diagnostics:provenance"),
+  },
   dispatcher: {
     status: () => ipcRenderer.invoke("botapp:dispatcher:status"),
     action: (action) => ipcRenderer.invoke("botapp:dispatcher:action", action),
