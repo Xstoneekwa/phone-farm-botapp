@@ -207,6 +207,30 @@ dans le dispatcher worker et appelle le backend canonique
 `/api/instagram-dashboard/auto-restart/tick`. BotApp affiche l’état rapporté par
 le contrôleur et le backend, sans créer de scheduler parallèle.
 
+### Actualisation automatique de la vue Devices
+
+Trois couches distinctes, à ne jamais confondre lors d'un diagnostic :
+
+1. **Backend** : le publisher launchd upserte `device_heartbeats.last_seen_at`
+   (~60 s par cycle). C'est la source de vérité.
+2. **Relay** : `devices_overview` (edge function `admin-dashboard`) lit la table
+   à chaque appel, **sans cache** côté relay ni côté main process
+   (`botappDevicesList` → `dashboardGet`, fetch direct).
+3. **UI** : la vue Devices se rafraîchit seule, sans clic Refresh, via
+   `src/views/devices-auto-refresh.ts` :
+   - fetch overview toutes les **15 s**, uniquement quand la vue Devices est
+     active **et** la fenêtre visible (`document.visibilityState`) ;
+   - recalcul local du libellé relatif « Dernier signal il y a X » toutes les
+     15 s entre deux fetches (tick d'horloge, aucun réseau) ;
+   - retour au premier plan → actualisation immédiate + reprise du polling ;
+   - vue quittée ou fenêtre cachée → timers arrêtés (aucun polling inutile) ;
+   - aucune page rechargée : les données sont mises à jour en place, les
+     drawers et sélections UI survivent aux cycles de refresh.
+
+Le bouton Refresh reste une action manuelle optionnelle ; l'exploitation ne
+doit jamais en dépendre pour voir l'état réel des Samsung. Un device stale
+(ex. émulateur) reste projeté « Expiré » et distinct des téléphones actifs.
+
 ---
 
 ## Migration userData legacy

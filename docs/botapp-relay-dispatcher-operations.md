@@ -222,12 +222,39 @@ Diagnostic rapide : si `open` rend la main sans erreur mais qu'aucun processus
 | Relay health | UI bandeau ou IPC ; status JSON `relayOk: true` |
 | Profiles | Onglet Profiles count > 0 |
 | Devices | Onglet Devices |
+| Devices auto-refresh | Vue Devices ouverte : `Last seen` et « Dernier signal » avancent seuls (≤ 20 s après un heartbeat backend), sans clic Refresh |
 | Runtime Health | `launchdLoaded`, `processRunning`, status `running` |
 | Bootstrap | `botapp-relay-bootstrap.status.json` : `relayUrlConfigured`, `relayKeyConfigured` |
 | Trace | `botapp-startup.trace.log` : phases `main_loaded`, `when_ready`, `bootstrap_done` |
 | Tests unitaires | `node --test src/views/relay-runtime-bootstrap.test.mjs src/views/botapp-relay-bootstrap.test.mjs` |
 | Correctif embarqué | `asar list` contient `relay-runtime-bootstrap.cjs` ; `setPath` avant `whenReady` |
 | Pont runtime async | `node --test electron/runtime-controller.test.mjs` |
+| Auto-refresh Devices | `node --test src/views/devices-auto-refresh.test.mjs` |
+
+### Actualisation automatique Devices (diagnostic)
+
+Cadences attendues en production :
+
+- **backend** : publisher launchd → `device_heartbeats.last_seen_at` toutes
+  les ~60 s par téléphone ;
+- **UI** : fetch `devices_overview` toutes les 15 s quand la vue Devices est
+  active et visible, plus recalcul local du libellé relatif toutes les 15 s.
+  Un nouveau heartbeat backend doit apparaître dans l'UI en ≤ 20 s.
+
+Si « Dernier signal » semble figé, diagnostiquer couche par couche **sans
+cliquer Refresh** :
+
+1. backend : `select last_seen_at from device_heartbeats` (lecture seule) —
+   avance ? sinon problème runtime/publisher, ne pas patcher BotApp ;
+2. relay : IPC `devices.list` (ou `devices_overview`) — renvoie la valeur
+   backend ? le relay n'a pas de cache ; un écart ici est anormal ;
+3. UI : si backend et relay avancent mais pas l'affichage, c'est le polling
+   renderer (`devices-auto-refresh.ts`) — vérifier vue active + fenêtre
+   visible (le polling s'arrête volontairement quand la vue est inactive ou
+   la fenêtre cachée, et reprend avec un refresh immédiat au retour).
+
+Le bouton Refresh reste disponible comme action manuelle mais n'est plus
+nécessaire pour voir l'état réel.
 
 ### Test sans compte / run / login
 
