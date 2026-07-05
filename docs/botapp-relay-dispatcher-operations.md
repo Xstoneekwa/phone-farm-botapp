@@ -155,12 +155,42 @@ démarre ou que le process Electron reste ouvert. Le gate minimal est :
 1. source commitée ;
 2. tests ciblés verts ;
 3. `npm run build` vert ;
-4. `npm run package:mac` vert ;
+4. `npm run package:mac` vert — inclut désormais deux gates automatiques :
+   - `scripts/verify-electron-main-local-requires.mjs` (modules locaux dans
+     le source et dans `app.asar`) ;
+   - `scripts/sign-and-verify-macos-bundle.mjs` (signature macOS ad hoc
+     de l'intérieur vers l'extérieur + vérification, voir ci-dessous) ;
 5. vérification `app.asar` des `require("./...")` locaux ;
 6. test packagé depuis un chemin temporaire hors `/Applications` ;
 7. validation visuelle utilisateur : Profiles, Devices, Client Accounts,
    Runtime, drawer et navigation ;
 8. seulement ensuite installation vers `/Applications/BotApp.app`.
+
+### Gate signature macOS (`scripts/sign-and-verify-macos-bundle.mjs`)
+
+`electron-builder` est configuré avec `identity: null` (aucune identité
+Developer ID n'existe sur ce Mac) : le bundle sort avec des signatures
+linker ad hoc partielles qui échouent `codesign --verify --deep --strict`
+(« code has no resources… ») et produisent des logs AMFI `no CMS blob`.
+Le gate resigne donc le bundle **de l'intérieur vers l'extérieur**
+(dylibs → frameworks → helpers → bundle racine, jamais un `--deep` aveugle
+sur la racine seule), puis fait échouer le packaging si :
+
+- le binaire principal ou un framework/helper requis manque ou n'est pas signé ;
+- le bundle n'est pas arm64 ;
+- `codesign --verify --strict` échoue sur un composant ;
+- `codesign --verify --deep --strict` échoue sur le bundle complet.
+
+Règles absolues :
+
+- **jamais** de désactivation SIP/Gatekeeper/AMFI, jamais de `xattr -cr`
+  comme solution produit, jamais de bypass manuel ;
+- aucun secret : la signature est ad hoc (`-`), aucun certificat ni clé
+  privée n'est utilisé ni exporté (`BOTAPP_MAC_SIGN_IDENTITY` permet de
+  passer une identité réelle le jour où elle existera dans le Keychain) ;
+- portée : ce modèle ad hoc est valable **pour ce Mac local uniquement**.
+  Une distribution sur d'autres Macs exigera une identité Developer ID +
+  notarisation (non implémentée volontairement, à valider séparément).
 
 Une copie de rollback dans `/Users/admin/phonefarm-botapp-rollbacks/...` est un
 artefact forensics non quotidien. Elle ne remplace pas l’application officielle.
@@ -240,12 +270,22 @@ Sortie : `release/mac-arm64/BotApp.app`
 Vérification obligatoire avant installation :
 
 ```bash
-node --test electron/runtime-controller.test.mjs
+node --test electron/runtime-controller.test.mjs electron/ipc-structured-clone.test.mjs
 node scripts/verify-electron-main-local-requires.mjs
+node scripts/sign-and-verify-macos-bundle.mjs
 ```
 
-Cette vérification échoue si un `require("./...")` local de
-`electron/main.cjs` manque dans le source ou dans `app.asar`.
+La première vérification échoue si un `require("./...")` local de
+`electron/main.cjs` manque dans le source ou dans `app.asar` ; la seconde
+échoue si la signature macOS du bundle est incomplète ou invalide
+(voir « Gate signature macOS »).
+
+Attention sérialisation IPC : `electron/ipc-structured-clone.cjs` doit rester
+le module basé sur `toIpcSafe` (JSON round-trip qui **préserve les références
+partagées**). Un serializer qui marque les objets déjà vus comme `[circular]`
+corrompt le payload overview (les mêmes profils sont référencés dans
+`profiles` et `profileGroups[].profiles`) et fait crasher la vue Profiles
+(`Cannot read properties of undefined (reading 'follow')`).
 
 Installation opérateur canonique :
 

@@ -314,13 +314,29 @@ Status: REQUIRED
 Commands:
 
 ```bash
-cd /Users/admin/Projects/BotApp
-node --test electron/runtime-controller.test.mjs
+cd /Users/admin/Projects/BotApp-clean
+node --test electron/runtime-controller.test.mjs electron/ipc-structured-clone.test.mjs
 npm run build
 npm run lint
 npm run package:mac
 node scripts/verify-electron-main-local-requires.mjs
+node scripts/sign-and-verify-macos-bundle.mjs
 ```
+
+macOS signing prerequisites (this Mac):
+
+- No Developer ID / Apple Development identity exists in the Keychain, so
+  `electron-builder` runs with `identity: null` and `npm run package:mac`
+  applies an **inside-out ad-hoc signature** via
+  `scripts/sign-and-verify-macos-bundle.mjs` (dylibs → frameworks → helpers →
+  root bundle). The gate fails the build if any component is unsigned, if the
+  binary is not arm64, or if `codesign --verify --deep --strict` fails.
+- Never bypass macOS security: no SIP/Gatekeeper/AMFI disabling, no
+  `xattr -cr` as a product fix, no certificate/private-key export.
+- This ad-hoc model is only valid for local use on this Mac. Distributing
+  BotApp to other Macs requires a Developer ID identity plus notarization
+  (separate, not implemented). Set `BOTAPP_MAC_SIGN_IDENTITY` once a real
+  identity is available.
 
 Release gate before installing the canonical packaged app:
 
@@ -328,11 +344,12 @@ Release gate before installing the canonical packaged app:
 2. Targeted tests and build are green.
 3. Package is built from the committed source.
 4. `app.asar` verification passes for local `require("./...")` dependencies.
-5. Candidate is opened from `release/mac-arm64/BotApp.app` or a temporary copy
+5. Bundle signature gate passes (`sign-and-verify-macos-bundle.mjs`).
+6. Candidate is opened from `release/mac-arm64/BotApp.app` or a temporary copy
    outside `/Applications`.
-6. User visually validates Profiles, Devices, Client Accounts, Runtime, one
+7. User visually validates Profiles, Devices, Client Accounts, Runtime, one
    non-destructive drawer, and navigation/back flow.
-7. Only then install the official app:
+8. Only then install the official app:
 
 ```bash
 ditto /Users/admin/Projects/BotApp-clean/release/mac-arm64/BotApp.app /Applications/BotApp.app

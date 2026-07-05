@@ -69,6 +69,27 @@ une application quotidienne. Le vault de rollback
 `/Users/admin/phonefarm-botapp-rollbacks/...` est réservé aux copies forensics et
 ne doit pas être ouvert comme seconde app officielle.
 
+Trois rôles distincts, à ne jamais confondre :
+
+1. **Bundle de build** — `release/mac-arm64/BotApp.app` : artefact temporaire,
+   signé ad hoc par le gate de packaging, utilisé uniquement pour la validation
+   hors `/Applications` ;
+2. **Rollback readonly** — `/Users/admin/phonefarm-botapp-rollbacks/...` :
+   copie forensics figée (permissions lecture seule), jamais modifiée, jamais
+   resignée, jamais lancée comme app quotidienne ;
+3. **Application officielle** — `/Applications/BotApp.app` : seule app
+   opérateur, remplacée uniquement après le gate complet (tests, package,
+   signature vérifiée, validation visuelle utilisateur).
+
+Signature macOS : sans identité Developer ID locale, le packaging signe le
+bundle **ad hoc de l'intérieur vers l'extérieur** (gate
+`scripts/sign-and-verify-macos-bundle.mjs`) pour que `codesign --verify
+--deep --strict` passe et que le lancement local ne déclenche pas d'erreurs
+AMFI. Interdictions absolues : désactiver SIP/Gatekeeper/AMFI, `xattr -cr`
+comme contournement, export de certificats. Ce modèle est local à ce Mac ;
+toute distribution multi-Mac exigera Developer ID + notarisation (chantier
+séparé, non implémenté).
+
 La provenance discrète à exposer dans About, Diagnostics ou Runtime Health doit
 inclure : commit BotApp, chemin du bundle, date de packaging, root runtime actif
 et commit runtime worker. Ne pas afficher ces informations comme bannière
