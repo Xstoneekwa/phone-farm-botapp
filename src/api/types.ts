@@ -192,7 +192,19 @@ export type ProfileRestoreLoginScreenPayload = {
 };
 
 export type ProfileAutoLoginProgressStep = {
-  id: "queued" | "claimed" | "worker" | "login" | "result";
+  id:
+    | "queued"
+    | "claimed"
+    | "worker"
+    | "login"
+    | "stale_detected"
+    | "clone_assignment"
+    | "replacement_safety"
+    | "stale_account"
+    | "controlled_logout"
+    | "target_login"
+    | "final_identity"
+    | "result";
   label: string;
   detail: string;
   status: "done" | "running" | "pending" | "failed" | "action_required" | "skipped";

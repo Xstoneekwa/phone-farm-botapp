@@ -8,6 +8,20 @@ import type {
 } from "../../api/types";
 
 const STEP_IDS: Array<ProfileAutoLoginState["steps"][number]["id"]> = ["queued", "claimed", "worker", "login", "result"];
+const CANONICAL_STEP_ORDER: Array<ProfileAutoLoginState["steps"][number]["id"]> = [
+  "queued",
+  "claimed",
+  "worker",
+  "stale_detected",
+  "clone_assignment",
+  "replacement_safety",
+  "stale_account",
+  "controlled_logout",
+  "target_login",
+  "login",
+  "final_identity",
+  "result",
+];
 const SECRET_PATTERNS = [
   /(password|passwd|pwd)\s*[:=]\s*[^,\s;]+/gi,
   /(token|secret|vault|api[_-]?key)\s*[:=]\s*[^,\s;]+/gi,
@@ -60,6 +74,13 @@ function stepDetail(profile: BotProfile, stepId: ProfileAutoLoginState["steps"][
   if (stepId === "queued") return "Prepare the account and create a login_provisioning request.";
   if (stepId === "claimed") return "Wait for the dispatcher to reserve the request.";
   if (stepId === "worker") return `${profile.deviceName} · open Instagram on the assigned phone.`;
+  if (stepId === "stale_detected") return "A different Instagram account is connected on this clone.";
+  if (stepId === "clone_assignment") return "Verify the target account owns this exact app instance.";
+  if (stepId === "replacement_safety") return "Fail closed unless runs, lifecycle, ownership, entitlement, and subscription protections are clear.";
+  if (stepId === "stale_account") return "Confirm the connected account is stale, orphaned, deleted, archived, or unmanaged.";
+  if (stepId === "controlled_logout") return "Use the canonical controlled logout and recovery path.";
+  if (stepId === "target_login") return `Connect @${profile.username} through the existing login_provisioning flow.`;
+  if (stepId === "final_identity") return "Verify the final Instagram identity before reporting success.";
   if (stepId === "login") return "Identify the account, enter credentials if needed, then verify connection.";
   return "Connection succeeded, verification is required, or the attempt failed with a safe reason.";
 }
@@ -68,6 +89,13 @@ function stepLabel(stepId: ProfileAutoLoginState["steps"][number]["id"]) {
   if (stepId === "queued") return "Account preparation";
   if (stepId === "claimed") return "Dispatcher reservation";
   if (stepId === "worker") return "Open Instagram";
+  if (stepId === "stale_detected") return "Different account detected";
+  if (stepId === "clone_assignment") return "Clone assignment check";
+  if (stepId === "replacement_safety") return "Replacement safety check";
+  if (stepId === "stale_account") return "Unassigned account confirmed";
+  if (stepId === "controlled_logout") return "Previous account logout";
+  if (stepId === "target_login") return "Target account login";
+  if (stepId === "final_identity") return "Final identity verification";
   if (stepId === "login") return "Credentials and connection check";
   return "Login result";
 }
@@ -159,6 +187,13 @@ function normalizeSnapshotStepId(id: string): ProfileAutoLoginState["steps"][num
   if (id === "queue_request") return "queued";
   if (id === "dispatcher_claim") return "claimed";
   if (id === "open_instagram") return "worker";
+  if (id === "detect_different_account") return "stale_detected";
+  if (id === "verify_clone_assignment") return "clone_assignment";
+  if (id === "verify_replacement_safety") return "replacement_safety";
+  if (id === "detect_unassigned_account") return "stale_account";
+  if (id === "controlled_logout_previous") return "controlled_logout";
+  if (id === "login_target_account") return "target_login";
+  if (id === "verify_final_identity") return "final_identity";
   if (id === "check_session" || id === "enter_credentials" || id === "verify_identity") return "login";
   if (id === "save_login_status") return "result";
   return null;
@@ -193,11 +228,17 @@ export function mergeAutoLoginProgressSnapshot(
   snapshot: ProfileRunProgressSnapshot,
 ): ProfileAutoLoginState {
   const stepById = new Map(state.steps.map((step) => [step.id, step]));
+  const backendStepIds: Array<ProfileAutoLoginState["steps"][number]["id"]> = [];
   for (const backendStep of snapshot.steps) {
     const id = normalizeSnapshotStepId(backendStep.id);
     if (!id) continue;
-    const current = stepById.get(id);
-    if (!current) continue;
+    if (!backendStepIds.includes(id)) backendStepIds.push(id);
+    const current = stepById.get(id) ?? {
+      id,
+      label: stepLabel(id),
+      detail: backendStep.subtitle || stepLabel(id),
+      status: "pending" as const,
+    };
     stepById.set(id, {
       ...current,
       label: backendStep.label || current.label,
@@ -233,7 +274,9 @@ export function mergeAutoLoginProgressSnapshot(
   } : null;
 
   const reason = sanitizeAutoLoginText(snapshot.reason || state.safeReason, "Waiting for backend progress.");
-  const mergedSteps = state.steps.map((step) => stepById.get(step.id) ?? step);
+  const presentIds = new Set([...state.steps.map((step) => step.id), ...backendStepIds]);
+  const orderedIds = CANONICAL_STEP_ORDER.filter((id) => presentIds.has(id));
+  const mergedSteps = orderedIds.map((id) => stepById.get(id)).filter((step): step is ProfileAutoLoginState["steps"][number] => Boolean(step));
   const globalStatus = globalStatusFromSnapshot(snapshot.status);
   const steps = mergedSteps.map((step) => {
     if (globalStatus === "completed" && step.status !== "failed" && step.status !== "action_required") {

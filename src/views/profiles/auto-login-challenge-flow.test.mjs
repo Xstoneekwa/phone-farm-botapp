@@ -244,6 +244,40 @@ test("Auto Login modal shows next action and failed-state retry copy", () => {
   assert.match(modalSource, /Auto Login failed before connection was confirmed/);
 });
 
+test("stale-session replacement progress keeps canonical ordered stages", () => {
+  const queued = autoLoginStateFromStartResult(profile({ username: "j_automatise_pour_toi" }), {
+    request_id: REQUEST_ID,
+    status: "running",
+    run_id: RUN_ID,
+  });
+  const replaced = mergeAutoLoginProgressSnapshot(queued, activeSnapshot({
+    status: "connected",
+    reason: "stale_session_replacement_completed",
+    steps: [
+      { id: "queue_request", label: "Préparation du compte", subtitle: "Request created", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "dispatcher_claim", label: "Dispatcher", subtitle: "Dispatcher claimed request", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "open_instagram", label: "Ouverture Instagram", subtitle: "Opening Instagram", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "detect_different_account", label: "Compte Instagram différent détecté", subtitle: "Current session: @growth_with_bmb.", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "verify_clone_assignment", label: "Vérification de l’affectation du clone", subtitle: "Exact app instance verified.", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "verify_replacement_safety", label: "Vérification de la sécurité du remplacement", subtitle: "No protected ownership or active runtime.", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "detect_unassigned_account", label: "Compte non attribué détecté", subtitle: "Previous account is unmanaged.", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "controlled_logout_previous", label: "Déconnexion du compte précédent", subtitle: "Controlled logout completed.", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "login_target_account", label: "Connexion à @j_automatise_pour_toi", subtitle: "Target login completed.", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "verify_final_identity", label: "Vérification de l’identité finale", subtitle: "Target identity verified.", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+      { id: "save_login_status", label: "Connexion réussie", subtitle: "Login status saved.", status: "done", started_at: null, completed_at: null, metadata_safe: {} },
+    ],
+  }));
+
+  assert.equal(replaced.globalStatus, "completed");
+  assert.deepEqual(
+    replaced.steps.map((step) => step.id),
+    ["queued", "claimed", "worker", "stale_detected", "clone_assignment", "replacement_safety", "stale_account", "controlled_logout", "target_login", "login", "final_identity", "result"],
+  );
+  assert.equal(replaced.steps.find((step) => step.id === "controlled_logout")?.status, "done");
+  assert.equal(replaced.steps.find((step) => step.id === "final_identity")?.status, "done");
+  assert.doesNotMatch(replaced.processLog.map((entry) => entry.message).join("\n"), /password|token|verification_code=\d/i);
+});
+
 test("sixty second post-submit window does not alter BotApp Auto Login progression contract", () => {
   assert.doesNotMatch(profilesViewSource, /post_submit_timeout_ms|post-submit-timeout-ms|10000/);
   assert.doesNotMatch(autoLoginFlowSource, /post_submit_timeout_ms|post-submit-timeout-ms|10000/);
