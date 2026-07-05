@@ -103,6 +103,10 @@ IPC : `botapp:relay:repair` → `repairRelayConnection()` :
 
 Visible si relay vert et dispatcher inactif.
 IPC : `botapp:dispatcher:ensure` → `ensureDispatcherAutostart()`.
+L’appel au runtime doit passer par `phonefarm-runtimectl` en asynchrone avec
+timeout. Un contrôleur lent ou bloqué doit retourner un état structuré
+(`*_command_timeout`, `runtime_root_mismatch`, etc.) sans rendre l’application
+macOS non répondante.
 
 ---
 
@@ -143,6 +147,24 @@ Causes dispatcher (Runtime Health) :
 6. Runtime Health : dispatcher **Running**, pas de bannière rouge bloquante
 7. Fermer / rouvrir BotApp — état stable **sans** action manuelle
 
+### Gate obligatoire avant installation officielle
+
+Ne jamais remplacer `/Applications/BotApp.app` uniquement parce qu’un package
+démarre ou que le process Electron reste ouvert. Le gate minimal est :
+
+1. source commitée ;
+2. tests ciblés verts ;
+3. `npm run build` vert ;
+4. `npm run package:mac` vert ;
+5. vérification `app.asar` des `require("./...")` locaux ;
+6. test packagé depuis un chemin temporaire hors `/Applications` ;
+7. validation visuelle utilisateur : Profiles, Devices, Client Accounts,
+   Runtime, drawer et navigation ;
+8. seulement ensuite installation vers `/Applications/BotApp.app`.
+
+Une copie de rollback dans `/Users/admin/phonefarm-botapp-rollbacks/...` est un
+artefact forensics non quotidien. Elle ne remplace pas l’application officielle.
+
 ### Checks développeur (sans action Instagram)
 
 | Check | Méthode |
@@ -155,6 +177,7 @@ Causes dispatcher (Runtime Health) :
 | Trace | `botapp-startup.trace.log` : phases `main_loaded`, `when_ready`, `bootstrap_done` |
 | Tests unitaires | `node --test src/views/relay-runtime-bootstrap.test.mjs src/views/botapp-relay-bootstrap.test.mjs` |
 | Correctif embarqué | `asar list` contient `relay-runtime-bootstrap.cjs` ; `setPath` avant `whenReady` |
+| Pont runtime async | `node --test electron/runtime-controller.test.mjs` |
 
 ### Test sans compte / run / login
 
@@ -188,6 +211,8 @@ Le renderer copie un JSON avec :
 - `ok`, `reason`, `relay_authenticated`, `backend_configured`
 - `backend_key` / `provided_key` : `{ present, length, sha256_prefix, environment_scope }` — **pas de valeur secrète**
 - `routes`, `checkedAt`
+- `provenance` : commit/marque BotApp, date package, chemin bundle/app, root
+  runtime actif, commit runtime actif, sans secret
 
 **Ne doit jamais apparaître :**
 
@@ -215,6 +240,7 @@ Sortie : `release/mac-arm64/BotApp.app`
 Vérification obligatoire avant installation :
 
 ```bash
+node --test electron/runtime-controller.test.mjs
 node scripts/verify-electron-main-local-requires.mjs
 ```
 

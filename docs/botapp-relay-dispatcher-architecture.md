@@ -19,7 +19,7 @@ Documentation technique pour développeurs. Décrit le runtime packagé macOS, l
 │  │ Renderer     │ ◄──────► │ Main process │ ────────► │ Backend│ │
 │  │ (React/Vite) │ preload  │ (Electron)   │  relay    │ partagé│ │
 │  └──────────────┘          └──────┬───────┘           └────────┘ │
-│                                   │ spawn/status                  │
+│                                   │ async controller/status       │
 │                                   ▼                               │
 │                          Run Control Dispatcher                   │
 │                          (LaunchAgent macOS local)                │
@@ -32,7 +32,7 @@ Documentation technique pour développeurs. Décrit le runtime packagé macOS, l
 | **Electron dev** | Développement UI uniquement — **interdit pour Liam** |
 | **Relay local** | Pont HTTPS entre le Mac et le backend partagé (dashboard API) |
 | **Backend partagé** | Source de vérité Profiles, Devices, comptes, gouvernance |
-| **Runtime controller** | Point d’entrée local stable `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl` ; résout la release worker active |
+| **Runtime controller** | Point d’entrée local stable `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl` ; résout la release worker active ; appelé depuis Electron main en asynchrone avec timeout |
 | **Dispatcher** | Processus local worker dans `/Users/admin/phonefarm-worker-current` — exécute runs **uniquement** quand l’opérateur lance une action ; pas de démarrage automatique de compte au bootstrap |
 
 ---
@@ -56,6 +56,18 @@ Chemin officiel de l’application installée pour l’usage quotidien :
 Build source : `npm run package:mac` depuis le worktree propre
 `/Users/admin/Projects/BotApp-clean` → sortie dans `release/mac-arm64/`, puis
 installation contrôlée vers `/Applications/BotApp.app`.
+
+Un worktree propre n’est pas automatiquement une baseline produit. Une baseline
+produit existe seulement quand la source réconciliée est commitée et poussée, le
+package est construit depuis ce commit, le package a passé les tests et la
+validation visuelle complète, puis l’installation officielle est réalisée vers
+`/Applications/BotApp.app`.
+
+Les bundles `release/mac-arm64/BotApp.app` sont des artefacts de build. Ils
+peuvent servir à la validation temporaire hors `/Applications`, mais ne sont pas
+une application quotidienne. Le vault de rollback
+`/Users/admin/phonefarm-botapp-rollbacks/...` est réservé aux copies forensics et
+ne doit pas être ouvert comme seconde app officielle.
 
 La provenance discrète à exposer dans About, Diagnostics ou Runtime Health doit
 inclure : commit BotApp, chemin du bundle, date de packaging, root runtime actif
@@ -102,7 +114,7 @@ Preload (electron/preload.cjs)
     │  API étroite : botappDesktop.relay, .dispatcher, .data, …
     ▼
 Main process (electron/main.cjs)
-    │  Lit config + Keychain, fetch relay, spawn runtime controller
+    │  Lit config + Keychain, fetch relay, appelle le runtime controller async
     ▼
 Backend HTTPS / scripts locaux autorisés
 ```
@@ -111,7 +123,8 @@ Backend HTTPS / scripts locaux autorisés
 
 - Pas d’accès Node.js, `child_process`, filesystem credentials, ni `fetch` direct vers le backend avec secrets.
 - Le preload n’expose qu’une liste blanche d’invocations IPC (`ipcRenderer.invoke`).
-- Toutes les URLs relay, clés et appels `run_control_dispatcher_service.sh` restent dans le **main process**.
+- Toutes les URLs relay, clés et appels au runtime restent dans le **main process**.
+- Le main process appelle uniquement `phonefarm-runtimectl` avec `spawn` asynchrone borné ; aucun `spawnSync` ne doit être utilisé pour Start dispatcher, Retry, status runtime ou heartbeat.
 - Le renderer reçoit des réponses **déjà filtrées** (health, listes, messages client-safe).
 
 Référence preload : `window.botappDesktop.relay.health`, `.relay.repair`, `.dispatcher.ensure`, `.data.overview`.
@@ -152,6 +165,10 @@ BotApp ne doit jamais deviner une release, hardcoder un hash ou tomber sur
 `/Users/admin/instagram-worker-python`. Si le contrôleur retourne
 `runtime_root_invalid` ou `runtime_root_mismatch`, l’UI doit afficher ce
 diagnostic plutôt que `starting/waiting for launchd`.
+
+Le pont Runtime est une frontière stricte : BotApp ne connaît ni wrapper legacy,
+ni release hashée, ni checkout worker mutable. Les actions `Start dispatcher` et
+`Retry` doivent rester non bloquantes pour le renderer et pour le main process.
 
 ## Heartbeats et scheduler
 

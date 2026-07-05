@@ -97,6 +97,13 @@ Rules:
 - If the app shows old UI or old behavior, quit all old instances and rebuild/package again.
 - Production services must not start from `/Users/admin/instagram-worker-python`.
 - BotApp must call `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl`, not a worker checkout script.
+- A clean worktree is not a product baseline by itself. A product baseline is a
+  reconciled source commit, pushed, packaged from that commit, visually validated,
+  and only then installed to `/Applications/BotApp.app`.
+- `release/mac-arm64/BotApp.app` is a build artifact for validation, not the
+  daily operator application.
+- Rollback bundles under `/Users/admin/phonefarm-botapp-rollbacks/...` are
+  read-only forensics/rollback vault copies, not a second official application.
 
 PENDING: Define the expected production branch names for each repo once the release workflow is finalized.
 
@@ -308,13 +315,24 @@ Commands:
 
 ```bash
 cd /Users/admin/Projects/BotApp
+node --test electron/runtime-controller.test.mjs
 npm run build
 npm run lint
 npm run package:mac
 node scripts/verify-electron-main-local-requires.mjs
 ```
 
-Install and open the canonical packaged app:
+Release gate before installing the canonical packaged app:
+
+1. Source committed and pushed.
+2. Targeted tests and build are green.
+3. Package is built from the committed source.
+4. `app.asar` verification passes for local `require("./...")` dependencies.
+5. Candidate is opened from `release/mac-arm64/BotApp.app` or a temporary copy
+   outside `/Applications`.
+6. User visually validates Profiles, Devices, Client Accounts, Runtime, one
+   non-destructive drawer, and navigation/back flow.
+7. Only then install the official app:
 
 ```bash
 ditto /Users/admin/Projects/BotApp-clean/release/mac-arm64/BotApp.app /Applications/BotApp.app
@@ -327,6 +345,10 @@ Before smoke:
 - Confirm package was rebuilt after the latest code changes.
 - If old UI appears, quit BotApp and run `npm run package:mac` again.
 - Confirm packaged app logs show the expected build marker if available.
+- Confirm Copy diagnostics includes safe provenance: BotApp commit/marker,
+  package date, bundle path, runtime root and runtime commit.
+- Confirm Start dispatcher / Retry stay responsive and call only
+  `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl` asynchronously.
 
 No-leak validation:
 

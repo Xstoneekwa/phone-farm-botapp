@@ -116,6 +116,10 @@ BotApp must not hardcode `/Users/admin/instagram-worker-python`, guess a release
 hash, or silently fall back to a mutable checkout. Runtime root failures are
 explicit states: `runtime_root_invalid` and `runtime_root_mismatch`.
 
+Runtime service calls from UI paths must be asynchronous and timeout-bounded in
+Electron main. `Start dispatcher`, `Retry`, runtime status and heartbeat actions
+must not use synchronous child processes or legacy worker wrappers.
+
 ## Electron Packaging
 
 Packaging is configured in `electron-builder.json`.
@@ -128,3 +132,8 @@ Important constraints:
 - `.env*`, logs, XML, screenshots, uploads, runs, Supabase folders, and migrations are excluded.
 
 The renderer build uses relative Vite assets so packaged Electron does not black-screen when loading local files.
+
+`release/mac-arm64/BotApp.app` is a build artifact. The only official daily app
+is `/Applications/BotApp.app`, and it may be replaced only after source commit,
+tests/build/package, `app.asar` verification, packaged UI validation, and
+explicit user visual approval.
