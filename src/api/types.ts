@@ -2347,7 +2347,16 @@ export type BotAppRuntimeIntegrationStatus = {
   integrationLocalBanner?: string | null;
 };
 
-export type BotAppDeviceHeartbeatServiceStatus = "running" | "paused" | "stopped" | "degraded" | "starting" | "unhealthy" | "unknown";
+export type BotAppDeviceHeartbeatServiceStatus =
+  | "running"
+  | "paused"
+  | "stopped"
+  | "degraded"
+  | "starting"
+  | "unhealthy"
+  | "runtime_root_invalid"
+  | "runtime_root_mismatch"
+  | "unknown";
 
 export type BotAppDeviceHeartbeatOperatorStatus = "operational" | "degraded" | "stopped" | "no_phones_detected";
 
@@ -2373,12 +2382,24 @@ export type BotAppDeviceHeartbeatHealth = {
   physicalPhonesInInventory: number | null;
   lastError: string | null;
   logsPath: string | null;
+  activeRoot?: string | null;
+  resolvedRoot?: string | null;
+  runtimeCommit?: string | null;
   checkedAt: string;
   message: string;
   action?: "status" | "pause" | "resume" | "restart" | "stop" | "logs" | "fix-duplicate";
 };
 
-export type BotAppDispatcherStatus = "running" | "paused" | "stopped" | "unhealthy" | "starting" | "unknown";
+export type BotAppDispatcherStatus =
+  | "running"
+  | "paused"
+  | "stopped"
+  | "degraded"
+  | "unhealthy"
+  | "starting"
+  | "runtime_root_invalid"
+  | "runtime_root_mismatch"
+  | "unknown";
 
 export type BotAppSchedulerRuntimeStatus =
   | "active"
@@ -2425,6 +2446,9 @@ export type BotAppDispatcherHealth = {
   queueActiveCount: number | null;
   lastError: string | null;
   logsPath: string | null;
+  activeRoot?: string | null;
+  resolvedRoot?: string | null;
+  runtimeCommit?: string | null;
   supabaseRestStatus: "ok" | "failed" | "unknown";
   deviceCountOnline: number | null;
   checkedAt: string;

@@ -32,7 +32,8 @@ Documentation technique pour développeurs. Décrit le runtime packagé macOS, l
 | **Electron dev** | Développement UI uniquement — **interdit pour Liam** |
 | **Relay local** | Pont HTTPS entre le Mac et le backend partagé (dashboard API) |
 | **Backend partagé** | Source de vérité Profiles, Devices, comptes, gouvernance |
-| **Dispatcher** | Processus local `instagram-worker-python` — exécute runs **uniquement** quand l’opérateur lance une action ; pas de démarrage automatique de compte au bootstrap |
+| **Runtime controller** | Point d’entrée local stable `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl` ; résout la release worker active |
+| **Dispatcher** | Processus local worker dans `/Users/admin/phonefarm-worker-current` — exécute runs **uniquement** quand l’opérateur lance une action ; pas de démarrage automatique de compte au bootstrap |
 
 ---
 
@@ -94,7 +95,7 @@ Preload (electron/preload.cjs)
     │  API étroite : botappDesktop.relay, .dispatcher, .data, …
     ▼
 Main process (electron/main.cjs)
-    │  Lit config + Keychain, fetch relay, spawn dispatcher wrapper
+    │  Lit config + Keychain, fetch relay, spawn runtime controller
     ▼
 Backend HTTPS / scripts locaux autorisés
 ```
@@ -129,14 +130,37 @@ Référence preload : `window.botappDesktop.relay.health`, `.relay.repair`, `.di
 
 ## Dispatcher (Run Control)
 
-- Script wrapper : `instagram-worker-python/scripts/run_control_dispatcher_service.sh`
-  (surcharge possible via `BOTAPP_DISPATCHER_WRAPPER_PATH` côté dev).
+- Contrôleur stable : `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl`.
+- Root actif : `/Users/admin/phonefarm-worker-current`.
+- Releases immuables : `/Users/admin/phonefarm-worker-releases/<commit>`.
+- Script wrapper interne : `scripts/run_control_dispatcher_service.sh` dans la release active.
 - LaunchAgent : `com.boost.phonefarm.dispatcher`
-  Plist source : `instagram-worker-python/ops/launchd/com.boost.phonefarm.dispatcher.plist`
+  Plist source : `ops/launchd/com.boost.phonefarm.dispatcher.plist` dans la release active.
 - **Autostart** : uniquement après relay healthy **et** `queueActiveCount === 0` — n’installe/resume pas si une queue active existe.
 - **Contrôles UI** : Pause / Resume / Restart / Stop via Runtime Health ; « Démarrer le dispatcher » via bandeau si relay OK.
 
 Le bootstrap relay/dispatcher **ne lance jamais** de login Instagram, Connect, Start ou run.
+
+BotApp ne doit jamais deviner une release, hardcoder un hash ou tomber sur
+`/Users/admin/instagram-worker-python`. Si le contrôleur retourne
+`runtime_root_invalid` ou `runtime_root_mismatch`, l’UI doit afficher ce
+diagnostic plutôt que `starting/waiting for launchd`.
+
+## Heartbeats et scheduler
+
+Les heartbeats devices utilisent le même contrôleur stable :
+
+```text
+BotApp Runtime Health / Devices
+-> phonefarm-runtimectl heartbeat status|restart
+-> launchd com.boost.phonefarm.device-heartbeat
+-> device_heartbeat_publisher.py --serve
+```
+
+Le scheduler Auto Restart n’est pas un service BotApp séparé. Il est embarqué
+dans le dispatcher worker et appelle le backend canonique
+`/api/instagram-dashboard/auto-restart/tick`. BotApp affiche l’état rapporté par
+le contrôleur et le backend, sans créer de scheduler parallèle.
 
 ---
 

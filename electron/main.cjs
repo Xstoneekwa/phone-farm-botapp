@@ -1655,10 +1655,12 @@ const runtimeIpcHandlers = [
   "botapp:integrations:save-webhook",
   "botapp:integrations:remove-webhook",
 ];
-const dispatcherWrapperPath = process.env.BOTAPP_DISPATCHER_WRAPPER_PATH || "/Users/admin/instagram-worker-python/scripts/run_control_dispatcher_service.sh";
-const workerRootPath = path.dirname(path.dirname(dispatcherWrapperPath));
-const deviceHeartbeatPublisherPath = process.env.BOTAPP_DEVICE_HEARTBEAT_PUBLISHER_PATH || path.join(workerRootPath, "device_heartbeat_publisher.py");
-const deviceHeartbeatServiceWrapperPath = process.env.BOTAPP_DEVICE_HEARTBEAT_SERVICE_WRAPPER_PATH || path.join(workerRootPath, "scripts/device_heartbeat_service.sh");
+const runtimeControllerPath = process.env.BOTAPP_RUNTIME_CONTROLLER_PATH || "/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl";
+const runtimeControllerCwd = path.dirname(path.dirname(runtimeControllerPath));
+const dispatcherWrapperPath = runtimeControllerPath;
+const workerRootPath = runtimeControllerCwd;
+const deviceHeartbeatPublisherPath = process.env.BOTAPP_DEVICE_HEARTBEAT_PUBLISHER_PATH || "";
+const deviceHeartbeatServiceWrapperPath = runtimeControllerPath;
 const workerEnvFilePath = process.env.BOTAPP_WORKER_ENV_FILE || path.join(workerRootPath, ".env");
 const deviceHeartbeatPythonPath = process.env.BOTAPP_PYTHON || "python3";
 const ASSIGNMENT_HEARTBEAT_STALE_MS = 15 * 60 * 1000;
@@ -6000,7 +6002,7 @@ function computeDeviceHeartbeatOperatorLabel(normalized) {
 
 function normalizeDeviceHeartbeatStatus(raw, action) {
   const lastError = safeDispatcherText(raw?.lastError || "");
-  const status = ["running", "paused", "stopped", "degraded", "starting", "unhealthy", "unknown"].includes(raw?.status) ? raw.status : "unknown";
+  const status = ["running", "paused", "stopped", "degraded", "starting", "unhealthy", "runtime_root_invalid", "runtime_root_mismatch", "unknown"].includes(raw?.status) ? raw.status : "unknown";
   const normalized = {
     ok: Boolean(raw?.ok),
     status,
@@ -6021,6 +6023,9 @@ function normalizeDeviceHeartbeatStatus(raw, action) {
     physicalPhonesInInventory: null,
     lastError: lastError || null,
     logsPath: typeof raw?.logsPath === "string" ? raw.logsPath : null,
+    activeRoot: typeof raw?.activeRoot === "string" ? raw.activeRoot : null,
+    resolvedRoot: typeof raw?.resolvedRoot === "string" ? raw.resolvedRoot : null,
+    runtimeCommit: typeof raw?.runtimeCommit === "string" ? raw.runtimeCommit : null,
     checkedAt: typeof raw?.checkedAt === "string" && raw.checkedAt ? raw.checkedAt : new Date().toISOString(),
     message: safeDispatcherText(raw?.message || "Device heartbeat service status unavailable."),
     action,
@@ -6045,8 +6050,8 @@ function runDeviceHeartbeatWrapper(command, args = [], timeoutMs = 25000) {
   } catch {
     return { ok: false, error: "device_heartbeat_wrapper_not_executable" };
   }
-  const result = spawnSync(deviceHeartbeatServiceWrapperPath, [command, ...args], {
-    cwd: workerRootPath,
+  const result = spawnSync(deviceHeartbeatServiceWrapperPath, ["heartbeat", command, ...args], {
+    cwd: runtimeControllerCwd,
     encoding: "utf8",
     shell: false,
     timeout: timeoutMs,
@@ -6077,8 +6082,8 @@ function runDeviceHeartbeatWrapperAsync(command, args = [], timeoutMs = 25000) {
     return Promise.resolve({ ok: false, error: "device_heartbeat_wrapper_not_executable" });
   }
   return new Promise((resolve) => {
-    const child = spawn(deviceHeartbeatServiceWrapperPath, [command, ...args], {
-      cwd: workerRootPath,
+    const child = spawn(deviceHeartbeatServiceWrapperPath, ["heartbeat", command, ...args], {
+      cwd: runtimeControllerCwd,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -7110,7 +7115,7 @@ function dispatcherFallbackStatus(status, message, extra = {}) {
 function normalizeDispatcherStatus(raw, action) {
   const preflight = raw && typeof raw.preflight === "object" && !Array.isArray(raw.preflight) ? raw.preflight : null;
   const lastError = safeDispatcherText(raw?.lastError || preflight?.reason || preflight?.error || "");
-  const status = ["running", "paused", "stopped", "unhealthy", "starting", "unknown"].includes(raw?.status) ? raw.status : "unknown";
+  const status = ["running", "paused", "stopped", "degraded", "unhealthy", "starting", "runtime_root_invalid", "runtime_root_mismatch", "unknown"].includes(raw?.status) ? raw.status : "unknown";
   return {
     ok: Boolean(raw?.ok),
     status,
@@ -7132,6 +7137,9 @@ function normalizeDispatcherStatus(raw, action) {
     queueActiveCount: Number.isFinite(Number(raw?.queueActiveCount)) ? Number(raw.queueActiveCount) : null,
     lastError: lastError || null,
     logsPath: typeof raw?.logsPath === "string" ? raw.logsPath : null,
+    activeRoot: typeof raw?.activeRoot === "string" ? raw.activeRoot : null,
+    resolvedRoot: typeof raw?.resolvedRoot === "string" ? raw.resolvedRoot : null,
+    runtimeCommit: typeof raw?.runtimeCommit === "string" ? raw.runtimeCommit : null,
     supabaseRestStatus: raw?.preflightOk ? "ok" : lastError ? "failed" : "unknown",
     deviceCountOnline: Number.isFinite(Number(raw?.deviceCountOnline)) ? Number(raw.deviceCountOnline) : null,
     checkedAt: typeof raw?.checkedAt === "string" && raw.checkedAt ? raw.checkedAt : new Date().toISOString(),
@@ -7193,8 +7201,8 @@ function runDispatcherWrapper(command, args = [], timeoutMs = 25000) {
   } catch {
     return { ok: false, error: "dispatcher_wrapper_not_executable" };
   }
-  const result = spawnSync(dispatcherWrapperPath, [command, ...args], {
-    cwd: path.dirname(path.dirname(dispatcherWrapperPath)),
+  const result = spawnSync(dispatcherWrapperPath, ["dispatcher", command, ...args], {
+    cwd: runtimeControllerCwd,
     encoding: "utf8",
     shell: false,
     timeout: timeoutMs,

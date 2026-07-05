@@ -26,9 +26,9 @@ test("repair and dispatcher ensure IPC are exposed to renderer", () => {
   const appSource = readFileSync(new URL("../app/App.tsx", import.meta.url), "utf8");
   assert.match(preload, /botapp:relay:repair/);
   assert.match(preload, /botapp:dispatcher:ensure/);
-  assert.match(appSource, /Réparer la connexion/);
-  assert.match(appSource, /Connexion BotApp : opérationnelle/);
-  assert.match(appSource, /Démarrer le dispatcher/);
+  assert.match(appSource, /Repair connection/);
+  assert.match(appSource, /BotApp connection: operational/);
+  assert.match(appSource, /Start dispatcher/);
 });
 
 test("dispatcher autostart uses install and resume allowlist", () => {
@@ -37,6 +37,15 @@ test("dispatcher autostart uses install and resume allowlist", () => {
   assert.match(main, /runDispatcherWrapper\("install"/);
   assert.match(main, /runDispatcherWrapper\("resume"/);
   assert.match(main, /"install"/);
+});
+
+test("runtime controls use canonical controller without legacy worker fallback", () => {
+  const main = readFileSync(new URL("../../electron/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /phonefarm-runtime\/bin\/phonefarm-runtimectl/);
+  assert.match(main, /spawnSync\(dispatcherWrapperPath, \["dispatcher", command/);
+  assert.match(main, /spawnSync\(deviceHeartbeatServiceWrapperPath, \["heartbeat", command/);
+  assert.doesNotMatch(main, /\/Users\/admin\/instagram-worker-python/);
+  assert.doesNotMatch(main, /BOTAPP_DISPATCHER_WRAPPER_PATH/);
 });
 
 test("runtime health exposes relay repair action", () => {

@@ -74,8 +74,11 @@ const statusCopy: Record<BotAppDispatcherStatus, { label: string; detail: string
   running: { label: "Running", detail: "Dispatcher is healthy and ready.", tone: "success" },
   paused: { label: "Paused", detail: "Dispatcher is paused. Resume it before starting Auto Login or runs.", tone: "warning" },
   stopped: { label: "Stopped", detail: "Dispatcher is stopped.", tone: "error" },
+  degraded: { label: "Degraded", detail: "Dispatcher is active but one runtime check is degraded.", tone: "warning" },
   unhealthy: { label: "Unhealthy", detail: "Dispatcher is running but cannot process jobs.", tone: "error" },
   starting: { label: "Starting", detail: "Dispatcher is starting or waiting for launchd.", tone: "info" },
+  runtime_root_invalid: { label: "Runtime root invalid", detail: "Active worker root is missing, invalid, or forbidden.", tone: "error" },
+  runtime_root_mismatch: { label: "Runtime root mismatch", detail: "A service is running from a different worker root than the active release.", tone: "error" },
   unknown: { label: "Unknown", detail: "Dispatcher status unavailable.", tone: "neutral" },
 };
 

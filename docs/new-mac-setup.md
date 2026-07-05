@@ -76,6 +76,9 @@ Current local paths:
 | BotApp | `/Users/admin/Projects/BotApp` | Electron local ops app |
 | Dashboard / shared backend API | `/Users/admin/Projects/boost-ai-frontend` | Next.js app and Supabase-backed API routes |
 | Worker Python | `/Users/admin/Projects/instagram-worker-python` | Runtime executor, devices, runs, logs |
+| Worker active runtime | `/Users/admin/phonefarm-worker-current` | Symlink to the immutable production release |
+| Worker releases | `/Users/admin/phonefarm-worker-releases/<commit>` | Immutable worker release worktrees |
+| Runtime controller | `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl` | Only local service control entrypoint |
 
 For each repo:
 
@@ -92,6 +95,8 @@ Rules:
 - Do not revert user or runtime changes unless explicitly requested.
 - Do not commit `release/mac-arm64/BotApp.app`, `dist/`, logs, screenshots, XML dumps, `.env`, or runtime artifacts unless an explicit release process says otherwise.
 - If the app shows old UI or old behavior, quit all old instances and rebuild/package again.
+- Production services must not start from `/Users/admin/instagram-worker-python`.
+- BotApp must call `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl`, not a worker checkout script.
 
 PENDING: Define the expected production branch names for each repo once the release workflow is finalized.
 
@@ -168,6 +173,14 @@ Document and validate worker environment before running local runtime:
 - Dispatcher flags.
 - Run-control flags.
 - ADB/device selection variables.
+
+Production runtime env files live outside releases:
+
+- `/Users/admin/phonefarm-runtime/env/run-control-dispatcher.env`
+- `/Users/admin/phonefarm-runtime/env/device-heartbeat.env`
+
+Do not copy these files from a mutable checkout. Provision or rotate them through
+the approved secret process.
 
 NO-GO: Do not run login/provisioning/follow automation during a new Mac setup smoke unless the runtime checkpoint explicitly authorizes it.
 
@@ -638,4 +651,13 @@ Relay / dispatcher architecture and runbook:
 - `docs/botapp-relay-dispatcher-operations.md`
 
 Packaged BotApp is the only normal operator application. Do not use `npm run electron:start` for Liam or production operator validation.
+
+Runtime controller checkpoint:
+
+- Active worker root is `/Users/admin/phonefarm-worker-current`.
+- Dispatcher, heartbeat and scheduler diagnostics are resolved through
+  `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl`.
+- `runtime_root_invalid` and `runtime_root_mismatch` are explicit STOP states.
+- Heartbeat logs rotate outside immutable releases under
+  `/Users/admin/phonefarm-runtime/logs/device-heartbeat-service`.
 

@@ -13,6 +13,7 @@ Do not add:
 - Full Vault UUIDs or secret reference IDs.
 - Raw XML, raw screenshots, local screenshot paths, HAR files, ADB dumps, or raw device logs.
 - Direct worker dispatch from preview UI.
+- Hardcoded worker checkout fallbacks such as `/Users/admin/instagram-worker-python`.
 - Direct Instagram scraping or CT validation in BotApp.
 - Direct external avatar fetches from raw provider URLs in the renderer.
 
@@ -89,6 +90,7 @@ Review any match manually. Documentation that says "do not include secrets" is a
 - `release/`
 - `.env`
 - `.env.*`
+- `/Users/admin/phonefarm-runtime/env/*`
 - logs
 - screenshots
 - XML dumps
@@ -96,3 +98,15 @@ Review any match manually. Documentation that says "do not include secrets" is a
 - uploads containing user artifacts
 - temporary inspection folders
 - raw worker/runtime outputs
+
+## Runtime Controller Boundary
+
+BotApp may invoke only the stable local controller
+`/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl` for dispatcher,
+heartbeat and scheduler diagnostics/actions. It must not bundle Supabase
+service-role credentials, read worker env files, guess a release hash, or call
+scripts from `/Users/admin/instagram-worker-python`.
+
+The controller returns safe root metadata (`activeRoot`, `resolvedRoot`,
+`runtimeCommit`) and explicit STOP states (`runtime_root_invalid`,
+`runtime_root_mismatch`) without exposing env-file contents.

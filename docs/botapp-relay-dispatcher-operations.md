@@ -19,6 +19,9 @@ Complète [l’architecture relay/dispatcher](./botapp-relay-dispatcher-architec
 | Status bootstrap | `~/Library/Application Support/BotApp/botapp-relay-bootstrap.status.json` |
 | Trace démarrage | `~/Library/Application Support/BotApp/botapp-startup.trace.log` |
 | Backups legacy | `botapp-runtime-config.json.disabled.<timestamp>` (même dossier ou legacy) |
+| Runtime controller | `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl` |
+| Worker active root | `/Users/admin/phonefarm-worker-current` |
+| Worker releases | `/Users/admin/phonefarm-worker-releases/<commit>` |
 
 Legacy (import automatique, ne plus utiliser comme source permanente) :
 
@@ -77,10 +80,13 @@ Appelle `bootstrapRelayRuntime()` avec :
 ### `ensureDispatcherAutostart()`
 
 1. Relay health OK + authentifié
-2. `dispatcherStatus()` — si `queueActiveCount > 0` → **report** (pas de démarrage)
-3. Si LaunchAgent absent → `install`
-4. Sinon → `resume`
-5. Re-vérifier `processRunning` + status `running`
+2. `dispatcherStatus()` via `phonefarm-runtimectl dispatcher status --json`
+3. Si `runtime_root_invalid` ou `runtime_root_mismatch` → **report explicite**
+   (pas de fallback legacy)
+4. Si `queueActiveCount > 0` → **report** (pas de démarrage)
+5. Si LaunchAgent absent → `install`
+6. Sinon → `resume`
+7. Re-vérifier `processRunning` + status `running`
 
 ### Bouton « Réparer la connexion » (UI)
 
@@ -118,6 +124,8 @@ Causes dispatcher (Runtime Health) :
 |----------|----------------|
 | `stopped` / `unknown` | LaunchAgent non chargé ou process arrêté |
 | `paused` | Pause volontaire — Resume |
+| `runtime_root_invalid` | `/Users/admin/phonefarm-worker-current` absent, hors releases ou incomplet |
+| `runtime_root_mismatch` | Un process service tourne depuis une release différente du root actif |
 | Relay rouge | Bootstrap/URL/clé — Réparer connexion |
 | Autostart deferred | Queue active > 0 ou relay non authentifié |
 
@@ -215,13 +223,20 @@ rg "setPath|bootstrapRelayConfig|relay-runtime-bootstrap" /tmp/botapp-asar-check
 
 Confirmer `app.setPath("userData", canonicalUserDataDir())` **avant** `app.whenReady()`.
 
-### Dispatcher (terminal — dev uniquement)
+### Runtime controller (terminal — dev uniquement)
 
 ```bash
-/Users/admin/instagram-worker-python/scripts/run_control_dispatcher_service.sh status
+/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl status --json
+/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl dispatcher status --json
+/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl heartbeat status --json
+/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl scheduler status --json
 ```
 
 Ne pas demander ces commandes à Liam.
+
+Les commandes ci-dessus ne doivent jamais afficher
+`/Users/admin/instagram-worker-python` comme `resolvedRoot`. Si c’est le cas,
+STOP : le runtime canonique est cassé ou un fallback legacy est revenu.
 
 ### Rollback Keychain
 

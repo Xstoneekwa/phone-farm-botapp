@@ -101,6 +101,21 @@ The relay should enforce:
 - no service-role exposure to desktop
 - safe avatar proxying
 
+## Local Runtime Boundary
+
+Production BotApp controls local worker services through one stable entrypoint:
+
+```text
+Electron main
+  -> /Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl
+  -> /Users/admin/phonefarm-worker-current
+  -> /Users/admin/phonefarm-worker-releases/<commit>
+```
+
+BotApp must not hardcode `/Users/admin/instagram-worker-python`, guess a release
+hash, or silently fall back to a mutable checkout. Runtime root failures are
+explicit states: `runtime_root_invalid` and `runtime_root_mismatch`.
+
 ## Electron Packaging
 
 Packaging is configured in `electron-builder.json`.
