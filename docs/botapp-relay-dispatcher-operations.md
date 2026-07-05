@@ -195,6 +195,26 @@ Règles absolues :
 Une copie de rollback dans `/Users/admin/phonefarm-botapp-rollbacks/...` est un
 artefact forensics non quotidien. Elle ne remplace pas l’application officielle.
 
+### Piège `ELECTRON_RUN_AS_NODE` pendant le test visuel
+
+Si `ELECTRON_RUN_AS_NODE=1` est présent dans l'environnement du shell (cas des
+shells lancés depuis un IDE Electron comme Cursor/VS Code), **tout lancement de
+BotApp échoue silencieusement** : l'app démarre en mode Node headless et sort
+avec le code 0 avant même de charger `main.cjs` (aucune fenêtre, aucune entrée
+`main_loaded` dans `botapp-startup.trace.log`). Ceci vaut aussi pour `open -n`,
+car `open` propage l'environnement de l'appelant à l'app lancée. Les logs AMFI
+(`no CMS blob`, `CT signature issue`) qui apparaissent au même moment sont des
+messages bénins et **ne sont pas la cause**. Avant tout test visuel :
+
+```bash
+unset ELECTRON_RUN_AS_NODE
+open -n /chemin/vers/release/mac-arm64/BotApp.app
+```
+
+Diagnostic rapide : si `open` rend la main sans erreur mais qu'aucun processus
+`MacOS/BotApp` n'apparaît et que la trace de démarrage ne bouge pas, vérifier
+`echo $ELECTRON_RUN_AS_NODE` en premier.
+
 ### Checks développeur (sans action Instagram)
 
 | Check | Méthode |
