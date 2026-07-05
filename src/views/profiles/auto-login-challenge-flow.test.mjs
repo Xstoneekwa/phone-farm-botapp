@@ -8,6 +8,7 @@ import {
   autoLoginStateFromStartResult,
   createAutoLoginStartingState,
   mergeAutoLoginProgressSnapshot,
+  sanitizeAutoLoginText,
 } from "./auto-login-flow.ts";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -195,6 +196,8 @@ test("terminal Auto Login failure stays failed and does not masquerade as verifi
   }));
   assert.equal(failed.globalStatus, "failed");
   assert.equal(failed.challenge, null);
+  assert.equal(failed.nextAction, "retry_auto_login");
+  assert.equal(failed.steps.find((step) => step.id === "result")?.status, "failed");
 });
 
 test("Auto Login retry is explicit and progress polling binds to the existing request id", () => {
@@ -202,6 +205,43 @@ test("Auto Login retry is explicit and progress polling binds to the existing re
   assert.match(profilesViewSource, /const requestId = autoLoginFlow\.state\.requestId/);
   assert.match(autoLoginFlowSource, /requested_run_type: "login_provisioning"/);
   assert.match(profilesViewSource, /window\.botappDesktop\?\.profiles\?\.autoLogin/);
+  assert.match(profilesViewSource, /previousState\.processLog/);
+  assert.match(profilesViewSource, /Retry Auto Login requested after previous attempt/);
+  assert.match(profilesViewSource, /Retry request accepted by backend/);
+});
+
+test("Auto Login progression redacts secrets and never emits an empty operator reason", () => {
+  const redacted = sanitizeAutoLoginText("password=hunter2 token=abc code=123456");
+  assert.match(redacted, /password=<redacted>/);
+  assert.match(redacted, /token=<redacted>/);
+  assert.match(redacted, /code=<redacted>/);
+  assert.doesNotMatch(redacted, /hunter2|abc|123456/);
+  assert.equal(sanitizeAutoLoginText("", "safe fallback"), "safe fallback");
+
+  const queued = autoLoginStateFromStartResult(profile(), {
+    request_id: REQUEST_ID,
+    status: "running",
+    run_id: RUN_ID,
+  });
+  const failed = mergeAutoLoginProgressSnapshot(queued, activeSnapshot({
+    status: "failed",
+    reason: "worker_exit_nonzero password=hunter2",
+    process_log: [
+      { id: "log-secret", timestamp: "2026-06-24T12:00:50.000Z", phase: "error", message: "verification_code=123456 rejected" },
+    ],
+  }));
+
+  assert.equal(failed.globalStatus, "failed");
+  assert.match(failed.safeReason ?? "", /password=<redacted>/);
+  assert.doesNotMatch(failed.safeReason ?? "", /hunter2/);
+  assert.equal(failed.processLog.some((entry) => /verification_code=<redacted>/.test(entry.message)), true);
+});
+
+test("Auto Login modal shows next action and failed-state retry copy", () => {
+  assert.match(modalSource, /nextActionLabel/);
+  assert.match(modalSource, /Retry Auto Login is available/);
+  assert.match(modalSource, /No backend reason yet/);
+  assert.match(modalSource, /Auto Login failed before connection was confirmed/);
 });
 
 test("sixty second post-submit window does not alter BotApp Auto Login progression contract", () => {

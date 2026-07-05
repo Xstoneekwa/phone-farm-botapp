@@ -13,7 +13,7 @@ import { AddProfileDrawer } from "./drawers/AddProfileDrawer";
 import { resolveAddProfileCredentialsState } from "./add-profile-credentials";
 import { AutoLoginFlowModal } from "./AutoLoginFlowModal";
 import { buildAssignNowPayload, createAssignNowState } from "./assign-now-flow";
-import { autoLoginLogEntry, autoLoginStateFromStartResult, buildAutoLoginPayload, createAutoLoginStartingState, mergeAutoLoginProgressSnapshot } from "./auto-login-flow";
+import { autoLoginLogEntry, autoLoginStateFromStartResult, buildAutoLoginPayload, createAutoLoginStartingState, mergeAutoLoginProgressSnapshot, sanitizeAutoLoginText } from "./auto-login-flow";
 import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifecycle-flow";
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
 import { buildRestoreLoginScreenPayload } from "./restore-login-screen-flow";
@@ -236,14 +236,24 @@ function connectBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
   return { label: "login pending", tone: "neutral" };
 }
 
-function socialBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
+export function socialBlockLabel(reason: string) {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("review_login_package_mismatch") || normalized.includes("identity_mismatch")) return "social review: account mismatch";
+  if (normalized.includes("blocking_dashboard_action")) return "social review required";
+  if (normalized.includes("welcome_real_send_disabled")) return "growth blocked: Welcome DM disabled";
+  if (normalized.includes("outreach_real_send_disabled")) return "growth blocked: Outreach DM disabled";
+  if (normalized.includes("quota") || normalized.includes("cap")) return "growth blocked: quota";
+  return "social blocked: reason required";
+}
+
+export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
   if (profile.eligibility === "can_start") return { label: "growth ready", tone: "success" };
   const reason = `${profile.eligibilityReason} ${profile.eligibilityDetail.primary_block_reason} ${profile.eligibilityDetail.reason_label}`.toLowerCase();
   if (reason.includes("login")) return { label: "social needs login", tone: "warning" };
   if (reason.includes("target") || reason.includes("ct")) return { label: "growth needs targets", tone: "warning" };
   if (reason.includes("schedule") || reason.includes("window")) return { label: "growth waiting slot", tone: "warning" };
   if (reason.includes("phone") || reason.includes("device") || reason.includes("assignment")) return { label: "growth waiting device", tone: "warning" };
-  return { label: "social blocked", tone: "warning" };
+  return { label: socialBlockLabel(reason), tone: "warning" };
 }
 
 function AccountRow({
@@ -727,26 +737,37 @@ export function ProfilesView({
   async function startAutoLogin(profile: BotProfile) {
     const start = window.botappDesktop?.profiles?.autoLogin;
     const startingState = createAutoLoginStartingState(profile);
-    setAutoLoginFlow({ profile, state: startingState });
+    const previousState = autoLoginFlow?.profile.id === profile.id ? autoLoginFlow.state : null;
+    const stateWithHistory = previousState
+      ? {
+        ...startingState,
+        processLog: [
+          ...previousState.processLog,
+          autoLoginLogEntry("REQUEST", "Retry Auto Login requested after previous attempt."),
+          ...startingState.processLog,
+        ].slice(-80),
+      }
+      : startingState;
+    setAutoLoginFlow({ profile, state: stateWithHistory });
     if (!start) {
-      setAutoLoginFlow({ profile, state: { ...startingState, globalStatus: "failed", safeReason: "BotApp relay unavailable.", processLog: [...startingState.processLog, autoLoginLogEntry("ERROR", "Auto Login relay unavailable in this runtime.")] } });
+      setAutoLoginFlow({ profile, state: { ...stateWithHistory, globalStatus: "failed", safeReason: "BotApp relay unavailable.", processLog: [...stateWithHistory.processLog, autoLoginLogEntry("ERROR", "Auto Login relay unavailable in this runtime.")] } });
       return;
     }
     const result = await start({ accountId: profile.id, username: profile.username });
     if (!result.ok) {
-      const reason = String(result.error || "auto_login_request_failed");
+      const reason = sanitizeAutoLoginText(result.error, "Auto Login request failed before the backend returned a reason.");
       setAutoLoginFlow({
         profile,
         state: {
-          ...startingState,
+          ...stateWithHistory,
           globalStatus: "failed",
           safeReason: reason,
-          nextAction: "none",
+          nextAction: "retry_auto_login",
           processLog: [
-            ...startingState.processLog,
+            ...stateWithHistory.processLog,
             autoLoginLogEntry("ERROR", `Auto Login request failed: ${reason}.`),
           ],
-          steps: startingState.steps.map((step) => step.status === "running" || step.id === "result" ? { ...step, status: "failed" } : step),
+          steps: stateWithHistory.steps.map((step) => step.status === "running" || step.id === "result" ? { ...step, status: "failed" } : step),
         },
       });
       onMockSubmit(`Auto Login failed: ${reason}`, "error");
@@ -754,7 +775,17 @@ export function ProfilesView({
     }
     const data = (result.data ?? {}) as Record<string, unknown>;
     const nextState = autoLoginStateFromStartResult(profile, data);
-    setAutoLoginFlow({ profile, state: nextState });
+    setAutoLoginFlow({
+      profile,
+      state: previousState ? {
+        ...nextState,
+        processLog: [
+          ...stateWithHistory.processLog,
+          autoLoginLogEntry("QUEUE", "Retry request accepted by backend."),
+          ...nextState.processLog,
+        ].slice(-80),
+      } : nextState,
+    });
     onMockSubmit(`Auto Login queued: request ${String(data.request_id || "").slice(0, 8) || "created"}.`, "success");
     onRefresh();
   }

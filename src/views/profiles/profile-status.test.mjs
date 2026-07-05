@@ -23,10 +23,25 @@ test("social badge separates login and target blocks", () => {
   assert.match(profilesViewSource, /reason\.includes\("target"\)[\s\S]*growth needs targets/);
 });
 
+test("social badge explains real blocking reasons and preserves growth-ready state", () => {
+  assert.match(profilesViewSource, /export function socialBlockLabel/);
+  assert.match(profilesViewSource, /review_login_package_mismatch/);
+  assert.match(profilesViewSource, /social review: account mismatch/);
+  assert.match(profilesViewSource, /if \(profile\.eligibility === "can_start"\) return \{ label: "growth ready"/);
+  assert.match(profilesViewSource, /social blocked: reason required/);
+  assert.doesNotMatch(profilesViewSource, /return \{ label: "social blocked", tone: "warning" \}/);
+});
+
 test("BotApp profile normalization blocks social eligibility until login is connected", () => {
   assert.match(mainSource, /loginStatus && loginStatus !== "connected"[\s\S]*blocked_now/);
   assert.match(mainSource, /loginStatus && loginStatus !== "connected"[\s\S]*login_not_connected/);
   assert.match(mainSource, /readEligibility\(account, blocked, loginStatus\)/);
+});
+
+test("BotApp relay consumes backend primaryBlockReason instead of stale generic social blocked", () => {
+  assert.match(mainSource, /primaryBlockReason/);
+  assert.match(mainSource, /primary_block_reason/);
+  assert.match(mainSource, /reason_label: eligibility === "blocked_now" \? eligibilityReason\.replaceAll/);
 });
 
 test("BotApp profiles surface assignment health instead of fake unassigned state", () => {

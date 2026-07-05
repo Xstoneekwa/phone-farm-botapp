@@ -24,6 +24,16 @@ function globalStatusLabel(state: ProfileAutoLoginState) {
   return "Running";
 }
 
+function nextActionLabel(state: ProfileAutoLoginState) {
+  if (state.nextAction === "open_phone") return "Open the assigned phone and complete Instagram verification.";
+  if (state.nextAction === "check_login") return "Run Check Login after completing the Instagram prompt.";
+  if (state.nextAction === "retry_auto_login") return "Retry Auto Login is available for a clean new attempt.";
+  if (state.nextAction === "update_credentials") return "Update the Instagram credentials before retrying.";
+  if (state.nextAction === "review_mismatch") return "Review the expected Instagram account before retrying.";
+  if (state.globalStatus === "completed") return "No action required.";
+  return "Wait for the next backend progress update.";
+}
+
 export function AutoLoginFlowModal({
   profile,
   state,
@@ -46,6 +56,7 @@ export function AutoLoginFlowModal({
   const logText = useMemo(() => copyableProcessLog(state.processLog), [state.processLog]);
   const actionRequired = state.globalStatus === "action_required" || Boolean(state.challenge);
   const canStop = ["queued", "claimed", "running", "starting"].includes(state.globalStatus);
+  const safeReason = state.safeReason || "No backend reason yet.";
 
   async function copyLog() {
     await navigator.clipboard.writeText(logText);
@@ -71,7 +82,8 @@ export function AutoLoginFlowModal({
             <span>request_id</span><code>{state.requestId ?? "pending"}</code>
             <span>request_status</span><code>{state.requestStatus ?? state.globalStatus}</code>
             <span>run_id</span><code>{state.runId ?? "not linked yet"}</code>
-            <span>reason</span><code>{state.safeReason ?? "none"}</code>
+            <span>reason</span><code>{safeReason}</code>
+            <span>next_action</span><code>{nextActionLabel(state)}</code>
           </div>
           <div className="auto-login-step-list">
             {state.steps.map((step) => (
@@ -91,7 +103,15 @@ export function AutoLoginFlowModal({
           <section className="auto-login-action-required" aria-label="Action required">
             <strong>Instagram requires a code or confirmation.</strong>
             <span>Open the phone and complete it manually in Instagram. Do not use the web dashboard for this step.</span>
-            <span>{state.challenge?.help_text ?? state.safeReason ?? "Complete the Instagram prompt on the assigned phone, then run Check Login or Retry Auto Login."}</span>
+            <span>{state.challenge?.help_text ?? safeReason}</span>
+          </section>
+        ) : null}
+
+        {state.globalStatus === "failed" ? (
+          <section className="auto-login-action-required" aria-label="Auto Login failed">
+            <strong>Auto Login failed before connection was confirmed.</strong>
+            <span>{safeReason}</span>
+            <span>{nextActionLabel(state)}</span>
           </section>
         ) : null}
 

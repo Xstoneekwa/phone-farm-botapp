@@ -8,6 +8,11 @@ import type {
 } from "../../api/types";
 
 const STEP_IDS: Array<ProfileAutoLoginState["steps"][number]["id"]> = ["queued", "claimed", "worker", "login", "result"];
+const SECRET_PATTERNS = [
+  /(password|passwd|pwd)\s*[:=]\s*[^,\s;]+/gi,
+  /(token|secret|vault|api[_-]?key)\s*[:=]\s*[^,\s;]+/gi,
+  /(verification[_-]?code|email[_-]?code|code)\s*[:=]\s*\d{3,8}/gi,
+];
 
 function timestamp() {
   return new Intl.DateTimeFormat("en-US", {
@@ -19,12 +24,22 @@ function timestamp() {
 }
 
 export function autoLoginLogEntry(phase: ProfileAutoLoginProcessLogEntry["phase"], message: string): ProfileAutoLoginProcessLogEntry {
+  const safeMessage = sanitizeAutoLoginText(message);
   return {
-    id: `${Date.now()}-${phase}-${message}`,
+    id: `${Date.now()}-${phase}-${safeMessage}`,
     timestamp: timestamp(),
     phase,
-    message,
+    message: safeMessage,
   };
+}
+
+export function sanitizeAutoLoginText(value: unknown, fallback = "Waiting for backend progress.") {
+  let text = typeof value === "string" ? value.trim() : "";
+  if (!text) text = fallback;
+  for (const pattern of SECRET_PATTERNS) {
+    text = text.replace(pattern, (_match, key) => `${key}=<redacted>`);
+  }
+  return text;
 }
 
 function idempotencyKey(profile: BotProfile) {
@@ -42,19 +57,19 @@ export function buildAutoLoginPayload(profile: BotProfile): ProfileAutoLoginPayl
 }
 
 function stepDetail(profile: BotProfile, stepId: ProfileAutoLoginState["steps"][number]["id"]) {
-  if (stepId === "queued") return "Create account_run_request for login_provisioning.";
-  if (stepId === "claimed") return "Wait for the dispatcher to claim the request.";
+  if (stepId === "queued") return "Prepare the account and create a login_provisioning request.";
+  if (stepId === "claimed") return "Wait for the dispatcher to reserve the request.";
   if (stepId === "worker") return `${profile.deviceName} · open Instagram on the assigned phone.`;
-  if (stepId === "login") return "Worker verifies login and enters credentials if needed.";
-  return "Connected, action required, failed, or stopped.";
+  if (stepId === "login") return "Identify the account, enter credentials if needed, then verify connection.";
+  return "Connection succeeded, verification is required, or the attempt failed with a safe reason.";
 }
 
 function stepLabel(stepId: ProfileAutoLoginState["steps"][number]["id"]) {
-  if (stepId === "queued") return "Queued";
-  if (stepId === "claimed") return "Claimed by dispatcher";
-  if (stepId === "worker") return "Worker started";
-  if (stepId === "login") return "Checking login";
-  return "Result";
+  if (stepId === "queued") return "Account preparation";
+  if (stepId === "claimed") return "Dispatcher reservation";
+  if (stepId === "worker") return "Open Instagram";
+  if (stepId === "login") return "Credentials and connection check";
+  return "Login result";
 }
 
 export function createAutoLoginStartingState(profile: BotProfile): ProfileAutoLoginState {
@@ -135,7 +150,7 @@ export function autoLoginStateFromStartResult(
     requestId,
     requestStatus,
     runId,
-    safeReason: typeof result.message === "string" ? result.message : null,
+    safeReason: sanitizeAutoLoginText(result.message, "Request accepted. Waiting for dispatcher progress."),
     nextAction: "none",
   };
 }
@@ -195,7 +210,7 @@ export function mergeAutoLoginProgressSnapshot(
   const nextLogs = [...state.processLog];
   for (const item of snapshot.process_log) {
     const phase = phaseFromLog(item.phase);
-    const message = item.message || "runtime event";
+    const message = sanitizeAutoLoginText(item.message, "Runtime progress event.");
     const key = item.id || `${item.timestamp}:${phase}:${message}`;
     if (seenLogs.has(key)) continue;
     seenLogs.add(key);
@@ -217,11 +232,22 @@ export function mergeAutoLoginProgressSnapshot(
     help_text: action.message || "Open the phone and complete the Instagram code, 2FA, checkpoint, or confirmation manually.",
   } : null;
 
-  const reason = snapshot.reason || state.safeReason;
+  const reason = sanitizeAutoLoginText(snapshot.reason || state.safeReason, "Waiting for backend progress.");
+  const mergedSteps = state.steps.map((step) => stepById.get(step.id) ?? step);
+  const globalStatus = globalStatusFromSnapshot(snapshot.status);
+  const steps = mergedSteps.map((step) => {
+    if (globalStatus === "completed" && step.status !== "failed" && step.status !== "action_required") {
+      return { ...step, status: "done" as const };
+    }
+    if ((globalStatus === "failed" || globalStatus === "stopped") && step.id === "result" && step.status === "pending") {
+      return { ...step, status: globalStatus === "failed" ? "failed" as const : "skipped" as const };
+    }
+    return step;
+  });
   return {
     ...state,
-    globalStatus: globalStatusFromSnapshot(snapshot.status),
-    steps: state.steps.map((step) => stepById.get(step.id) ?? step),
+    globalStatus,
+    steps,
     challenge,
     requestId: snapshot.request_id || state.requestId,
     requestStatus: snapshot.request_status || state.requestStatus,
@@ -230,7 +256,8 @@ export function mergeAutoLoginProgressSnapshot(
     nextAction: challenge ? "open_phone"
       : reason?.toLowerCase().includes("password") ? "update_credentials"
         : reason?.toLowerCase().includes("mismatch") ? "review_mismatch"
-          : state.nextAction,
+          : globalStatus === "failed" ? "retry_auto_login"
+            : state.nextAction,
     processLog: nextLogs.slice(-80),
   };
 }
