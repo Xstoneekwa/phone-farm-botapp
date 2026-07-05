@@ -206,7 +206,9 @@ test("restart heartbeat IPC uses async non-blocking recovery supervisor", () => 
   assert.match(mainSource, /offline_excluded_count/);
   assert.match(mainSource, /botapp:devices:delete-preflight/);
   assert.match(mainSource, /botapp:devices:delete/);
-  assert.match(mainSource, /device_heartbeat_service\.sh/);
+  // Heartbeat service actions are routed through the canonical runtime
+  // controller (phonefarm-runtimectl), not the legacy device_heartbeat_service.sh.
+  assert.match(mainSource, /deviceHeartbeatServiceWrapperPath = runtimeControllerPath/);
   assert.match(mainSource, /ensureDeviceHeartbeatAutostart/);
   assert.match(preloadSource, /restartHeartbeatPublisher/);
   assert.match(preloadSource, /subscribeHeartbeatRecovery/);

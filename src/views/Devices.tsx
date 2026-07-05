@@ -7,6 +7,7 @@ import {
   projectBackendHeartbeat,
   summarizeBackendHeartbeats,
 } from "./device-backend-heartbeat";
+import { createDevicesAutoRefreshController, DEVICES_RELATIVE_TICK_MS } from "./devices-auto-refresh";
 import {
   canConfirmDeviceDelete,
   DELETE_PREFLIGHT_MISMATCH_FR,
@@ -183,6 +184,32 @@ const HEARTBEAT_RECOVERY_BUSY_STAGES = new Set([
   "recovery_in_progress",
 ]);
 
+/**
+ * Local clock tick so the relative "Dernier signal il y a X" labels advance
+ * between two relay fetches, without any manual click. The tick pauses while
+ * the window is hidden and resumes (with an immediate recompute) when the
+ * window becomes visible again.
+ */
+function useHeartbeatNowTick(intervalMs = DEVICES_RELATIVE_TICK_MS) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const controller = createDevicesAutoRefreshController({
+      refresh: () => setNow(new Date()),
+      intervalMs,
+    });
+    const onVisibilityChange = () => {
+      controller.handleVisibilityChange(document.visibilityState === "visible");
+    };
+    controller.start(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      controller.stop();
+    };
+  }, [intervalMs]);
+  return now;
+}
+
 export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; onAction: (action: string, target: string, danger?: boolean) => void; onRefresh?: () => Promise<void> | void }) {
   const [openViews, setOpenViews] = useState<DeviceViewState[]>([]);
   const [panel, setPanel] = useState<DevicePanel>(null);
@@ -195,6 +222,7 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
   const [incidentsByDevice, setIncidentsByDevice] = useState<Map<string, { count: number; incidentId: string; severity: string }>>(new Map());
   const [incidentDrawerId, setIncidentDrawerId] = useState<string | null>(null);
   const canRestartHeartbeats = typeof window.botappDesktop?.devices?.restartHeartbeatPublisher === "function";
+  const heartbeatNow = useHeartbeatNowTick();
 
   useEffect(() => {
     let cancelled = false;
@@ -438,7 +466,7 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
             <span className="active">{activeCount} active</span>
             <span className="offline">{offlineCount} offline</span>
           </div>
-          <BackendHeartbeatSummary devices={devices} />
+          <BackendHeartbeatSummary devices={devices} now={heartbeatNow} />
         </div>
       </header>
 
@@ -451,6 +479,7 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
                 device={device}
                 incidentSummary={incidentsByDevice.get(device.id) ?? null}
                 onIncidentOpen={setIncidentDrawerId}
+                heartbeatNow={heartbeatNow}
                 heartbeatPending={Boolean(heartbeatRestartStage && HEARTBEAT_RECOVERY_BUSY_STAGES.has(heartbeatRestartStage))}
                 isOpen={isViewOpen(openViews, device)}
                 onOpen={() => void openPhoneView(device)}
@@ -540,8 +569,8 @@ function RefreshIcon() {
   );
 }
 
-function BackendHeartbeatSummary({ devices }: { devices: Device[] }) {
-  const summary = useMemo(() => summarizeBackendHeartbeats(devices), [devices]);
+function BackendHeartbeatSummary({ devices, now }: { devices: Device[]; now?: Date }) {
+  const summary = useMemo(() => summarizeBackendHeartbeats(devices, now), [devices, now]);
   if (!summary.totalPhysical) return null;
   return (
     <div className={`devices-backend-heartbeat-summary ${summary.globalReady ? "ready" : "blocked"}`}>
@@ -552,8 +581,8 @@ function BackendHeartbeatSummary({ devices }: { devices: Device[] }) {
   );
 }
 
-function BackendHeartbeatIndicator({ device, pending }: { device: Device; pending?: boolean }) {
-  const projection = useMemo(() => projectBackendHeartbeat(device, { pending }), [device, pending]);
+function BackendHeartbeatIndicator({ device, pending, now }: { device: Device; pending?: boolean; now?: Date }) {
+  const projection = useMemo(() => projectBackendHeartbeat(device, { pending, now }), [device, pending, now]);
   if (!projection) return null;
   return (
     <div className={`devices-backend-heartbeat-indicator state-${projection.label}`}>
@@ -573,6 +602,7 @@ function DeviceRow({
   device,
   incidentSummary,
   onIncidentOpen,
+  heartbeatNow,
   heartbeatPending,
   isOpen,
   onOpen,
@@ -582,6 +612,7 @@ function DeviceRow({
   device: Device;
   incidentSummary?: { count: number; incidentId: string; severity: string } | null;
   onIncidentOpen?: (incidentId: string) => void;
+  heartbeatNow?: Date;
   heartbeatPending?: boolean;
   isOpen: boolean;
   onOpen: () => void;
@@ -633,7 +664,7 @@ function DeviceRow({
         <span>Free <strong>{device.appInstancesAvailableCount}</strong></span>
         <span>Occupied <strong>{device.appInstancesOccupiedCount}</strong></span>
       </div>
-      <BackendHeartbeatIndicator device={device} pending={heartbeatPending} />
+      <BackendHeartbeatIndicator device={device} pending={heartbeatPending} now={heartbeatNow} />
       {device.viewUnavailableReason ? <p className="device-warning">{device.viewUnavailableReason}</p> : null}
       {appInstances.length ? (
         <div className="device-app-instances">

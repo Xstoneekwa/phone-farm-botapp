@@ -19,6 +19,7 @@ import { APIKeys } from "../views/APIKeys";
 import { Settings } from "../views/Settings";
 import { routes, type RouteId } from "./routes";
 import { shouldPollProfilesLiveCounters } from "../views/profiles/run-control";
+import { createDevicesAutoRefreshController, shouldPollDevices } from "../views/devices-auto-refresh";
 import "./app.css";
 
 type AppData = {
@@ -177,6 +178,28 @@ export function App() {
     }, 4000);
     return () => window.clearInterval(interval);
   }, [profilesNeedLiveCounters]);
+
+  // Devices auto-refresh: backend heartbeats advance every ~60s, so keep the
+  // Devices view in sync (max ~15s of lag) without manual Refresh clicks.
+  // Polls only while the Devices view is active and the window is visible.
+  useEffect(() => {
+    if (active !== "devices") return;
+    const controller = createDevicesAutoRefreshController({
+      refresh: () => {
+        void loadOverviewData();
+      },
+    });
+    const onVisibilityChange = () => {
+      controller.handleVisibilityChange(document.visibilityState === "visible");
+    };
+    controller.start(shouldPollDevices(active, document.visibilityState));
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      controller.stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadOverviewData is stable enough for polling; mirrors the live-counters interval above.
+  }, [active]);
 
   const counts = useMemo(() => ({ profiles: data.profiles.length, devices: data.devices.length, notifications: data.notifications.filter((item) => !item.acknowledged).length }), [data]);
 
