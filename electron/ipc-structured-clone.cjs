@@ -1,91 +1,118 @@
-"use strict";
+/**
+ * Electron IPC payloads must pass the structured clone algorithm (renderer ↔ main).
+ * Utilities to detect and sanitize non-cloneable values before ipcMain.handle returns.
+ */
 
-const MAX_STRING_LENGTH = 4000;
-const MAX_DEPTH = 16;
+function isPlainObject(value) {
+  if (!value || typeof value !== "object") return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
 
-function kindOf(value) {
+function describeValue(value) {
   if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  if (value instanceof Date) return "date";
-  if (value instanceof Error) return "error";
+  if (value === undefined) return "undefined";
+  if (Array.isArray(value)) return "Array";
+  if (value instanceof Error) return "Error";
+  if (value instanceof Map) return "Map";
+  if (value instanceof Set) return "Set";
+  if (value instanceof Date) return "Date";
+  if (value instanceof RegExp) return "RegExp";
+  if (typeof value === "function") return "function";
+  if (typeof value === "symbol") return "symbol";
+  if (typeof value === "bigint") return "bigint";
+  if (typeof Response !== "undefined" && value instanceof Response) return "Response";
+  if (typeof Headers !== "undefined" && value instanceof Headers) return "Headers";
+  if (typeof Request !== "undefined" && value instanceof Request) return "Request";
+  if (typeof Promise !== "undefined" && value instanceof Promise) return "Promise";
+  if (!isPlainObject(value) && !Array.isArray(value)) return value.constructor?.name || "object";
   return typeof value;
 }
 
 function findNonCloneablePath(value, path = "$", seen = new WeakSet()) {
-  const kind = kindOf(value);
-  if (
-    value === null
-    || kind === "undefined"
-    || kind === "string"
-    || kind === "number"
-    || kind === "boolean"
-    || kind === "bigint"
-    || kind === "date"
-  ) {
-    return null;
+  if (value === undefined || value === null) return null;
+  const kind = describeValue(value);
+  if (kind === "function" || kind === "symbol" || kind === "bigint" || kind === "Error"
+    || kind === "Map" || kind === "Set" || kind === "Response" || kind === "Headers"
+    || kind === "Request" || kind === "Promise") {
+    return { path, kind };
   }
-  if (kind === "function" || kind === "symbol") return { path, kind };
-  if (kind !== "object" && kind !== "array" && kind !== "error") return { path, kind };
-  if (seen.has(value)) return null;
+  if (typeof value !== "object") {
+    try {
+      structuredClone(value);
+      return null;
+    } catch (error) {
+      return { path, kind, message: error instanceof Error ? error.message : String(error) };
+    }
+  }
+  if (seen.has(value)) {
+    return { path, kind: "circular_reference" };
+  }
   seen.add(value);
-
-  if (kind === "error") {
+  try {
+    structuredClone(value);
     return null;
+  } catch {
+    // descend
   }
-
-  const entries = Array.isArray(value)
-    ? value.map((item, index) => [String(index), item])
-    : Object.entries(value);
-  for (const [key, child] of entries) {
-    const next = findNonCloneablePath(child, `${path}.${key}`, seen);
-    if (next) return next;
-  }
-  return null;
-}
-
-function serializeIpcPayload(value, depth = 0, seen = new WeakSet()) {
-  const kind = kindOf(value);
-  if (value === null || kind === "undefined" || kind === "number" || kind === "boolean") return value;
-  if (kind === "bigint") return String(value);
-  if (kind === "string") {
-    return value.length > MAX_STRING_LENGTH ? `${value.slice(0, MAX_STRING_LENGTH)}…` : value;
-  }
-  if (kind === "date") return value.toISOString();
-  if (kind === "function" || kind === "symbol") return `[${kind}]`;
-  if (kind === "error") return toRedactedIpcError(value, "ipc_error");
-  if (depth >= MAX_DEPTH) return "[max_depth]";
-  if (seen.has(value)) return "[circular]";
-  if (kind !== "array" && kind !== "object") return String(value);
-
-  seen.add(value);
   if (Array.isArray(value)) {
-    return value.map((item) => serializeIpcPayload(item, depth + 1, seen));
+    for (let index = 0; index < value.length; index += 1) {
+      const found = findNonCloneablePath(value[index], `${path}[${index}]`, seen);
+      if (found) return found;
+    }
+    return { path, kind: "object", message: "structured_clone_failed_at_array" };
   }
-
-  const out = {};
-  for (const [key, child] of Object.entries(value)) {
-    out[key] = serializeIpcPayload(child, depth + 1, seen);
+  if (!isPlainObject(value)) {
+    return { path, kind };
   }
-  return out;
+  for (const key of Object.keys(value)) {
+    const found = findNonCloneablePath(value[key], `${path}.${key}`, seen);
+    if (found) return found;
+  }
+  return { path, kind: "object", message: "structured_clone_failed_unknown" };
 }
 
-function redactErrorMessage(message) {
-  return String(message || "")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/(service_role|supabase_service_role_key|password|secret|token)=?[^,\s]*/gi, "$1=[redacted]")
-    .slice(0, 600);
+function jsonReplacer(_key, value) {
+  if (typeof value === "bigint") return value.toString();
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message, stack: value.stack || null };
+  }
+  if (value instanceof Map) return Object.fromEntries(value);
+  if (value instanceof Set) return [...value];
+  if (typeof value === "function" || typeof value === "symbol") return undefined;
+  return value;
 }
 
-function toRedactedIpcError(error, fallback = "ipc_error") {
-  const message = error instanceof Error ? error.message : String(error || fallback);
+function toIpcSafe(value) {
+  return JSON.parse(JSON.stringify(value, jsonReplacer));
+}
+
+function toRedactedIpcError(error, fallbackCode = "ipc_error") {
+  const rawMessage = error instanceof Error ? error.message : String(error || "unknown");
+  const message = /could not be cloned|clone/i.test(rawMessage)
+    ? "structured_clone_failed"
+    : rawMessage.replace(/Bearer\s+\S+/gi, "Bearer [redacted]").replace(/(token|key|secret)=\S+/gi, "$1=[redacted]");
   return {
-    name: error instanceof Error && error.name ? error.name : "Error",
-    message: redactErrorMessage(message || fallback),
+    code: /structured_clone_failed|could not be cloned/i.test(message) ? "structured_clone_failed" : fallbackCode,
+    message,
   };
 }
 
+function assertIpcCloneable(value, label = "ipc_payload") {
+  const found = findNonCloneablePath(value);
+  if (found) {
+    const detail = `${label}: non-cloneable ${found.kind} at ${found.path}`;
+    throw new Error(found.message ? `${detail} (${found.message})` : detail);
+  }
+  structuredClone(value);
+  return value;
+}
+
 module.exports = {
+  assertIpcCloneable,
+  describeValue,
   findNonCloneablePath,
-  serializeIpcPayload,
+  serializeIpcPayload: toIpcSafe,
   toRedactedIpcError,
+  toIpcSafe,
 };
