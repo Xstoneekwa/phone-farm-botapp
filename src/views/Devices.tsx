@@ -15,6 +15,9 @@ import {
   resolveDeleteModalDeviceId,
 } from "./devices-delete-preflight-sync";
 import "./devices.css";
+import { IncidentDrawer } from "./IncidentDrawer";
+import "./incident-drawer.css";
+import { Badge } from "../design/components";
 
 type DevicePanel = "add" | "history" | "edit" | "delete" | null;
 type ConfirmState =
@@ -129,15 +132,11 @@ function formatViewFocused(deviceName: string, result: DeviceViewResult) {
   return `${deviceName} phone view focused.`;
 }
 
-function formatToolPath(path: string | null) {
-  return path || "missing";
-}
-
 function localToolsMessage(tools: LocalToolDiagnostics | null) {
   if (!tools) return null;
-  if (!tools.adb.found) return "ADB not found by BotApp. Set ADB env or install Android platform-tools.";
-  if (!tools.scrcpy.found) return "scrcpy not found by BotApp. Install scrcpy or set SCRCPY env.";
-  return `Local tools: ADB ${formatToolPath(tools.adb.path)} · scrcpy ${formatToolPath(tools.scrcpy.path)}`;
+  if (!tools.adb.found && !tools.scrcpy.found) return "Outils locaux indisponibles";
+  if (!tools.adb.found || !tools.scrcpy.found) return "Outils locaux partiellement disponibles · Chemin masqué pour sécurité";
+  return "Outils locaux disponibles · Chemin masqué pour sécurité";
 }
 
 function historyFor(devices: Device[]): BotAppDeviceHistoryEntry[] {
@@ -193,7 +192,47 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
   const [localTools, setLocalTools] = useState<LocalToolDiagnostics | null>(null);
   const [heartbeatRestartStage, setHeartbeatRestartStage] = useState<string | null>(null);
   const [lastPublisherResult, setLastPublisherResult] = useState<Record<string, unknown> | null>(null);
+  const [incidentsByDevice, setIncidentsByDevice] = useState<Map<string, { count: number; incidentId: string; severity: string }>>(new Map());
+  const [incidentDrawerId, setIncidentDrawerId] = useState<string | null>(null);
   const canRestartHeartbeats = typeof window.botappDesktop?.devices?.restartHeartbeatPublisher === "function";
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.botappDesktop?.incidents?.list?.({ status: "open,acknowledged", limit: 200 }).then((result) => {
+      if (cancelled) return;
+      const payload = result as Record<string, unknown> | undefined;
+      const data = payload?.data as Record<string, unknown> | undefined;
+      const nestedData = data?.data as Record<string, unknown> | undefined;
+      const incidentRows = Array.isArray(payload?.incidents)
+        ? payload.incidents
+        : Array.isArray(data?.incidents)
+          ? data.incidents
+          : Array.isArray(nestedData?.incidents)
+            ? nestedData.incidents
+            : [];
+      const map = new Map<string, { count: number; incidentId: string; severity: string }>();
+      for (const row of incidentRows) {
+        const deviceId = String(row.deviceId || row.device_id || "");
+        const id = String(row.incidentId || row.incident_id || row.id || "");
+        if (!deviceId || !id) continue;
+        const current = map.get(deviceId);
+        const severity = String(row.severity || "warning");
+        if (!current) {
+          map.set(deviceId, { count: 1, incidentId: id, severity });
+        } else {
+          map.set(deviceId, {
+            count: current.count + 1,
+            incidentId: current.severity === "critical" ? current.incidentId : severity === "critical" ? id : current.incidentId,
+            severity: severity === "critical" || current.severity === "critical" ? "critical" : severity,
+          });
+        }
+      }
+      setIncidentsByDevice(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [devices.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -390,12 +429,12 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
   }
 
   return (
-    <div className="devices-screen">
+    <div className="devices-screen" data-testid="devices-view" data-device-count={devices.length} data-incident-count={incidentsByDevice.size}>
       <header className="devices-header">
         <div>
           <h2>Devices</h2>
           <div className="devices-counts">
-            <span>{savedCount} saved</span>
+            <span data-testid="devices-saved-count">{savedCount} saved</span>
             <span className="active">{activeCount} active</span>
             <span className="offline">{offlineCount} offline</span>
           </div>
@@ -405,11 +444,13 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
 
       <div className="devices-layout">
         <section className="devices-card" aria-label="Saved phones">
-          <div className="devices-list">
+          <div className="devices-list" data-testid="devices-list">
             {devices.map((device) => (
               <DeviceRow
                 key={device.id}
                 device={device}
+                incidentSummary={incidentsByDevice.get(device.id) ?? null}
+                onIncidentOpen={setIncidentDrawerId}
                 heartbeatPending={Boolean(heartbeatRestartStage && HEARTBEAT_RECOVERY_BUSY_STAGES.has(heartbeatRestartStage))}
                 isOpen={isViewOpen(openViews, device)}
                 onOpen={() => void openPhoneView(device)}
@@ -467,6 +508,12 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
         />
       ) : null}
       {confirmState ? <RestartModal confirmState={confirmState} onClose={() => setConfirmState(null)} onConfirm={confirmRestart} /> : null}
+      <IncidentDrawer
+        open={Boolean(incidentDrawerId)}
+        incidentId={incidentDrawerId}
+        onClose={() => setIncidentDrawerId(null)}
+        onChanged={() => void onRefresh?.()}
+      />
     </div>
   );
 }
@@ -524,6 +571,8 @@ function BackendHeartbeatIndicator({ device, pending }: { device: Device; pendin
 
 function DeviceRow({
   device,
+  incidentSummary,
+  onIncidentOpen,
   heartbeatPending,
   isOpen,
   onOpen,
@@ -531,6 +580,8 @@ function DeviceRow({
   onRestart,
 }: {
   device: Device;
+  incidentSummary?: { count: number; incidentId: string; severity: string } | null;
+  onIncidentOpen?: (incidentId: string) => void;
   heartbeatPending?: boolean;
   isOpen: boolean;
   onOpen: () => void;
@@ -541,7 +592,7 @@ function DeviceRow({
   const occupied = appInstances.filter((app) => app.occupant);
   const available = appInstances.filter((app) => app.selectable);
   return (
-    <article className={`device-row status-${statusClass(device)}`}>
+    <article className={`device-row status-${statusClass(device)}`} data-testid="device-row">
       <div className="device-row-main">
         <button
           type="button"
@@ -556,6 +607,13 @@ function DeviceRow({
         <div className="device-name-block">
           <strong>{device.name}</strong>
           <span>{device.shortSerial}</span>
+          {incidentSummary ? (
+            <button type="button" className="incident-scope-badge" data-testid="device-incident-badge" onClick={() => onIncidentOpen?.(incidentSummary.incidentId)}>
+              <Badge tone={incidentSummary.severity === "critical" ? "error" : "warning"}>
+                {incidentSummary.count} incident{incidentSummary.count > 1 ? "s" : ""}
+              </Badge>
+            </button>
+          ) : null}
         </div>
         <span className="device-profile-count" title="App instances"><AndroidIcon />{device.appInstancesCount}</span>
         <span className="device-latency">{latencyLabel(device)}</span>

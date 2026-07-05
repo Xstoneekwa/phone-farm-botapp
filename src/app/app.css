@@ -82,6 +82,21 @@ tr:hover td { background: #FAFAF8; }
 .detail-list { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: center; }
 .detail-list > span { color: var(--fg-secondary); font-size: 12px; }
 code { font-family: var(--font-mono); background: #1A1A2C; color: #CBD5E1; border-radius: var(--radius-sm); padding: 2px 6px; font-size: 12px; }
+.notification-settings-inline-label { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.notification-settings-field-label { display: grid; gap: 6px; margin-bottom: 10px; }
+.notification-settings-hint { margin: 8px 0 0; color: var(--fg-tertiary); font-size: 12px; }
+.notification-settings-test-proof { margin: 0; border-radius: var(--radius-md); padding: 9px 11px; font-size: 12px; font-weight: 800; }
+.notification-settings-test-proof.ok { border: 1px solid #BBF7D0; background: #F0FDF4; color: #14532D; }
+.notification-settings-test-proof.error { border: 1px solid #FECACA; background: #FEF2F2; color: #991B1B; }
+.notification-settings-message.success { border-color: #BBF7D0; background: #F0FDF4; color: #14532D; }
+.notification-settings-message.error { border-color: #FECACA; background: #FEF2F2; color: #991B1B; }
+.incident-drawer-action-proof { margin: 0; border-radius: var(--radius-md); padding: 10px 12px; font-size: 12px; font-weight: 800; }
+.incident-drawer-action-proof.ok { border: 1px solid #BBF7D0; background: #F0FDF4; color: #14532D; }
+.incident-drawer-action-proof.error { border: 1px solid #FECACA; background: #FEF2F2; color: #991B1B; }
+.incident-drawer-audit { display: grid; gap: 8px; border: 1px solid var(--border-default); background: #fff; border-radius: var(--radius-md); padding: 10px 12px; }
+.incident-drawer-audit ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.incident-drawer-audit li { display: grid; gap: 2px; color: var(--fg-secondary); font-size: 12px; }
+.incident-drawer-audit li b { color: var(--fg-primary); }
 .device-card { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
 .device-card div, .api-grid div, .settings-row { border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 9px; background: #FAFAF8; }
 .device-card span, .settings-row span { display: block; }
