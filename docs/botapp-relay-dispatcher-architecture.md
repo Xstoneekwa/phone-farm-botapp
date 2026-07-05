@@ -47,13 +47,20 @@ Documentation technique pour développeurs. Décrit le runtime packagé macOS, l
 | **Relay** | Bootstrap au démarrage, Keychain | Variable selon config locale |
 | **Pour Liam** | **Oui — seule app normale** | **Non — jamais** |
 
-Chemin officiel de l’application packagée :
+Chemin officiel de l’application installée pour l’usage quotidien :
 
 ```text
-/Users/admin/Projects/BotApp/release/mac-arm64/BotApp.app
+/Applications/BotApp.app
 ```
 
-Build : `npm run package:mac` → sortie dans `release/mac-arm64/`.
+Build source : `npm run package:mac` depuis le worktree propre
+`/Users/admin/Projects/BotApp-clean` → sortie dans `release/mac-arm64/`, puis
+installation contrôlée vers `/Applications/BotApp.app`.
+
+La provenance discrète à exposer dans About, Diagnostics ou Runtime Health doit
+inclure : commit BotApp, chemin du bundle, date de packaging, root runtime actif
+et commit runtime worker. Ne pas afficher ces informations comme bannière
+permanente.
 
 `npm run electron:start` et toute fenêtre Electron dev noire sont **réservés aux développeurs** et ne doivent jamais être utilisés pour valider ou exploiter BotApp en production opérateur.
 

@@ -311,12 +311,14 @@ cd /Users/admin/Projects/BotApp
 npm run build
 npm run lint
 npm run package:mac
+node scripts/verify-electron-main-local-requires.mjs
 ```
 
-Open packaged app:
+Install and open the canonical packaged app:
 
 ```bash
-open /Users/admin/Projects/BotApp/release/mac-arm64/BotApp.app
+ditto /Users/admin/Projects/BotApp-clean/release/mac-arm64/BotApp.app /Applications/BotApp.app
+open /Applications/BotApp.app
 ```
 
 Before smoke:
@@ -641,7 +643,8 @@ Current known validated devices:
 
 Current packager target:
 
-- `/Users/admin/Projects/BotApp/release/mac-arm64/BotApp.app`
+- source artifact: `/Users/admin/Projects/BotApp-clean/release/mac-arm64/BotApp.app`
+- daily operator app: `/Applications/BotApp.app`
 
 Operator procedure (no terminal): `docs/guide-operateur-liam.md`
 

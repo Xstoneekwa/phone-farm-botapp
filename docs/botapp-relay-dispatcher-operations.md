@@ -136,7 +136,7 @@ Causes dispatcher (Runtime Health) :
 ### Critères de succès (app packagée)
 
 1. Fermer toutes instances BotApp (`Cmd + Q`)
-2. Ouvrir uniquement `release/mac-arm64/BotApp.app`
+2. Ouvrir uniquement `/Applications/BotApp.app`
 3. Bandeau vert : **Connexion BotApp : opérationnelle** + **Dispatcher : actif**
 4. Profiles : liste non vide
 5. Devices : états visibles
@@ -212,7 +212,28 @@ npm run package:mac
 
 Sortie : `release/mac-arm64/BotApp.app`
 
-**Ne pas** utiliser `npm run electron:start` pour valider le runtime opérateur.
+Vérification obligatoire avant installation :
+
+```bash
+node scripts/verify-electron-main-local-requires.mjs
+```
+
+Cette vérification échoue si un `require("./...")` local de
+`electron/main.cjs` manque dans le source ou dans `app.asar`.
+
+Installation opérateur canonique :
+
+```bash
+ditto release/mac-arm64/BotApp.app /Applications/BotApp.app
+open /Applications/BotApp.app
+```
+
+Sauvegarder le chemin de l’ancien bundle avant remplacement si
+`/Applications/BotApp.app` existe déjà. Ce backup est un rollback temporaire,
+pas une seconde app quotidienne à utiliser.
+
+**Ne pas** utiliser `npm run electron:start` ou un bundle de workspace pour
+valider le runtime opérateur.
 
 ### Vérifier le correctif dans l’app packagée
 

@@ -11,7 +11,7 @@
     "build": "npm run copy:emoji-assets && tsc -b && vite build && node scripts/verify-emoji-bundle.mjs",
     "electron:start": "npm run build && electron .",
     "lint": "eslint .",
-    "package:mac": "npm run build && electron-builder --mac --config electron-builder.json",
+    "package:mac": "npm run build && electron-builder --mac --config electron-builder.json && node scripts/verify-electron-main-local-requires.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
