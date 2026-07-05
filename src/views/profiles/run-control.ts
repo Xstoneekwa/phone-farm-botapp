@@ -12,6 +12,30 @@ const ACTIVE_RUN_STATUSES = new Set(["pending", "running", "stopping"]);
 const ACTIVE_DEVICE_STATUSES = new Set(["pending", "queued", "claimed", "running", "starting", "stopping", "canceling"]);
 
 export function projectRunEligibility(profile: BotProfile): RunControlEligibilityProjection {
+  if (profile.assignmentState === "requires_attention" || profile.assignmentHealth === "requires_attention") {
+    return {
+      ok_to_start: false,
+      eligibility_status: "blocked",
+      reason: "assignment_requires_attention",
+      primary_block_reason: "assignment_requires_attention",
+      reason_label: "Affectation à vérifier",
+      reason_description: "Assignment/device/app instance state is inconsistent. Review the assigned phone, clone, and timeslot before starting a run.",
+      message: "Affectation à vérifier",
+      requested_run_type: "account_session",
+    };
+  }
+  if (!profile.deviceId || profile.assignmentState === "missing_slot") {
+    return {
+      ok_to_start: false,
+      eligibility_status: "blocked",
+      reason: "assignment_missing",
+      primary_block_reason: "assignment_missing",
+      reason_label: "Device not assigned",
+      reason_description: "Assign a valid phone and Instagram app instance before starting a run.",
+      message: "Device not assigned",
+      requested_run_type: "account_session",
+    };
+  }
   const okToStart = profile.eligibility === "can_start";
   return {
     ok_to_start: okToStart,

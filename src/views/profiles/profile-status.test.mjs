@@ -29,6 +29,24 @@ test("BotApp profile normalization blocks social eligibility until login is conn
   assert.match(mainSource, /readEligibility\(account, blocked, loginStatus\)/);
 });
 
+test("BotApp profiles surface assignment health instead of fake unassigned state", () => {
+  assert.match(mainSource, /function readAssignmentHealth\(account\)/);
+  assert.match(mainSource, /assignmentHealth/);
+  assert.match(mainSource, /assignmentHealthReason/);
+  assert.match(mainSource, /buildProfileBackedDeviceGroup/);
+  assert.match(mainSource, /Affectation à vérifier/);
+  assert.match(mainSource, /Device\/app instance requires review/);
+});
+
+test("BotApp blocks Start and Auto Login when assignment requires attention", () => {
+  const runControlSource = readFileSync(resolve(currentDir, "run-control.ts"), "utf8");
+  assert.match(runControlSource, /assignment_requires_attention/);
+  assert.match(runControlSource, /ok_to_start: false/);
+  assert.match(mainSource, /assignmentState === "requires_attention"[\s\S]*Auto Login/);
+  assert.match(mainSource, /assignmentState === "requires_attention"[\s\S]*refreshing readiness/);
+  assert.match(mainSource, /Assignment\/device\/app instance state is inconsistent/);
+});
+
 test("Settings drawer saves runtime settings through backend relay", () => {
   assert.match(mainSource, /botapp:profiles:settings:save/);
   assert.match(mainSource, /settings_account/);

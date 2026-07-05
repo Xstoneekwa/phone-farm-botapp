@@ -82,6 +82,7 @@ export type ProfileRequirementState = {
     | "needs_2fa"
     | "checkpoint_required"
     | "assignment_missing"
+    | "assignment_requires_attention"
     | "assignment_window_closed"
     | "schedule_gate_blocked"
     | "app_instance_missing"
@@ -586,8 +587,10 @@ export type BotProfile = {
   twoFactorEnabled: boolean;
   credentialStatus: CredentialStatus;
   loginStatus: ProfileLoginStatus;
-  deviceAvailability: "available" | "reserved" | "offline" | "maintenance";
-  assignmentState: "assigned" | "reserved" | "missing_slot" | "blocked";
+  deviceAvailability: "available" | "reserved" | "offline" | "maintenance" | "unassigned";
+  assignmentState: "assigned" | "reserved" | "missing_slot" | "blocked" | "requires_attention";
+  assignmentHealth?: "unassigned" | "assigned" | "requires_attention";
+  assignmentHealthReason?: string | null;
   entitlements: string[];
   runtimeProfile: string;
   scheduleMode?: string | null;
@@ -622,6 +625,8 @@ export type BotAppClientAccountAssignment = {
   appInstanceLabel: string;
   packageName: string;
   assignmentStatus: BotProfile["assignmentState"];
+  assignmentHealth?: BotProfile["assignmentHealth"];
+  assignmentHealthReason?: string | null;
   scheduleMode?: string | null;
   slotKind: string;
   activeWindow: string;
@@ -670,6 +675,8 @@ export type BotAppClientAccount = {
   entitlementSummary: string;
   entitlements: BotAppClientAccountEntitlement[];
   assignment: BotAppClientAccountAssignment;
+  assignmentHealth?: BotProfile["assignmentHealth"];
+  assignmentHealthReason?: string | null;
   lastActivityAt: string | null;
   targetsCount: number;
   needsMoreTargets: boolean;

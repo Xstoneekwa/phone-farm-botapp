@@ -4357,11 +4357,26 @@ function readDeviceId(account, device) {
   return String(device?.id || account?.deviceId || account?.device_id || account?.phoneId || account?.phone_id || account?.assignment?.deviceId || "");
 }
 
+function readAssignmentHealth(account) {
+  const raw = normalizeMatchText(account?.assignmentHealth || account?.assignment_health || account?.assignment?.assignmentHealth || account?.assignment?.assignment_health || "");
+  if (raw === "requires_attention" || raw.includes("attention") || raw.includes("inconsistent")) return "requires_attention";
+  if (raw === "assigned") return "assigned";
+  if (raw === "unassigned") return "unassigned";
+  const assignmentStatus = normalizeMatchText(account?.assignmentStatus || account?.assignment_status || account?.assignmentState || account?.assignment_state || account?.assignment?.assignmentStatus);
+  if (assignmentStatus.includes("reserved") || assignmentStatus.includes("active") || assignmentStatus.includes("assigned")) return "assigned";
+  return "unassigned";
+}
+
+function readAssignmentHealthReason(account) {
+  return String(account?.assignmentHealthReason || account?.assignment_health_reason || account?.assignment?.assignmentHealthReason || account?.assignment?.assignment_health_reason || "").trim() || null;
+}
+
 function readDeviceName(account, device) {
   return device?.name || readAssignmentLabel(account);
 }
 
 function readAssignmentState(account, device) {
+  if (readAssignmentHealth(account) === "requires_attention") return "requires_attention";
   const raw = normalizeMatchText(account?.assignmentStatus || account?.assignment_status || account?.assignmentState || account?.assignment_state || account?.assignment?.assignmentStatus);
   if (raw.includes("reserved")) return "reserved";
   if (raw.includes("blocked")) return "blocked";
@@ -4371,6 +4386,7 @@ function readAssignmentState(account, device) {
 }
 
 function readDeviceAvailability(account, device) {
+  if (readAssignmentHealth(account) === "requires_attention") return "maintenance";
   if (!device) return "unassigned";
   const raw = normalizeMatchText(account?.assignmentStatus || account?.assignment_status || account?.assignmentState || account?.assignment_state);
   if (raw.includes("reserved")) return "reserved";
@@ -4399,6 +4415,7 @@ function readReadiness(account, blocked) {
 }
 
 function readEligibility(account, blocked, loginStatus = "") {
+  if (readAssignmentHealth(account) === "requires_attention") return "blocked_now";
   const raw = normalizeMatchText(account?.eligibility || account?.eligibilityStatus || account?.eligibility_status);
   if (raw.includes("can_start") || raw === "ready") return "can_start";
   if (raw.includes("blocked")) return "blocked_now";
@@ -4407,6 +4424,7 @@ function readEligibility(account, blocked, loginStatus = "") {
 }
 
 function readEligibilityReason(account, blocked, loginStatus = "") {
+  if (readAssignmentHealth(account) === "requires_attention") return "assignment_requires_attention";
   if (loginStatus && loginStatus !== "connected") return "login_not_connected";
   return String(account?.eligibilityReason || account?.eligibility_reason || account?.primaryBlockReason || account?.primary_block_reason || (blocked ? "blocked" : "ready"));
 }
@@ -4466,6 +4484,9 @@ function readRefreshReadinessRequirement({
   if (credentialStatus === "needs_update" || loginStatus === "password_invalid") {
     return requirementState(false, "password_needs_update", "Credentials invalid", "Update the Instagram password before refreshing readiness.");
   }
+  if (assignmentState === "requires_attention") {
+    return requirementState(false, "assignment_requires_attention", "Affectation à vérifier", "Assignment/device/app instance state is inconsistent. Review the assigned phone, clone, and timeslot before refreshing readiness.");
+  }
   if (!device?.id || !appInstanceId || assignmentState === "missing_slot") {
     return requirementState(false, "assignment_missing", "Device not assigned", "Assign a phone and Instagram app instance first.");
   }
@@ -4504,6 +4525,9 @@ function readRestoreLoginScreenRequirement({
   if (!account?.orphanRecoveryBotappActionAvailable) {
     return requirementState(false, "runtime_blocked", "Orphan challenge not confirmed", "Restore login screen is only available when an orphan email-code challenge is confirmed for this assigned clone.");
   }
+  if (assignmentState === "requires_attention") {
+    return requirementState(false, "assignment_requires_attention", "Affectation à vérifier", "Assignment/device/app instance state is inconsistent. Review the assigned phone, clone, and timeslot before recovery.");
+  }
   if (!device?.id || !appInstanceId || assignmentState === "missing_slot") {
     return requirementState(false, "assignment_missing", "Device not assigned", "Assign the account to the target phone and clone before recovery.");
   }
@@ -4530,6 +4554,9 @@ function readAutoLoginRequirement({
   const lifecycle = normalizeMatchText(`${account?.adminStatus || account?.admin_status || ""} ${account?.customerStatus || account?.customer_status || ""} ${account?.subscriptionStatus || account?.subscription_status || ""} ${account?.status || ""}`);
   if (lifecycle.includes("cancel") || lifecycle.includes("delete") || lifecycle.includes("trashed") || lifecycle.includes("archived")) {
     return requirementState(false, "status_blocked", "Account unavailable", "Archived, deleted, cancelled, or trashed accounts cannot start Auto Login.");
+  }
+  if (assignmentState === "requires_attention") {
+    return requirementState(false, "assignment_requires_attention", "Affectation à vérifier", "Assignment/device/app instance state is inconsistent. Review the assigned phone, clone, and timeslot before Auto Login.");
   }
   if (credentialStatus === "missing" || loginStatus === "missing_credentials") {
     return requirementState(false, "missing_credentials", "Missing credentials", "Add or update Instagram credentials before Auto Login.");
@@ -4641,6 +4668,8 @@ function profileFromManageAccount(account, index, devices) {
   const readiness = readReadiness(account, blocked);
   const deviceAvailability = readDeviceAvailability(account, device);
   const assignmentState = readAssignmentState(account, device);
+  const assignmentHealth = readAssignmentHealth(account);
+  const assignmentHealthReason = readAssignmentHealthReason(account);
   const appInstanceId = String(account?.appInstanceId || account?.app_instance_id || account?.assignment?.appInstanceId || account?.assignment?.app_instance_id || "");
   const lifecycleStatus = readProfileLifecycleStatus(account);
   const appInstanceIndex = readNullableProfileNumber(account, ["appInstanceIndex", "app_instance_index", "cloneIndex", "clone_index"]);
@@ -4697,6 +4726,8 @@ function profileFromManageAccount(account, index, devices) {
     loginStatus,
     deviceAvailability,
     assignmentState,
+    assignmentHealth,
+    assignmentHealthReason,
     entitlements,
     runtimeProfile: readRuntimeProfile(account),
     scheduleMode: scheduleModeValue,
@@ -4809,6 +4840,8 @@ function clientAccountFromManage(account, profile, devices) {
       appInstanceLabel: String(account?.appInstanceLabel || ""),
       packageName: String(account?.appPackageName || "com.instagram.android"),
       assignmentStatus: profile.assignmentState,
+      assignmentHealth: profile.assignmentHealth,
+      assignmentHealthReason: profile.assignmentHealthReason,
       scheduleMode: profile.scheduleMode,
       slotKind: profile.slotKind,
       activeWindow: profile.activeWindow,
@@ -4822,6 +4855,8 @@ function clientAccountFromManage(account, profile, devices) {
     clientContactEmailDisplay: String(account?.clientContactEmail || account?.clientContactEmailDisplay || "Not provided"),
     clientContactEmailSource: String(account?.clientContactEmailSource || "missing"),
     clientContactEmailAvailable: Boolean(account?.clientContactEmailAvailable),
+    assignmentHealth: profile.assignmentHealth,
+    assignmentHealthReason: profile.assignmentHealthReason,
     sourceLabel: "supabase_projection:manage_overview",
     profileImageUrl: account?.profileImageUrl || null,
     instagramVerificationStatus: account?.instagramVerificationStatus === "verified" ? "verified" : account?.instagramVerificationStatus === "pending" ? "pending" : "unknown",
@@ -4999,16 +5034,44 @@ function buildUnassignedProfileGroup(ungroupedProfiles) {
   };
 }
 
+function buildProfileBackedDeviceGroup(deviceId, groupProfiles) {
+  const first = groupProfiles[0] || {};
+  const requiresAttention = groupProfiles.some((profile) => profile.assignmentState === "requires_attention" || profile.assignmentHealth === "requires_attention");
+  const label = String(first.deviceName || (requiresAttention ? "Affectation à vérifier" : "Assigned backend device"));
+  return {
+    deviceId,
+    deviceLabel: label,
+    deviceSerial: "",
+    deviceSerialLabel: requiresAttention ? "Device/app instance requires review" : "Device inventory pending",
+    deviceStatus: requiresAttention ? "maintenance" : "reserved",
+    phoneStatus: groupProfiles.some((profile) => profile.status === "running") ? "running" : "idle",
+    deviceView: {
+      available: false,
+      unavailableReason: requiresAttention
+        ? "Assignment exists, but device/app instance/timeslot state requires review before runtime actions."
+        : "Device is projected from the account assignment, but no ADB serial is attached in the device inventory payload.",
+    },
+    summary: summarizeProfileGroup(groupProfiles),
+    profiles: groupProfiles,
+  };
+}
+
 function profileGroupsFromData(profiles, devices) {
   const knownDeviceIds = new Set(devices.map((device) => device.id));
   const assignedProfiles = new Map();
   for (const device of devices) assignedProfiles.set(device.id, []);
   const ungroupedProfiles = [];
+  const profileBackedDeviceGroups = new Map();
 
   for (const profile of profiles) {
     const deviceId = String(profile.deviceId || "");
     if (deviceId && knownDeviceIds.has(deviceId)) {
       assignedProfiles.get(deviceId).push(profile);
+      continue;
+    }
+    if (deviceId || profile.assignmentState === "requires_attention" || profile.assignmentHealth === "requires_attention") {
+      const key = deviceId || `assignment-attention:${profile.id || profile.username}`;
+      profileBackedDeviceGroups.set(key, [...(profileBackedDeviceGroups.get(key) || []), profile]);
       continue;
     }
     ungroupedProfiles.push(profile);
@@ -5017,6 +5080,10 @@ function profileGroupsFromData(profiles, devices) {
   const groups = devices
     .map((device) => buildDeviceProfileGroup(device, assignedProfiles.get(device.id) || []))
     .filter((group) => group.profiles.length > 0);
+
+  for (const [deviceId, groupProfiles] of profileBackedDeviceGroups) {
+    groups.push(buildProfileBackedDeviceGroup(deviceId, groupProfiles));
+  }
 
   if (ungroupedProfiles.length) {
     groups.push(buildUnassignedProfileGroup(ungroupedProfiles));
