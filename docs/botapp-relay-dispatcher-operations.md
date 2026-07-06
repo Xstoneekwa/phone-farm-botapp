@@ -290,6 +290,16 @@ runs planifiés). Points opérateur :
 - **Nota bene** : quand le scheduler est OFF, les ticks ne persistent ni lock
   ni décision — un « dernier tick » ancien avec backend OFF est attendu, pas
   une panne.
+- **Last error** : n'apparaît que si un tick réel a échoué sur une exception
+  inattendue (erreur backend, persistance non récupérable). Le backend
+  finalise alors le lock en `failed` avec une raison courte **redigée**
+  (aucun secret/URL/token) exposée telle quelle par la vue. Les issues
+  métier normales (`scheduler_disabled`, aucun candidat, exclusions
+  `manual_only`, rejets runtime par compte) sont des ticks **réussis** et ne
+  produisent jamais de `Last error`. Un `Last error` isolé suivi d'un
+  `Last success` plus récent est auto-résolu ; un `Last error` répété sans
+  nouveau succès justifie une investigation backend (logs Vercel + table
+  `auto_restart_tick_locks`).
 - **Installation/release** : aucune activation automatique du Scheduler
   pendant une installation ou une release BotApp ; le switch ne change d'état
   que par action opérateur explicite.
