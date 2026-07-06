@@ -84,6 +84,7 @@ const navIcons: Record<RouteId, ReactNode> = {
   "incident-notifications": "IN",
   compass: <CompassNavIcon />,
   "auto-restart": <AutoRestartNavIcon />,
+  scheduler: "◷",
   api: "{}",
   settings: "⚙",
 };

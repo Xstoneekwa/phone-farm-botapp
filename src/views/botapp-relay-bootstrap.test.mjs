@@ -34,18 +34,24 @@ test("repair and dispatcher ensure IPC are exposed to renderer", () => {
 test("dispatcher autostart uses install and resume allowlist", () => {
   const main = readFileSync(new URL("../../electron/main.cjs", import.meta.url), "utf8");
   assert.match(main, /ensureDispatcherAutostart/);
-  assert.match(main, /runDispatcherWrapper\("install"/);
-  assert.match(main, /runDispatcherWrapper\("resume"/);
+  assert.match(main, /runDispatcherWrapperAsync\("install"/);
+  assert.match(main, /runDispatcherWrapperAsync\("resume"/);
   assert.match(main, /"install"/);
 });
 
 test("runtime controls use canonical controller without legacy worker fallback", () => {
   const main = readFileSync(new URL("../../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /phonefarm-runtime\/bin\/phonefarm-runtimectl/);
-  assert.match(main, /spawnSync\(dispatcherWrapperPath, \["dispatcher", command/);
-  assert.match(main, /spawnSync\(deviceHeartbeatServiceWrapperPath, \["heartbeat", command/);
+  const controller = readFileSync(new URL("../../electron/runtime-controller.cjs", import.meta.url), "utf8");
+  assert.match(controller, /phonefarm-runtime\/bin\/phonefarm-runtimectl/);
+  assert.match(main, /const dispatcherWrapperPath = runtimeControllerPath/);
+  assert.match(main, /const deviceHeartbeatServiceWrapperPath = runtimeControllerPath/);
+  // The async bridge is the only runtime control path (no blocking spawnSync).
+  assert.match(main, /runDispatcherWrapperAsync\(/);
+  assert.doesNotMatch(main, /spawnSync\(dispatcherWrapperPath/);
   assert.doesNotMatch(main, /\/Users\/admin\/instagram-worker-python/);
   assert.doesNotMatch(main, /BOTAPP_DISPATCHER_WRAPPER_PATH/);
+  // The legacy worker root stays an explicit guard in the controller module.
+  assert.match(controller, /LEGACY_WORKER_ROOT/);
 });
 
 test("runtime health exposes relay repair action", () => {

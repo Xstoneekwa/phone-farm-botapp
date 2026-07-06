@@ -60,6 +60,7 @@ Top-level views live in `src/views/`:
 - `Notifications`
 - `Targets`
 - `DMTemplates`
+- `Scheduler` (read-only observability of the canonical backend scheduler plus the global ON/OFF switch; never a second scheduler)
 - `APIKeys`
 - `Settings`
 

@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     status: () => ipcRenderer.invoke("botapp:scheduler-runtime:status"),
     ensure: () => ipcRenderer.invoke("botapp:scheduler-runtime:ensure"),
   },
+  scheduler: {
+    status: () => ipcRenderer.invoke("botapp:scheduler:status"),
+    setEnabled: (input) => ipcRenderer.invoke("botapp:scheduler:set-enabled", input),
+  },
   compass: {
     status: () => ipcRenderer.invoke("botapp:compass:ai-status"),
     saveRelayConfig: (input) => ipcRenderer.invoke("botapp:compass:save-relay-config", input),

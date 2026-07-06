@@ -1615,6 +1615,8 @@ const runtimeIpcHandlers = [
   "botapp:auto-restart:settings-load",
   "botapp:auto-restart:settings-save",
   "botapp:auto-restart:execute",
+  "botapp:scheduler:status",
+  "botapp:scheduler:set-enabled",
   "botapp:incidents:list",
   "botapp:incidents:detail",
   "botapp:incidents:action",
@@ -2443,6 +2445,17 @@ const botappEndpointRegistry = [
     status: "active",
     testStrategy: "safe_post",
   },
+  {
+    id: "scheduler_status",
+    name: "Scheduler status",
+    method: "GET",
+    path: "/api/instagram-dashboard/auto-restart/scheduler-status",
+    usedBy: ["Scheduler"],
+    purpose: "Read-only canonical scheduler observability (engine, backend mode, tick facts, recent decisions)",
+    authRequired: true,
+    status: "active",
+    testStrategy: "fetch",
+  },
 ];
 
 function endpointById(id) {
@@ -3054,6 +3067,24 @@ async function autoRestartSettingsLoad() {
 async function autoRestartSettingsSave(patch) {
   const result = await dashboardRequestResult("PATCH", "auto_restart_settings_patch", sanitizeCompassValue(patch || {}));
   if (!result.ok) return { ok: false, error: result.error || "Could not save Auto Restart settings." };
+  return { ok: true, data: result.data };
+}
+
+async function schedulerStatusLoad() {
+  const result = await dashboardRequestResult("GET", "scheduler_status");
+  if (!result.ok) return { ok: false, error: result.error || "Scheduler status unavailable." };
+  return { ok: true, data: result.data };
+}
+
+// Global operator switch: only flips the canonical backend flag through the
+// existing relay/admin protected settings endpoint. Never creates a run and
+// never calls the worker; the next canonical tick applies the new mode.
+async function schedulerSetEnabled(input) {
+  const enabled = input?.enabled === true;
+  const result = await dashboardRequestResult("PATCH", "auto_restart_settings_patch", {
+    auto_restart_enabled: enabled,
+  });
+  if (!result.ok) return { ok: false, error: result.error || "Could not update the Scheduler switch." };
   return { ok: true, data: result.data };
 }
 
@@ -7363,6 +7394,14 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:auto-restart:settings-load", () => autoRestartSettingsLoad());
   ipcMain.handle("botapp:auto-restart:settings-save", (_event, patch) => autoRestartSettingsSave(patch));
   ipcMain.handle("botapp:auto-restart:execute", (_event, input) => autoRestartExecute(input));
+  ipcMain.handle("botapp:scheduler:status", () => schedulerStatusLoad().catch((error) => ({
+    ok: false,
+    error: safeRuntimeError(error, "Scheduler status unavailable."),
+  })));
+  ipcMain.handle("botapp:scheduler:set-enabled", (_event, input) => schedulerSetEnabled(input).catch((error) => ({
+    ok: false,
+    error: safeRuntimeError(error, "Could not update the Scheduler switch."),
+  })));
   ipcMain.handle("botapp:data:overview", () => botappOverviewData());
   ipcMain.handle("botapp:relay:health", () => botappRelayHealth());
   ipcMain.handle("botapp:relay:repair", () => repairRelayConnection().catch((error) => ({

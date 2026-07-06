@@ -265,6 +265,35 @@ cliquer Refresh** :
 Le bouton Refresh reste disponible comme action manuelle mais n'est plus
 nécessaire pour voir l'état réel.
 
+### Vue Scheduler — procédure opérateur
+
+La vue `Scheduler` observe le scheduler canonique embarqué dans le dispatcher
+et porte le **switch global ON/OFF** (permission backend de créer de nouveaux
+runs planifiés). Points opérateur :
+
+- **Badge moteur ≠ switch** : `Engine: Running` signifie que le dispatcher et
+  son tick tournent (launchd). `Backend: OFF` signifie que le tick saute la
+  sélection (`scheduler_disabled`). Les deux états sont indépendants : un
+  moteur Running avec backend OFF est un état normal.
+- **Passer OFF** : effet au prochain tick canonique ; les runs déjà actifs ne
+  sont **jamais** interrompus par le switch.
+- **Passer ON** : confirmation compacte obligatoire (le prochain tick peut
+  créer des runs pour les comptes réellement éligibles). Aucun run n'est créé
+  depuis le clic ; la sélection reste 100 % backend (caps, schedules,
+  readiness, assignment, `manual_only` exclu en dur).
+- **Diagnostic « aucun run créé »** : lire les métriques (dernier tick,
+  examinés/éligibles/enqueued) et les décisions récentes avec leur raison
+  canonique courte (`manual only`, `scheduler disabled`, caps…). Détail complet
+  en tooltip ; clic compte → Profiles.
+- **Cadence** : la vue se rafraîchit toutes les 60 s uniquement quand elle est
+  active et la fenêtre visible ; elle ne déclenche jamais le tick backend.
+- **Nota bene** : quand le scheduler est OFF, les ticks ne persistent ni lock
+  ni décision — un « dernier tick » ancien avec backend OFF est attendu, pas
+  une panne.
+- **Installation/release** : aucune activation automatique du Scheduler
+  pendant une installation ou une release BotApp ; le switch ne change d'état
+  que par action opérateur explicite.
+
 ### Test sans compte / run / login
 
 Autorisé :

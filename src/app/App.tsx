@@ -14,6 +14,7 @@ import { RuntimeHealth } from "../views/RuntimeHealth";
 import { IncidentNotificationsSettingsView } from "../views/IncidentNotificationsSettings";
 import { Compass } from "../views/Compass";
 import { AutoRestart } from "../views/AutoRestart";
+import { Scheduler } from "../views/Scheduler";
 import { EmailHistory } from "../views/EmailHistory";
 import { APIKeys } from "../views/APIKeys";
 import { Settings } from "../views/Settings";
@@ -375,6 +376,7 @@ export function App() {
   else if (active === "incident-notifications") view = <IncidentNotificationsSettingsView />;
   else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
   else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} relayHealth={relayHealth} dispatcherHealth={dispatcherHealth} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;
+  else if (active === "scheduler") view = <Scheduler onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} />;
   else if (active === "api") view = <APIKeys apiKeys={data.apiKeys} webhooks={data.webhooks} onAction={requestAction} />;
   else view = data.settings ? <Settings settings={data.settings} onAction={requestAction} /> : null;
 

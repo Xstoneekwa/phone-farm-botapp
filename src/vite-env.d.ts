@@ -120,6 +120,10 @@ interface Window {
     status: () => Promise<BotAppSchedulerRuntimeHealth>;
     ensure: () => Promise<BotAppSchedulerRuntimeHealth>;
   };
+  scheduler?: {
+    status: () => Promise<{ ok: boolean; data?: import("./api/types").BotAppSchedulerStatus; error?: string }>;
+    setEnabled: (input: { enabled: boolean }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
+  };
     compass?: {
       status: () => Promise<CompassAiRuntimeStatus>;
       saveRelayConfig: (input: { relayUrl: string; relayCredential?: string }) => Promise<CompassAiRuntimeStatus>;

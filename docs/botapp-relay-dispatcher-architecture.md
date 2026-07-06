@@ -236,6 +236,43 @@ dans le dispatcher worker et appelle le backend canonique
 `/api/instagram-dashboard/auto-restart/tick`. BotApp affiche l’état rapporté par
 le contrôleur et le backend, sans créer de scheduler parallèle.
 
+### Vue `Scheduler` (observabilité + switch global ON/OFF)
+
+La vue `Scheduler` (navigation Automation) est une **surface d’observabilité**,
+jamais un second scheduler :
+
+- **Moteur vs mode backend** : deux axes distincts affichés côte à côte.
+  - Badge moteur `Running / Degraded / Unknown` : projection du heartbeat du
+    dispatcher (`worker_heartbeats`) faite par le backend. Le moteur tourne dès
+    que le service launchd est démarré, indépendamment du switch.
+  - Badge backend `ON / OFF` : reflet du drapeau canonique
+    `auto_restart_settings.auto_restart_enabled` (ligne `global`, Supabase
+    production), seule autorité de sélection.
+- **Lecture** : IPC `botapp:scheduler:status` → relay
+  `GET /api/instagram-dashboard/auto-restart/scheduler-status` (read-model
+  backend dérivé des faits canoniques : tick locks, décisions, settings,
+  heartbeat). Aucun calcul local d’éligibilité, créneau, cap ou readiness.
+- **Switch global** : IPC `botapp:scheduler:set-enabled` → PATCH canonique
+  `/api/instagram-dashboard/auto-restart/settings` (`auto_restart_enabled`
+  uniquement, autorisation relay/admin existante, audit
+  `auto_restart_settings_updated`).
+  - `OFF` : le prochain tick canonique saute la sélection
+    (`scheduler_disabled`) ; **aucun run actif n’est interrompu**.
+  - `ON` : le prochain tick canonique peut sélectionner les comptes réellement
+    éligibles ; **aucun run n’est créé depuis le clic**. Une confirmation
+    compacte est demandée uniquement pour OFF → ON.
+  - `manual_only` reste une exclusion dure côté backend
+    (`manual_only_requires_manual_trigger`).
+  - Le badge reflète la réponse backend confirmée, jamais une supposition
+    locale.
+- **Actualisation** : fetch uniquement quand la vue est active et la fenêtre
+  visible (même contrôleur que Devices, cadence 60 s), refresh immédiat au
+  retour au premier plan, timers arrêtés dès que la vue est quittée. La vue
+  n’appelle jamais le tick backend ni un dry-run pour « rafraîchir ».
+- **Décisions récentes** : liste courte des décisions persistées par le tick
+  (`auto_restart_decisions`, fenêtre 24 h) avec raison canonique courte ;
+  détail complet en tooltip ; clic sur un compte → vue Profiles.
+
 ### Actualisation automatique de la vue Devices
 
 Trois couches distinctes, à ne jamais confondre lors d'un diagnostic :

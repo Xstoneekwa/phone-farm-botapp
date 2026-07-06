@@ -2424,6 +2424,37 @@ export type BotAppSchedulerRuntimeHealth = {
   checkedAt: string;
 };
 
+/** Read-only canonical scheduler observability contract (backend read-model). */
+export type BotAppSchedulerEngineStatus = "running" | "degraded" | "unknown";
+export type BotAppSchedulerBackendMode = "enabled" | "disabled_by_config";
+
+export type BotAppSchedulerRecentDecision = {
+  account_id: string | null;
+  username: string | null;
+  action: string;
+  decision: string;
+  reason: string;
+  created_at: string;
+};
+
+export type BotAppSchedulerStatus = {
+  read_only: true;
+  engine_status: BotAppSchedulerEngineStatus;
+  engine_worker_id: string | null;
+  engine_last_seen_at: string | null;
+  backend_mode: BotAppSchedulerBackendMode;
+  tick_interval_seconds: number | null;
+  last_tick_at: string | null;
+  last_success_at: string | null;
+  last_error: { at: string; reason: string } | null;
+  decisions_window_hours: number;
+  examined_count: number;
+  enqueued_count: number;
+  blocked_count: number;
+  recent_decisions: BotAppSchedulerRecentDecision[];
+  settings_updated_at: string | null;
+};
+
 export type BotAppDispatcherHealth = {
   ok: boolean;
   status: BotAppDispatcherStatus;
