@@ -12,6 +12,7 @@ import type {
   BotAppSchedulerDailyEngine,
   BotAppSchedulerEngineStatus,
   BotAppSchedulerRecentDecision,
+  BotAppSchedulerUpcomingWindow,
 } from "../api/types";
 
 /**
@@ -145,6 +146,50 @@ export const dailyEngineCopy: Record<BotAppSchedulerDailyEngine["state"], { labe
   scheduler_disabled: { label: "Daily engine: gated by toggle", tone: "neutral" },
   active: { label: "Daily engine: active", tone: "success" },
 };
+
+/**
+ * CP2 — 48h projection display helpers. Everything shown comes from the
+ * backend read-model (derived daily recurrence); nothing is computed locally
+ * beyond formatting.
+ */
+export function upcomingWindowBadge(window: BotAppSchedulerUpcomingWindow): { label: string; tone: SchedulerBadgeTone } {
+  if (window.is_open) return { label: "open now", tone: "success" };
+  if (window.stored_window_expired && !window.materialized) {
+    // Real state, clearly surfaced: the stored dated window has expired and
+    // the cron has not rolled it forward yet — never a silent "waiting".
+    return { label: "awaiting roll-forward", tone: "warning" };
+  }
+  return { label: "planned", tone: "neutral" };
+}
+
+function dayKeyInTimezone(date: Date, timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+/** "today" / "tomorrow" / "Jul 8" — computed in the window's own timezone. */
+export function upcomingWindowDayLabel(window: BotAppSchedulerUpcomingWindow, now: Date): string {
+  const starts = new Date(window.starts_at);
+  if (!Number.isFinite(starts.getTime())) return "unknown day";
+  const startKey = dayKeyInTimezone(starts, window.timezone);
+  const todayKey = dayKeyInTimezone(now, window.timezone);
+  const tomorrowKey = dayKeyInTimezone(new Date(now.getTime() + 86_400_000), window.timezone);
+  if (startKey === todayKey) return "today";
+  if (startKey === tomorrowKey) return "tomorrow";
+  try {
+    return new Intl.DateTimeFormat(undefined, { timeZone: window.timezone, month: "short", day: "numeric" }).format(starts);
+  } catch {
+    return startKey;
+  }
+}
 
 export function decisionTone(decision: string): SchedulerBadgeTone {
   const normalized = decision.trim().toLowerCase();

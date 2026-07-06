@@ -16,6 +16,8 @@ import {
   isSchedulerConfigDecision,
   shortReasonLabel,
   shouldPollScheduler,
+  upcomingWindowBadge,
+  upcomingWindowDayLabel,
 } from "./scheduler-status";
 import "./scheduler.css";
 
@@ -179,6 +181,45 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
           <p className="scheduler-loading">Loading scheduler status…</p>
         ) : null}
       </Card>
+
+      {status ? (
+        <Card
+          title={`Upcoming windows (${status.windows_horizon_hours ?? 48}h)`}
+          subtitle="Daily recurrence derived from each account's Schedule — read-only projection, no run is created here."
+        >
+          {(status.upcoming_windows ?? []).length === 0 ? (
+            <p className="scheduler-empty">
+              No scheduled window in the next {status.windows_horizon_hours ?? 48}h.
+              Accounts in manual-only mode are never scheduled automatically.
+            </p>
+          ) : (
+            <ul className="scheduler-decisions scheduler-windows">
+              {(status.upcoming_windows ?? []).map((window, index) => {
+                const badge = upcomingWindowBadge(window);
+                const label = window.username || window.account_id;
+                return (
+                  <li key={`${window.account_id}-${window.starts_at}-${index}`}>
+                    <button
+                      type="button"
+                      className="scheduler-decision-account"
+                      title="Open in Profiles"
+                      onClick={() => onOpenProfile(window.account_id)}
+                    >
+                      {label}
+                    </button>
+                    <Badge tone={badge.tone}>{badge.label}</Badge>
+                    <span className="scheduler-decision-reason" title={`${window.starts_at} → ${window.ends_at} (${window.timezone})`}>
+                      {window.local_slot} · {upcomingWindowDayLabel(window, new Date())}
+                      {window.device_name ? ` · ${window.device_name}` : ""}
+                    </span>
+                    <span className="scheduler-decision-time">{formatTimestamp(window.starts_at)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      ) : null}
 
       {status ? (
         <Card title="Recent decisions" subtitle={`Canonical tick decisions · last ${status.decisions_window_hours}h`}>

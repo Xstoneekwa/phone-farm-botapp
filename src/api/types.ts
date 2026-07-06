@@ -2450,6 +2450,21 @@ export type BotAppSchedulerDailyEngine = {
   state: "technical_disabled" | "dry_run" | "scheduler_disabled" | "active";
 };
 
+/** CP2 — derived daily occurrence (48h projection) of a scheduled account. */
+export type BotAppSchedulerUpcomingWindow = {
+  account_id: string;
+  username: string | null;
+  device_id: string | null;
+  device_name: string | null;
+  starts_at: string;
+  ends_at: string;
+  timezone: string;
+  local_slot: string;
+  is_open: boolean;
+  materialized: boolean;
+  stored_window_expired: boolean;
+};
+
 export type BotAppSchedulerStatus = {
   read_only: true;
   engine_status: BotAppSchedulerEngineStatus;
@@ -2467,6 +2482,8 @@ export type BotAppSchedulerStatus = {
   recent_decisions: BotAppSchedulerRecentDecision[];
   settings_updated_at: string | null;
   daily_engine?: BotAppSchedulerDailyEngine | null;
+  windows_horizon_hours?: number;
+  upcoming_windows?: BotAppSchedulerUpcomingWindow[];
 };
 
 export type BotAppDispatcherHealth = {

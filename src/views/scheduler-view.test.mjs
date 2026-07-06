@@ -15,6 +15,8 @@ import {
   isSchedulerConfigDecision,
   shortReasonLabel,
   shouldPollScheduler,
+  upcomingWindowBadge,
+  upcomingWindowDayLabel,
 } from "./scheduler-status.ts";
 import { createDevicesAutoRefreshController } from "./devices-auto-refresh.ts";
 
@@ -162,6 +164,42 @@ test("CP1: the view distinguishes the Auto Restart engine, the daily engine and 
   assert.equal(dailyEngineCopy.dry_run.label, "Daily engine: dry run");
   assert.equal(dailyEngineCopy.scheduler_disabled.label, "Daily engine: gated by toggle");
   assert.equal(dailyEngineCopy.active.label, "Daily engine: active");
+});
+
+test("CP2: upcoming windows render the derived recurrence with honest states", () => {
+  const baseWindow = {
+    account_id: "acc-1",
+    username: "client_account",
+    device_id: "dev-1",
+    device_name: "Samsung A16-01",
+    starts_at: "2026-07-06T04:00:00.000Z",
+    ends_at: "2026-07-06T10:00:00.000Z",
+    timezone: "Africa/Johannesburg",
+    local_slot: "06:00–12:00",
+    is_open: false,
+    materialized: true,
+    stored_window_expired: false,
+  };
+  assert.deepEqual(upcomingWindowBadge({ ...baseWindow, is_open: true }), { label: "open now", tone: "success" });
+  assert.deepEqual(
+    upcomingWindowBadge({ ...baseWindow, stored_window_expired: true, materialized: false }),
+    { label: "awaiting roll-forward", tone: "warning" },
+  );
+  assert.deepEqual(upcomingWindowBadge(baseWindow), { label: "planned", tone: "neutral" });
+
+  // Day labels are computed in the window's own timezone (UTC+2 here):
+  // 04:00Z on the 6th is 06:00 local on the 6th.
+  const now = new Date("2026-07-06T03:00:00.000Z");
+  assert.equal(upcomingWindowDayLabel(baseWindow, now), "today");
+  assert.equal(upcomingWindowDayLabel({ ...baseWindow, starts_at: "2026-07-07T04:00:00.000Z" }, now), "tomorrow");
+  assert.notEqual(upcomingWindowDayLabel({ ...baseWindow, starts_at: "2026-07-08T04:00:00.000Z" }, now), "today");
+
+  // The view renders the section from the backend read-model only, and the
+  // projection never creates a run (read-only card, no mutation surface).
+  assert.match(schedulerViewSource, /Upcoming windows \(\$\{status\.windows_horizon_hours \?\? 48\}h\)/);
+  assert.match(schedulerViewSource, /upcomingWindowBadge\(window\)/);
+  assert.match(schedulerViewSource, /manual-only mode are never scheduled automatically/);
+  assert.doesNotMatch(schedulerViewSource, /startRun|createRun|materializeWindow|rollForward/);
 });
 
 test("clicking a decision opens the account in Profiles, only for real accounts", () => {
