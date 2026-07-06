@@ -2435,6 +2435,19 @@ export type BotAppSchedulerRecentDecision = {
   decision: string;
   reason: string;
   created_at: string;
+  /** CP1 — stable canonical reason code (backend nomenclature). */
+  reason_code?: string;
+  reason_kind?: "business" | "technical" | "config" | "unavailable";
+  /** CP1 — global ON/OFF events are typed, never rendered as unknown accounts. */
+  event?: "account_decision" | "scheduler_config";
+  config_enabled?: boolean | null;
+};
+
+/** CP1 — daily engine (schedule-session cron) configuration projection. */
+export type BotAppSchedulerDailyEngine = {
+  technical_enabled: boolean;
+  dry_run: boolean;
+  state: "technical_disabled" | "dry_run" | "scheduler_disabled" | "active";
 };
 
 export type BotAppSchedulerStatus = {
@@ -2453,6 +2466,7 @@ export type BotAppSchedulerStatus = {
   blocked_count: number;
   recent_decisions: BotAppSchedulerRecentDecision[];
   settings_updated_at: string | null;
+  daily_engine?: BotAppSchedulerDailyEngine | null;
 };
 
 export type BotAppDispatcherHealth = {

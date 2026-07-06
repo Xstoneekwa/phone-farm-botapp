@@ -5,11 +5,15 @@ import { createDevicesAutoRefreshController } from "./devices-auto-refresh";
 import {
   SCHEDULER_REFRESH_INTERVAL_MS,
   backendModeCopy,
+  dailyEngineCopy,
   decisionNavigationAccountId,
+  decisionReasonLabel,
+  decisionRowLabel,
   decisionTone,
   engineBadgeCopy,
   formatTickInterval,
   formatTimestamp,
+  isSchedulerConfigDecision,
   shortReasonLabel,
   shouldPollScheduler,
 } from "./scheduler-status";
@@ -93,6 +97,7 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
   const modeCopy = status ? backendModeCopy[status.backend_mode] : null;
   const backendOn = status?.backend_mode === "enabled";
   const tickInterval = status ? formatTickInterval(status.tick_interval_seconds) : null;
+  const dailyEngine = status?.daily_engine ? dailyEngineCopy[status.daily_engine.state] : null;
 
   return (
     <div className="scheduler-view" data-testid="scheduler-view">
@@ -101,8 +106,9 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
         subtitle="Canonical backend scheduler — the dispatcher tick decides, BotApp only observes."
         actions={
           <div className="scheduler-header-actions">
-            <Badge tone={engineCopy.tone} dot>{`Engine: ${engineCopy.label}`}</Badge>
-            {modeCopy ? <Badge tone={modeCopy.tone} dot>{`Backend: ${modeCopy.label}`}</Badge> : null}
+            <Badge tone={engineCopy.tone} dot>{`Auto Restart engine: ${engineCopy.label}`}</Badge>
+            {dailyEngine ? <Badge tone={dailyEngine.tone} dot>{dailyEngine.label}</Badge> : null}
+            {modeCopy ? <Badge tone={modeCopy.tone} dot>{`Scheduler: ${modeCopy.label}`}</Badge> : null}
             <span
               title={backendOn
                 ? "Turn OFF: the next canonical tick stops creating scheduled runs. Active runs keep running."
@@ -186,7 +192,8 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
             <ul className="scheduler-decisions">
               {status.recent_decisions.map((decision, index) => {
                 const accountId = decisionNavigationAccountId(decision);
-                const label = decision.username || decision.account_id || "unknown account";
+                const configEvent = isSchedulerConfigDecision(decision);
+                const label = decisionRowLabel(decision);
                 return (
                   <li key={`${decision.created_at}-${decision.account_id}-${index}`}>
                     {accountId ? (
@@ -201,10 +208,16 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
                     ) : (
                       <span className="scheduler-decision-account scheduler-decision-account-static">{label}</span>
                     )}
-                    <Badge tone={decisionTone(decision.decision)}>{decision.decision || "unknown"}</Badge>
-                    <span className="scheduler-decision-reason" title={decision.reason}>
-                      {shortReasonLabel(decision.reason)}
-                    </span>
+                    {configEvent ? (
+                      <Badge tone="neutral">config</Badge>
+                    ) : (
+                      <Badge tone={decisionTone(decision.decision)}>{decision.decision || "unknown"}</Badge>
+                    )}
+                    {configEvent ? null : (
+                      <span className="scheduler-decision-reason" title={decision.reason}>
+                        {decisionReasonLabel(decision)}
+                      </span>
+                    )}
                     <span className="scheduler-decision-time">{formatTimestamp(decision.created_at)}</span>
                   </li>
                 );

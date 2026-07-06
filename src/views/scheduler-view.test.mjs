@@ -3,11 +3,16 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import {
   SCHEDULER_REFRESH_INTERVAL_MS,
+  REASON_UNAVAILABLE_LABEL,
   backendModeCopy,
+  dailyEngineCopy,
   decisionNavigationAccountId,
+  decisionReasonLabel,
+  decisionRowLabel,
   decisionTone,
   engineBadgeCopy,
   formatTickInterval,
+  isSchedulerConfigDecision,
   shortReasonLabel,
   shouldPollScheduler,
 } from "./scheduler-status.ts";
@@ -98,6 +103,65 @@ test("manual_only decisions surface as a short exclusion label", () => {
   assert.equal(shortReasonLabel("some_new_backend_reason"), "some_new_backend_reason");
   assert.equal(decisionTone("blocked"), "warning");
   assert.equal(decisionTone("enqueued"), "success");
+});
+
+test("CP1: stable reason codes drive the label; raw reason stays in the tooltip", () => {
+  // reason_code is the preferred source, mirroring the backend nomenclature.
+  assert.equal(decisionReasonLabel({ reason_code: "resume_plan_missing", reason: "worker_plan:resume_plan_missing" }), "resume plan missing");
+  assert.equal(decisionReasonLabel({ reason_code: "phone_busy", reason: "skipped_phone_busy" }), "phone busy");
+  assert.equal(decisionReasonLabel({ reason_code: "active_run_exists", reason: "already_running" }), "run already active");
+  assert.equal(decisionReasonLabel({ reason_code: "scheduler_disabled_race_rejected", reason: "scheduler_disabled" }), "rejected: scheduler turned OFF");
+  // Technical errors keep their own labels, distinct from business blocks.
+  assert.equal(decisionReasonLabel({ reason_code: "enqueue_failed", reason: "enqueue_failed" }), "enqueue failed");
+  // Older backend payloads without reason_code fall back to the raw reason.
+  assert.equal(decisionReasonLabel({ reason: "manual_only_requires_manual_trigger" }), "manual only");
+  // The backend's explicit non-answer renders as "reason unavailable" — never invented.
+  assert.equal(decisionReasonLabel({ reason_code: "reason_unavailable", reason: "unknown" }), REASON_UNAVAILABLE_LABEL);
+  assert.equal(shortReasonLabel("unknown"), REASON_UNAVAILABLE_LABEL);
+  assert.equal(shortReasonLabel(""), REASON_UNAVAILABLE_LABEL);
+  // Unknown-but-real canonical codes pass through unchanged.
+  assert.equal(decisionReasonLabel({ reason_code: "some_future_reason", reason: "some_future_reason" }), "some_future_reason");
+  assert.match(schedulerViewSource, /decisionReasonLabel\(decision\)/);
+});
+
+test("CP1: global ON/OFF events render as Scheduler configuration, never unknown account", () => {
+  const onEvent = {
+    account_id: null,
+    username: null,
+    action: "auto_restart_settings_updated",
+    decision: "production",
+    reason: "settings_patch",
+    event: "scheduler_config",
+    config_enabled: true,
+    created_at: "2026-07-06T14:21:22Z",
+  };
+  const offEvent = { ...onEvent, decision: "disabled", config_enabled: false };
+  assert.equal(isSchedulerConfigDecision(onEvent), true);
+  assert.equal(decisionRowLabel(onEvent), "Scheduler configuration — ON");
+  assert.equal(decisionRowLabel(offEvent), "Scheduler configuration — OFF");
+  // Older backend payloads (no event field) are still recognized by shape.
+  assert.equal(
+    isSchedulerConfigDecision({ account_id: null, action: "auto_restart_settings_updated", reason: "settings_patch" }),
+    true,
+  );
+  // Account decisions keep the username/account label.
+  const accountDecision = { account_id: "acc-1", username: "client_account", action: "auto_restart_candidate_evaluated" };
+  assert.equal(isSchedulerConfigDecision(accountDecision), false);
+  assert.equal(decisionRowLabel(accountDecision), "client_account");
+  // Config events are not navigable (no account behind them).
+  assert.equal(decisionNavigationAccountId(onEvent), null);
+  assert.match(schedulerViewSource, /decisionRowLabel\(decision\)/);
+  assert.match(schedulerViewSource, /isSchedulerConfigDecision\(decision\)/);
+});
+
+test("CP1: the view distinguishes the Auto Restart engine, the daily engine and the toggle", () => {
+  assert.match(schedulerViewSource, /Auto Restart engine: \$\{engineCopy\.label\}/);
+  assert.match(schedulerViewSource, /Scheduler: \$\{modeCopy\.label\}/);
+  assert.match(schedulerViewSource, /dailyEngineCopy\[status\.daily_engine\.state\]/);
+  assert.equal(dailyEngineCopy.technical_disabled.label, "Daily engine: disabled (env)");
+  assert.equal(dailyEngineCopy.dry_run.label, "Daily engine: dry run");
+  assert.equal(dailyEngineCopy.scheduler_disabled.label, "Daily engine: gated by toggle");
+  assert.equal(dailyEngineCopy.active.label, "Daily engine: active");
 });
 
 test("clicking a decision opens the account in Profiles, only for real accounts", () => {
