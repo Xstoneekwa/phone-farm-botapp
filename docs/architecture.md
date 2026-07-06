@@ -120,6 +120,14 @@ Runtime service calls from UI paths must be asynchronous and timeout-bounded in
 Electron main. `Start dispatcher`, `Retry`, runtime status and heartbeat actions
 must not use synchronous child processes or legacy worker wrappers.
 
+The controller separates short control commands from long-lived services:
+`status`/`start`/`stop` are bounded and safe for BotApp (`start` is a short
+idempotent `launchctl kickstart`, never the worker's parent), while
+`dispatcher serve` / `heartbeat serve` are launchd-only exec entry points with
+**no timeout-bounded parent**. Wrapping a long-lived service in a bounded
+timeout is forbidden: it produced the historical ~60s running → SIGTERM →
+~30s stopped loop (fixed in worker release `52d76e7`).
+
 ## Electron Packaging
 
 Packaging is configured in `electron-builder.json`.

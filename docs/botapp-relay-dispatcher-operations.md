@@ -108,6 +108,15 @@ timeout. Un contrôleur lent ou bloqué doit retourner un état structuré
 (`*_command_timeout`, `runtime_root_mismatch`, etc.) sans rendre l’application
 macOS non répondante.
 
+Depuis la release worker `52d76e7`, `dispatcher start` / `heartbeat start` sont
+des commandes **courtes et idempotentes** : service déjà actif → `running` ;
+sinon `launchctl kickstart` du label canonique. Le service long-lived
+lui-même est porté par `dispatcher serve` / `heartbeat serve`, **réservé aux
+plists launchd** (chaîne d'`exec`, aucun parent Python avec timeout). Ne
+jamais appeler `serve` depuis BotApp ni depuis un shell interactif : le
+timeout borné autour d'un service long-lived est ce qui provoquait le cycle
+`running` ~60 s → SIGTERM → `stopped` ~30 s (bandeau rouge/vert alternant).
+
 ---
 
 ## États client-safe (`repairState`)
@@ -371,6 +380,32 @@ Ne pas demander ces commandes à Liam.
 Les commandes ci-dessus ne doivent jamais afficher
 `/Users/admin/instagram-worker-python` comme `resolvedRoot`. Si c’est le cas,
 STOP : le runtime canonique est cassé ou un fallback legacy est revenu.
+
+`dispatcher serve` / `heartbeat serve` ne doivent **jamais** être lancés
+manuellement : ils sont réservés aux plists launchd (exec long-lived).
+
+### Diagnostic dispatcher intermittent (rouge/vert alternant)
+
+Symptôme historique (corrigé, release `52d76e7`) : bandeau BotApp alternant
+`Dispatcher stopped` / `dispatcher confirmed running` toutes les ~60–90 s.
+Cause : le contrôleur enveloppait `dispatcher start` (foreground long-lived)
+dans un `subprocess.run(timeout=60)` et tuait son propre service ; launchd
+relançait après `ThrottleInterval`. Vérifications si le symptôme réapparaît :
+
+```bash
+launchctl print gui/$(id -u)/com.boost.phonefarm.dispatcher | grep -E 'runs|pid'
+# runs qui grimpe en continu = boucle de restart
+grep stop_signal /Users/admin/phonefarm-runtime/logs/run-control-dispatcher/dispatcher.log | tail
+# stop_signal 15 périodique (~60 s) = un parent tue le service
+grep command_timeout /Users/admin/phonefarm-runtime/logs/run-control-dispatcher/launchd.stdout.log | tail
+```
+
+Validation post-déploiement obligatoire : **12 minutes** d'observation sans
+action manuelle — PID dispatcher et publisher constants, `runs` launchd
+stable, aucun `stop_signal 15` périodique, aucun `*_command_timeout`,
+heartbeats A16 publiés toutes les ~60 s. `scheduler_disabled` (raison de tick
+embedded) reste distinct de l'état dispatcher et ne doit jamais faire basculer
+le bandeau.
 
 ### Rollback Keychain
 

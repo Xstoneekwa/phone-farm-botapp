@@ -366,6 +366,10 @@ Before smoke:
   package date, bundle path, runtime root and runtime commit.
 - Confirm Start dispatcher / Retry stay responsive and call only
   `/Users/admin/phonefarm-runtime/bin/phonefarm-runtimectl` asynchronously.
+- Launchd plists must call `phonefarm-runtimectl dispatcher serve` /
+  `heartbeat serve` (long-lived exec, no timed parent). BotApp and operators
+  only use the short `status` / `start` / `stop` commands; never run `serve`
+  manually.
 
 No-leak validation:
 

@@ -177,6 +177,32 @@ Référence preload : `window.botappDesktop.relay.health`, `.relay.repair`, `.di
 - Script wrapper interne : `scripts/run_control_dispatcher_service.sh` dans la release active.
 - LaunchAgent : `com.boost.phonefarm.dispatcher`
   Plist source : `ops/launchd/com.boost.phonefarm.dispatcher.plist` dans la release active.
+
+### Contrat `serve` vs `start` vs `status` (obligatoire)
+
+- `dispatcher serve` / `heartbeat serve` : **réservé aux plists launchd.** Le
+  contrôleur résout le root canonique puis fait un `exec` réel du wrapper de la
+  release active. Aucun parent Python avec timeout ne survit : launchd est le
+  seul superviseur du service long-lived. BotApp ne doit **jamais** appeler
+  `serve`.
+- `dispatcher start` / `heartbeat start` : commande courte et idempotente pour
+  BotApp/opérateur. Si le service tourne → `running` ; sinon → `launchctl
+  kickstart` du label canonique et retour d'un état structuré. Elle ne devient
+  jamais parent du consumer/publisher et ne bloque jamais le renderer.
+- `dispatcher status` / `heartbeat status` : strictement lecture seule ; les
+  sous-processus de diagnostic courts (`preflight`, `once`) ne sont jamais
+  comptés comme de vrais dispatchers/publishers.
+
+**Interdiction : jamais de timeout borné autour d'un service long-lived.** Le
+défaut historique (corrigé le 2026-07-06, release `52d76e7`) était un
+`subprocess.run(..., timeout=60)` dans le contrôleur autour de
+`dispatcher start` foreground : le contrôleur tuait son propre service toutes
+les ~60 s (SIGTERM), launchd relançait après `ThrottleInterval` (30 s), d'où le
+bandeau BotApp alternant rouge/vert en permanence. Signature d'une régression :
+compteur launchd `runs` qui grimpe, PID consumer changeant chaque minute,
+`stop_signal 15` périodique dans `dispatcher.log`,
+`dispatcher_command_timeout`/`heartbeat_command_timeout` dans
+`launchd.stdout.log`.
 - **Autostart** : uniquement après relay healthy **et** `queueActiveCount === 0` — n’installe/resume pas si une queue active existe.
 - **Contrôles UI** : Pause / Resume / Restart / Stop via Runtime Health ; « Démarrer le dispatcher » via bandeau si relay OK.
 
@@ -197,8 +223,11 @@ Les heartbeats devices utilisent le même contrôleur stable :
 
 ```text
 BotApp Runtime Health / Devices
--> phonefarm-runtimectl heartbeat status|restart
--> launchd com.boost.phonefarm.device-heartbeat
+-> phonefarm-runtimectl heartbeat status|start|restart   (commandes courtes)
+
+launchd com.boost.phonefarm.device-heartbeat
+-> exec phonefarm-runtimectl heartbeat serve             (service long-lived)
+-> (exec) device_heartbeat_service.sh start
 -> device_heartbeat_publisher.py --serve
 ```
 
