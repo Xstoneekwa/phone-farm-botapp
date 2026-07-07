@@ -104,34 +104,96 @@ export function countIncidents(rows: IncidentRowView[]): IncidentViewCounters {
 
 export const INCIDENT_STATE_COPY: Record<string, { label: string; tone: IncidentBadgeTone }> = {
   open: { label: "Open", tone: "warning" },
-  action_required: { label: "Action requise", tone: "error" },
+  action_required: { label: "Action required", tone: "error" },
   acknowledged: { label: "Acknowledged", tone: "info" },
-  resolved: { label: "Résolu", tone: "success" },
+  resolved: { label: "Resolved", tone: "success" },
   ignored: { label: "Ignored", tone: "neutral" },
-  // P3 recovery display states (human-confirmed resume workflow).
-  // "Prêt à relancer" is reserved for the BUTTON on an eligible incident;
-  // the armed state itself reads unambiguously.
-  ready_to_resume: { label: "Reprise autorisée — en attente du prochain tick", tone: "info" },
-  resume_requested: { label: "Reprise demandée", tone: "info" },
-  reintervention_required: { label: "Nouvelle intervention requise", tone: "error" },
+  // P3 recovery display states. "Ready to resume" is reserved for the BUTTON;
+  // the armed state reads unambiguously.
+  ready_to_resume: { label: "Resume authorized — awaiting next tick", tone: "info" },
+  resume_requested: { label: "Resume requested", tone: "info" },
+  reintervention_required: { label: "New intervention required", tone: "error" },
+  resume_authorization_expired: { label: "Recovery window expired", tone: "error" },
 };
 
-/**
- * Safe operator copy for recovery reasons (stable codes from the backend).
- * The "Prêt à relancer" button itself never creates a run: it arms one
- * durable authorization consumed only by the Auto Restart tick.
- */
+/** P3.2 English operator copy for recovery reasons (stable backend codes). */
 export const RECOVERY_REASON_COPY: Record<string, string> = {
-  awaiting_next_scheduler_tick: "Autorisation armée — en attente du prochain tick Auto Restart.",
-  resume_window_closed: "Fenêtre de session fermée — aucune reprise armable.",
-  resume_authorization_expired: "Fenêtre expirée — l'autorisation de reprise a expiré.",
-  resume_authorization_already_armed: "Une autorisation de reprise est déjà armée.",
-  resume_retry_window_exhausted: "Budget de reprise déjà consommé pour cette fenêtre.",
-  resume_plan_missing: "Aucun resume plan pour ce run (run antérieur à P3).",
-  resume_plan_not_recoverable: "Incident non récupérable automatiquement — résolution simple.",
-  incident_not_active: "Incident déjà résolu ou ignoré.",
-  recovery_state_unavailable: "État recovery indisponible pour le moment.",
+  awaiting_next_scheduler_tick: "Authorization armed — awaiting the next Auto Restart tick.",
+  resume_window_closed: "Recovery window closed — no resume can be armed.",
+  resume_authorization_expired: "Recovery window expired — the resume authorization expired.",
+  resume_authorization_already_armed: "A resume authorization is already armed.",
+  resume_retry_window_exhausted: "Resume budget already consumed for this window.",
+  resume_plan_missing: "No resume plan for this run (pre-P3 run).",
+  resume_plan_not_recoverable: "Incident not automatically recoverable — resolve manually.",
+  incident_not_active: "Incident already resolved or ignored.",
+  recovery_state_unavailable: "Recovery state unavailable right now.",
 };
+
+export const AUTHORIZATION_STATUS_COPY: Record<string, string> = {
+  armed: "Armed — awaiting next tick",
+  consumed: "Authorization consumed",
+  expired: "Recovery window expired",
+};
+
+export type RecoveryLike = {
+  state?: string;
+  eligible?: boolean;
+  reason?: string | null;
+  authorizationStatus?: string | null;
+} | null | undefined;
+
+export function isRecoveryFlow(recovery: RecoveryLike): boolean {
+  const state = str(recovery?.state);
+  return Boolean(state && state !== "none");
+}
+
+/** Armed or resume already in flight: hide ambiguous generic actions. */
+export function isArmedOrPendingRecovery(recovery: RecoveryLike): boolean {
+  if (!isRecoveryFlow(recovery)) return false;
+  const auth = str(recovery?.authorizationStatus);
+  const state = str(recovery?.state);
+  if (auth === "armed" || auth === "consumed") return true;
+  if (state === "ready_to_resume" && recovery?.eligible !== true) return true;
+  if (state === "resume_requested") return true;
+  return false;
+}
+
+export function shouldShowReadyToResume(recovery: RecoveryLike): boolean {
+  return recovery?.eligible === true;
+}
+
+export function shouldShowGenericIncidentActions(recovery: RecoveryLike): boolean {
+  return !isRecoveryFlow(recovery);
+}
+
+export function shouldShowAcknowledge(recovery: RecoveryLike, canAcknowledge: boolean): boolean {
+  return canAcknowledge && shouldShowGenericIncidentActions(recovery);
+}
+
+export function shouldShowKeepPaused(recovery: RecoveryLike): boolean {
+  return shouldShowGenericIncidentActions(recovery);
+}
+
+export function shouldShowResolve(recovery: RecoveryLike, canResolve: boolean): boolean {
+  if (!canResolve) return false;
+  if (shouldShowGenericIncidentActions(recovery)) return true;
+  if (isArmedOrPendingRecovery(recovery)) return false;
+  if (shouldShowReadyToResume(recovery)) return false;
+  return isRecoveryFlow(recovery);
+}
+
+export function resolveButtonLabel(recovery: RecoveryLike): string {
+  if (isRecoveryFlow(recovery) && !shouldShowGenericIncidentActions(recovery)) {
+    return "Resolve without resuming";
+  }
+  return "Resolve after verification";
+}
+
+export function authorizationStatusCopy(status: string | null | undefined): string | null {
+  const key = str(status);
+  if (!key) return null;
+  return AUTHORIZATION_STATUS_COPY[key] ?? key;
+}
 
 export function recoveryReasonCopy(reason: string | null | undefined): string | null {
   const code = str(reason);

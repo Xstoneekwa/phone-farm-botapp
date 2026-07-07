@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Drawer } from "../design/components";
-import { incidentStateCopy, recoveryReasonCopy } from "./incidents-view";
+import {
+  authorizationStatusCopy,
+  incidentStateCopy,
+  isArmedOrPendingRecovery,
+  recoveryReasonCopy,
+  resolveButtonLabel,
+  shouldShowAcknowledge,
+  shouldShowKeepPaused,
+  shouldShowReadyToResume,
+  shouldShowResolve,
+} from "./incidents-view";
 import "./incident-drawer.css";
 
 type IncidentRow = {
@@ -42,7 +52,16 @@ function formatWindowBound(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function recoveryStateLabel(recovery: IncidentRecovery | undefined): string | null {
+  const state = recovery?.state;
+  if (!state || state === "none") return null;
+  if (state === "awaiting_human_resume_authorization") {
+    return incidentStateCopy("action_required").label;
+  }
+  return incidentStateCopy(state).label;
 }
 
 export function IncidentDrawer({
@@ -129,14 +148,13 @@ export function IncidentDrawer({
   const recovery = detail?.recovery;
   const canAcknowledge = incident?.status === "open";
   const canResolve = incident?.status === "open" || incident?.status === "acknowledged";
-  // P3: "Prêt à relancer" is available ONLY when the backend proved the
-  // incident is recovery-eligible in the still-active window. The click never
-  // launches a run: it arms one authorization consumed by Auto Restart.
-  const canReadyToResume = recovery?.eligible === true;
-  const recoveryStateCopy = recovery?.state && recovery.state !== "none"
-    ? incidentStateCopy(recovery.state === "awaiting_human_resume_authorization" ? "action_required" : recovery.state)
-    : null;
+  const showReadyToResume = shouldShowReadyToResume(recovery);
+  const showAcknowledge = shouldShowAcknowledge(recovery, canAcknowledge);
+  const showResolve = shouldShowResolve(recovery, canResolve);
+  const showKeepPaused = shouldShowKeepPaused(recovery);
+  const armedOrPending = isArmedOrPendingRecovery(recovery);
   const recoveryReason = recoveryReasonCopy(recovery?.reason ?? null);
+  const recoveryStateText = recoveryStateLabel(recovery);
 
   if (!open) return null;
 
@@ -183,39 +201,38 @@ export function IncidentDrawer({
           ) : null}
           {recovery && (recovery.state !== "none" || recovery.reason) ? (
             <section className="incident-drawer-recovery" data-testid="incident-drawer-recovery">
-              <h4>Reprise contrôlée</h4>
+              <h4>Controlled recovery</h4>
               <dl className="incident-drawer-meta">
                 <div>
-                  <dt>État recovery</dt>
+                  <dt>Recovery state</dt>
                   <dd data-testid="incident-recovery-state">
-                    {recoveryStateCopy ? recoveryStateCopy.label : "—"}
+                    {recoveryStateText || "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt>Fenêtre de reprise</dt>
+                  <dt>Recovery window</dt>
                   <dd data-testid="incident-recovery-window">
                     {recovery.windowStart || recovery.windowEnd
-                      ? `${formatWindowBound(recovery.windowStart)} → ${formatWindowBound(recovery.windowEnd)}${recovery.windowActive ? " (active)" : " (fermée)"}`
+                      ? `${formatWindowBound(recovery.windowStart)} → ${formatWindowBound(recovery.windowEnd)}${recovery.windowActive ? " (active)" : " (closed)"}`
                       : "—"}
                   </dd>
                 </div>
                 {recovery.authorizationStatus ? (
                   <div>
-                    <dt>Autorisation</dt>
+                    <dt>Authorization</dt>
                     <dd data-testid="incident-recovery-authorization">
-                      {recovery.authorizationStatus === "armed"
-                        ? "Armée — en attente du prochain tick"
-                        : recovery.authorizationStatus === "consumed"
-                          ? "Autorisation consommée"
-                          : recovery.authorizationStatus === "expired"
-                            ? "Fenêtre expirée"
-                            : recovery.authorizationStatus}
+                      {authorizationStatusCopy(recovery.authorizationStatus) ?? recovery.authorizationStatus}
                     </dd>
                   </div>
                 ) : null}
               </dl>
-              {!canReadyToResume && recoveryReason ? (
+              {!showReadyToResume && recoveryReason ? (
                 <p className="incident-drawer-recovery-reason" data-testid="incident-recovery-reason">{recoveryReason}</p>
+              ) : null}
+              {armedOrPending ? (
+                <p className="incident-drawer-recovery-armed" data-testid="incident-recovery-armed-notice">
+                  Resume authorized — awaiting next tick. No further resume action is available until the tick runs or the window closes.
+                </p>
               ) : null}
             </section>
           ) : null}
@@ -229,38 +246,42 @@ export function IncidentDrawer({
               </ul>
             ) : <p>No canonical audit events loaded yet.</p>}
           </section>
-          <label className="incident-drawer-note">
-            Resolution note
-            <textarea data-testid="botapp-incident-resolution-note" value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} rows={3} />
-          </label>
-          <div className="incident-drawer-actions">
-            {canAcknowledge ? (
-              <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-acknowledge" disabled={Boolean(acting)} onClick={() => void runAction("acknowledge", { resolution_note: resolutionNote })}>
-                Acknowledge
-              </button>
-            ) : null}
-            {canReadyToResume ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                data-testid="botapp-incident-action-ready-to-resume"
-                disabled={Boolean(acting)}
-                onClick={() => void runAction("ready_to_resume", { resolution_note: resolutionNote })}
-              >
-                Prêt à relancer
-              </button>
-            ) : null}
-            {canResolve ? (
-              <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-resolve" disabled={Boolean(acting)} onClick={() => void runAction("resolve", { resolution_note: resolutionNote })}>
-                Resolve after verification
-              </button>
-            ) : null}
-            <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-keep-paused" disabled={Boolean(acting)} onClick={() => void runAction("keep_paused", { resolution_note: resolutionNote })}>
-              Keep paused
-            </button>
-            {/* No manual retry / relaunch action: "Prêt à relancer" only arms
-                an authorization; Auto Restart alone creates the resume. */}
-          </div>
+          {(showAcknowledge || showResolve || showKeepPaused || showReadyToResume) ? (
+            <>
+              <label className="incident-drawer-note">
+                Resolution note
+                <textarea data-testid="botapp-incident-resolution-note" value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} rows={3} />
+              </label>
+              <div className="incident-drawer-actions">
+                {showAcknowledge ? (
+                  <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-acknowledge" disabled={Boolean(acting)} onClick={() => void runAction("acknowledge", { resolution_note: resolutionNote })}>
+                    Acknowledge
+                  </button>
+                ) : null}
+                {showReadyToResume ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    data-testid="botapp-incident-action-ready-to-resume"
+                    disabled={Boolean(acting)}
+                    onClick={() => void runAction("ready_to_resume", { resolution_note: resolutionNote })}
+                  >
+                    Ready to resume
+                  </button>
+                ) : null}
+                {showResolve ? (
+                  <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-resolve" disabled={Boolean(acting)} onClick={() => void runAction("resolve", { resolution_note: resolutionNote })}>
+                    {resolveButtonLabel(recovery)}
+                  </button>
+                ) : null}
+                {showKeepPaused ? (
+                  <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-keep-paused" disabled={Boolean(acting)} onClick={() => void runAction("keep_paused", { resolution_note: resolutionNote })}>
+                    Keep paused
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </div>
       ) : null}
     </Drawer>

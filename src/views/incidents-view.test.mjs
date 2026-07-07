@@ -7,14 +7,21 @@ import {
   countIncidents,
   deliveryCopy,
   incidentStateCopy,
+  isArmedOrPendingRecovery,
   normalizeIncidentList,
   normalizeIncidentRow,
   recoveryReasonCopy,
+  resolveButtonLabel,
   severityTone,
   shouldPollIncidents,
+  shouldShowAcknowledge,
+  shouldShowKeepPaused,
+  shouldShowReadyToResume,
+  shouldShowResolve,
 } from "./incidents-view.ts";
 
 const viewSource = readFileSync(new URL("./Incidents.tsx", import.meta.url), "utf8");
+const incidentsViewSource = readFileSync(new URL("./incidents-view.ts", import.meta.url), "utf8");
 const drawerSource = readFileSync(new URL("./IncidentDrawer.tsx", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../app/App.tsx", import.meta.url), "utf8");
 const routesSource = readFileSync(new URL("../app/routes.tsx", import.meta.url), "utf8");
@@ -137,16 +144,15 @@ test("IncidentDrawer no longer offers manual retry in P2", () => {
   assert.doesNotMatch(drawerSource, /runAction\("manual_retry"\)/);
 });
 
-test("P3 recovery display states have exact French operator labels", () => {
-  // P3.1: "Prêt à relancer" is reserved for the button; the armed state
-  // reads unambiguously as an authorized resume waiting for the tick.
+test("P3.2 recovery display states have exact English operator labels", () => {
   assert.equal(
     incidentStateCopy("ready_to_resume").label,
-    "Reprise autorisée — en attente du prochain tick",
+    "Resume authorized — awaiting next tick",
   );
-  assert.equal(incidentStateCopy("resume_requested").label, "Reprise demandée");
-  assert.equal(incidentStateCopy("reintervention_required").label, "Nouvelle intervention requise");
-  assert.equal(incidentStateCopy("reintervention_required").tone, "error");
+  assert.equal(incidentStateCopy("resume_requested").label, "Resume requested");
+  assert.equal(incidentStateCopy("reintervention_required").label, "New intervention required");
+  assert.equal(incidentStateCopy("action_required").label, "Action required");
+  assert.equal(incidentStateCopy("resolved").label, "Resolved");
 });
 
 test("P3 recovery states are counted as active incidents", () => {
@@ -160,28 +166,70 @@ test("P3 recovery states are counted as active incidents", () => {
   assert.equal(counters.actionRequired, 1);
 });
 
-test("recovery reasons map to safe operator copy", () => {
-  assert.match(recoveryReasonCopy("awaiting_next_scheduler_tick"), /prochain tick/);
-  assert.match(recoveryReasonCopy("resume_authorization_expired"), /expirée?/i);
-  assert.match(recoveryReasonCopy("resume_retry_window_exhausted"), /consommé/);
+test("P3.2 recovery action visibility helpers", () => {
+  const eligible = { state: "awaiting_human_resume_authorization", eligible: true };
+  const armed = { state: "ready_to_resume", eligible: false, authorizationStatus: "armed" };
+  const expired = { state: "reintervention_required", eligible: false, reason: "resume_window_closed" };
+  assert.equal(shouldShowReadyToResume(eligible), true);
+  assert.equal(shouldShowReadyToResume(armed), false);
+  assert.equal(isArmedOrPendingRecovery(armed), true);
+  assert.equal(shouldShowAcknowledge(armed, true), false);
+  assert.equal(shouldShowKeepPaused(armed), false);
+  assert.equal(shouldShowResolve(armed, true), false);
+  assert.equal(shouldShowResolve(expired, true), true);
+  assert.equal(resolveButtonLabel(expired), "Resolve without resuming");
+  assert.equal(resolveButtonLabel(undefined), "Resolve after verification");
+});
+
+test("P3.2 recovery reasons map to safe English operator copy", () => {
+  assert.match(recoveryReasonCopy("awaiting_next_scheduler_tick"), /awaiting the next Auto Restart tick/i);
+  assert.match(recoveryReasonCopy("resume_authorization_expired"), /Recovery window expired/i);
+  assert.match(recoveryReasonCopy("resume_retry_window_exhausted"), /consum/i);
   assert.equal(recoveryReasonCopy("unknown_reason_code"), "unknown_reason_code");
   assert.equal(recoveryReasonCopy(""), null);
 });
 
-test("drawer shows 'Prêt à relancer' only for backend-proven eligible incidents", () => {
-  // Exact visible label, gated on recovery.eligible from the detail endpoint.
-  assert.match(drawerSource, /Prêt à relancer/);
-  assert.match(drawerSource, /recovery\?\.eligible === true/);
+test("drawer shows 'Ready to resume' only for backend-proven eligible incidents", () => {
+  assert.match(drawerSource, /Ready to resume/);
+  assert.match(drawerSource, /shouldShowReadyToResume/);
   assert.match(drawerSource, /runAction\("ready_to_resume"/);
-  // The button never starts anything locally: no run/tick primitives.
   assert.doesNotMatch(drawerSource, /runs\/start|Start run|forceTick|auto-restart\/tick/i);
 });
 
-test("drawer displays the resume window and authorization states", () => {
+test("P3.2 drawer hides ambiguous actions when recovery is armed or pending", () => {
+  assert.match(drawerSource, /isArmedOrPendingRecovery/);
+  assert.match(drawerSource, /shouldShowAcknowledge/);
+  assert.match(drawerSource, /shouldShowKeepPaused/);
+  assert.match(drawerSource, /shouldShowResolve/);
+  assert.match(drawerSource, /resolveButtonLabel/);
+  assert.match(drawerSource, /\{showAcknowledge \?/);
+  assert.match(drawerSource, /\{showResolve \?/);
+  assert.match(drawerSource, /\{showKeepPaused \?/);
+});
+
+test("drawer displays the recovery window and authorization states in English", () => {
   assert.match(drawerSource, /incident-recovery-window/);
-  assert.match(drawerSource, /Autorisation consommée/);
-  assert.match(drawerSource, /Fenêtre expirée/);
-  assert.match(drawerSource, /en attente du prochain tick/);
+  assert.match(drawerSource, /authorizationStatusCopy/);
+  assert.match(incidentsViewSource, /Authorization consumed/);
+  assert.match(incidentsViewSource, /Recovery window expired/);
+  assert.match(incidentsViewSource, /Armed — awaiting next tick/);
+  assert.match(drawerSource, /Controlled recovery/);
+});
+
+test("P3.2 incidents UI has no forbidden French operator strings in view or drawer", () => {
+  const forbidden = [
+    "Prêt à relancer",
+    "Reprise autorisée",
+    "Reprise contrôlée",
+    "Fenêtre de reprise",
+    "Armée — en attente",
+    "Nouvelle intervention requise",
+  ];
+  for (const phrase of forbidden) {
+    assert.doesNotMatch(viewSource, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.doesNotMatch(incidentsViewSource, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.doesNotMatch(drawerSource, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 });
 
 test("drawer keeps a simple resolve action and drops the dead resume flag", () => {

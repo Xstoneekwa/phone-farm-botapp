@@ -98,20 +98,22 @@ Le bandeau peut afficher **Dispatcher arrêté** alors que la connexion BotApp e
 
 ---
 
-## Monitoring → Incidents (reprise contrôlée P3)
+## Monitoring → Incidents (reprise contrôlée P3 — UI anglais P3.2)
 
-Route BotApp : **Monitoring → Incidents**.
+Route BotApp : **Monitoring → Incidents**. Tous les libellés visibles de cette
+vue sont en **anglais** (badges, drawer, boutons recovery).
 
 ### Lien reçu sur Slack ou Discord
 
 1. Cliquer le lien **Dashboard** dans la notification (contient `incident_id`).
 2. L’Admin web s’ouvre directement sur le bon incident (même incident test).
-3. Lire l’état **Reprise contrôlée** :
-   - **Prêt à relancer** = bouton disponible (incident éligible, pas encore armé).
-   - **Reprise autorisée — en attente du prochain tick** = autorisation déjà
-     armée ; attendre le prochain tick Auto Restart (Scheduler doit être ON).
-   - **Reprise demandée** = reprise consommée, run request créée.
-   - **Nouvelle intervention requise** = échec de reprise, intervention humaine.
+3. Lire la section **Controlled recovery** :
+   - **Ready to resume** = bouton disponible (incident éligible, pas encore armé).
+   - **Resume authorized — awaiting next tick** + **Armed — awaiting next tick**
+     = autorisation déjà armée ; attendre le prochain tick Auto Restart
+     (Scheduler doit être ON pour consommer).
+   - **Resume requested** = reprise consommée, run request créée.
+   - **New intervention required** = échec de reprise, intervention humaine.
 
 ### Dans BotApp
 
@@ -120,13 +122,21 @@ Route BotApp : **Monitoring → Incidents**.
    haut de la liste (toggle client-side).
 3. Cliquer la ligne pour ouvrir le drawer ; même logique de bouton et d’états.
 
+**Règles UX (P3.2) :**
+
+- Incident recovery éligible : seul **Ready to resume** (pas de
+  **Resolve after verification** ni **Keep paused** ambigus).
+- Incident recovery déjà armé : aucun bouton ; statuts armés anglais uniquement.
+- Incident recovery expiré : reason **Recovery window expired** +
+  **Resolve without resuming** si applicable.
+
 **Important :**
 
-- Le clic **Prêt à relancer** n’exécute **jamais** un run localement.
+- Le clic **Ready to resume** n’exécute **jamais** un run localement.
 - Tant que le **Scheduler est OFF**, aucune reprise automatique ne part —
   l’autorisation armée reste visible en attente.
 - Ne pas cliquer **Start**, **Play** ou **Auto Login** pour « débloquer » une
-  reprise : corriger le problème sur le téléphone, puis **Prêt à relancer**.
+  reprise : corriger le problème sur le téléphone, puis **Ready to resume**.
 
 ---
 
