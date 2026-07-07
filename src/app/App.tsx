@@ -12,6 +12,7 @@ import { Devices } from "../views/Devices";
 import { ActivityLog } from "../views/ActivityLog";
 import { RuntimeHealth } from "../views/RuntimeHealth";
 import { IncidentNotificationsSettingsView } from "../views/IncidentNotificationsSettings";
+import { Incidents } from "../views/Incidents";
 import { Compass } from "../views/Compass";
 import { AutoRestart } from "../views/AutoRestart";
 import { Scheduler } from "../views/Scheduler";
@@ -373,6 +374,7 @@ export function App() {
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
   else if (active === "email-history") view = <EmailHistory />;
   else if (active === "runtime") view = <RuntimeHealth />;
+  else if (active === "incidents") view = <Incidents onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} />;
   else if (active === "incident-notifications") view = <IncidentNotificationsSettingsView />;
   else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
   else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} relayHealth={relayHealth} dispatcherHealth={dispatcherHealth} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;

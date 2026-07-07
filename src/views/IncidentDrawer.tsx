@@ -107,7 +107,6 @@ export function IncidentDrawer({
   const incident = detail?.incident;
   const canAcknowledge = incident?.status === "open";
   const canResolve = incident?.status === "open" || incident?.status === "acknowledged";
-  const canManualRetry = incident?.status === "resolved";
 
   if (!open) return null;
 
@@ -180,11 +179,7 @@ export function IncidentDrawer({
             <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-keep-paused" disabled={Boolean(acting)} onClick={() => void runAction("keep_paused", { resolution_note: resolutionNote })}>
               Keep paused
             </button>
-            {canManualRetry ? (
-              <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-manual-retry" disabled={Boolean(acting)} onClick={() => void runAction("manual_retry")}>
-                Manual retry
-              </button>
-            ) : null}
+            {/* P2: no manual retry / relaunch action. Reserved for the next checkpoint. */}
           </div>
         </div>
       ) : null}

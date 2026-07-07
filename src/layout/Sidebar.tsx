@@ -81,6 +81,7 @@ const navIcons: Record<RouteId, ReactNode> = {
   activity: <ActivityInvestigationNavIcon />,
   "email-history": "✉",
   runtime: "RT",
+  incidents: "⚠",
   "incident-notifications": "IN",
   compass: <CompassNavIcon />,
   "auto-restart": <AutoRestartNavIcon />,
