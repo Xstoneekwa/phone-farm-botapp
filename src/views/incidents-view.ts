@@ -109,7 +109,9 @@ export const INCIDENT_STATE_COPY: Record<string, { label: string; tone: Incident
   resolved: { label: "Résolu", tone: "success" },
   ignored: { label: "Ignored", tone: "neutral" },
   // P3 recovery display states (human-confirmed resume workflow).
-  ready_to_resume: { label: "Prêt à relancer", tone: "info" },
+  // "Prêt à relancer" is reserved for the BUTTON on an eligible incident;
+  // the armed state itself reads unambiguously.
+  ready_to_resume: { label: "Reprise autorisée — en attente du prochain tick", tone: "info" },
   resume_requested: { label: "Reprise demandée", tone: "info" },
   reintervention_required: { label: "Nouvelle intervention requise", tone: "error" },
 };

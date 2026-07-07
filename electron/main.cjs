@@ -2905,6 +2905,10 @@ async function incidentsOverview(input = {}) {
       device_id: String(input?.device_id || "").trim() || undefined,
       account_id: String(input?.account_id || "").trim() || undefined,
       limit: String(input?.limit || 50),
+      // P3.1: always fetch test incidents too; the renderer's "Show test
+      // incidents" toggle filters client-side and operational counters
+      // already exclude them. Without this the toggle never appears.
+      include_test: "1",
     });
     const incidents = Array.isArray(data?.incidents) ? data.incidents.map((item) => serializeIpcPayload(item)) : [];
     return serializeIpcPayload({

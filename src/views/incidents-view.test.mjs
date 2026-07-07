@@ -138,7 +138,12 @@ test("IncidentDrawer no longer offers manual retry in P2", () => {
 });
 
 test("P3 recovery display states have exact French operator labels", () => {
-  assert.equal(incidentStateCopy("ready_to_resume").label, "Prêt à relancer");
+  // P3.1: "Prêt à relancer" is reserved for the button; the armed state
+  // reads unambiguously as an authorized resume waiting for the tick.
+  assert.equal(
+    incidentStateCopy("ready_to_resume").label,
+    "Reprise autorisée — en attente du prochain tick",
+  );
   assert.equal(incidentStateCopy("resume_requested").label, "Reprise demandée");
   assert.equal(incidentStateCopy("reintervention_required").label, "Nouvelle intervention requise");
   assert.equal(incidentStateCopy("reintervention_required").tone, "error");
@@ -184,6 +189,18 @@ test("drawer keeps a simple resolve action and drops the dead resume flag", () =
   // resume_scheduling was ignored by the backend; the canonical resume
   // authorization now goes through ready_to_resume only.
   assert.doesNotMatch(drawerSource, /resume_scheduling/);
+});
+
+test("P3.1: the main process always requests test incidents for the toggle", () => {
+  // Without include_test=1 the backend filters test incidents server-side,
+  // testCount stays 0 and the renderer's "Show test incidents" toggle can
+  // never appear (dead toggle). Operational counters still exclude tests.
+  const mainSource = readFileSync(new URL("../../electron/main.cjs", import.meta.url), "utf8");
+  const overviewSlice = mainSource.slice(
+    mainSource.indexOf("async function incidentsOverview"),
+    mainSource.indexOf("async function incidentsDetail"),
+  );
+  assert.match(overviewSlice, /include_test: "1"/);
 });
 
 test("App routes the incidents view with account navigation to Profiles", () => {

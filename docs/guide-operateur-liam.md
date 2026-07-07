@@ -98,6 +98,38 @@ Le bandeau peut afficher **Dispatcher arrêté** alors que la connexion BotApp e
 
 ---
 
+## Monitoring → Incidents (reprise contrôlée P3)
+
+Route BotApp : **Monitoring → Incidents**.
+
+### Lien reçu sur Slack ou Discord
+
+1. Cliquer le lien **Dashboard** dans la notification (contient `incident_id`).
+2. L’Admin web s’ouvre directement sur le bon incident (même incident test).
+3. Lire l’état **Reprise contrôlée** :
+   - **Prêt à relancer** = bouton disponible (incident éligible, pas encore armé).
+   - **Reprise autorisée — en attente du prochain tick** = autorisation déjà
+     armée ; attendre le prochain tick Auto Restart (Scheduler doit être ON).
+   - **Reprise demandée** = reprise consommée, run request créée.
+   - **Nouvelle intervention requise** = échec de reprise, intervention humaine.
+
+### Dans BotApp
+
+1. Ouvrir **Monitoring → Incidents**.
+2. Si l’incident est un test interne : cliquer **Show test incidents (N)** en
+   haut de la liste (toggle client-side).
+3. Cliquer la ligne pour ouvrir le drawer ; même logique de bouton et d’états.
+
+**Important :**
+
+- Le clic **Prêt à relancer** n’exécute **jamais** un run localement.
+- Tant que le **Scheduler est OFF**, aucune reprise automatique ne part —
+  l’autorisation armée reste visible en attente.
+- Ne pas cliquer **Start**, **Play** ou **Auto Login** pour « débloquer » une
+  reprise : corriger le problème sur le téléphone, puis **Prêt à relancer**.
+
+---
+
 ## Cas application noire ou vide
 
 1. Quitter complètement BotApp (`Cmd + Q`).
