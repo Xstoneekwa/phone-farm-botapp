@@ -622,6 +622,9 @@ export type BotProfile = {
   activeRunId?: string | null;
   activeRunStatus?: string | null;
   runtimeIndicator?: ProfileRuntimeIndicator;
+  runControlPhase?: "idle" | "stopping" | "cleanup_in_progress" | "stop_requires_attention" | "manual_restart_required" | null;
+  runControlLabel?: string | null;
+  operatorStopSuppressed?: boolean;
 };
 
 export type BotAppClientAccountStatus = "active" | "pending" | "onboarding" | "paused" | "cancelled" | "unknown";

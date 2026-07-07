@@ -150,7 +150,32 @@ Dans **Devices**, un téléphone leased affiche :
 - **Current operation** (type d’opération : manual run, scheduler, login, etc.) ;
 - heartbeat + lease combinés (auto-refresh inchangé).
 
-Si **Play** ou **Auto Login** est bloqué sur un profil :
+---
+
+## Operator Stop (CP5)
+
+**Règle :** **Stop** est disponible pour tout run actif ou request cancellable,
+quelle que soit l’origine (Scheduler, Auto Restart, P3 resume, Play manuel).
+
+États anglais visibles :
+
+- `Stopping…`
+- `Cleanup in progress`
+- `Stopped by operator — manual restart required`
+- `Stop requires attention` (échec cleanup — intervention humaine)
+
+Après un Stop réussi dans la fenêtre courante :
+
+- aucun redémarrage automatique (Scheduler / Auto Restart / P3) ;
+- seul **Play** manuel peut relancer le compte ;
+- à la fenêtre quotidienne suivante, le Scheduler peut à nouveau gérer le compte.
+
+**Play** reste indisponible tant que le cleanup n’est pas terminé (lease libérée,
+run/request terminal).
+
+---
+
+Si **Play** ou **Auto Login** est bloqué sur un profil (autres raisons) :
 
 - reason **`device_lease_unavailable`** / message **Device currently in use** ;
 - **aucune préemption** : le run en cours sur le téléphone n’est pas stoppé.

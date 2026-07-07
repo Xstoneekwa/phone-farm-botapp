@@ -56,9 +56,19 @@ export function isStartDisabled(profile: BotProfile) {
 }
 
 export function startDisabledReason(profile: BotProfile) {
+  const runControlPhase = String(
+    (profile as BotProfile & { runControlPhase?: string }).runControlPhase || "",
+  ).trim().toLowerCase();
+  if (runControlPhase === "stopping" || runControlPhase === "cleanup_in_progress" || runControlPhase === "stop_requires_attention") {
+    if (runControlPhase === "stop_requires_attention") return "Stop requires attention.";
+    return "Cleanup in progress. Manual restart will be available after the active operation fully stops.";
+  }
   const eligibility = projectRunEligibility(profile);
   if (eligibility.ok_to_start) return null;
   if (START_PENDING_REASONS.has(eligibility.reason)) return "A manual run is already requested for this account.";
+  if (eligibility.reason === "stop_cleanup_in_progress") {
+    return "Cleanup in progress. Manual restart will be available after the active operation fully stops.";
+  }
   return eligibility.message || "Manual run eligibility is blocked.";
 }
 

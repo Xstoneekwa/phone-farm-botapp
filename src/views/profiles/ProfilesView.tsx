@@ -1379,6 +1379,11 @@ function GenericConfirmation({ profile }: { profile: BotProfile }) {
         <span>Readiness</span><code>{profile.readiness}</code>
         <span>Eligibility</span><code>{profile.eligibilityDetail.status}</code>
         <span>Primary block</span><code className="mono">{profile.eligibilityDetail.primary_block_reason || "none"}</code>
+        {profile.runControlLabel ? (
+          <>
+            <span>Run control</span><code className="mono">{profile.runControlLabel}</code>
+          </>
+        ) : null}
         <span>Reason label</span><code>{profile.eligibilityDetail.reason_label}</code>
         <span>Description</span><span>{profile.eligibilityDetail.reason_description}</span>
         <span>Credential status</span><code>{profile.credentialStatus}</code>
