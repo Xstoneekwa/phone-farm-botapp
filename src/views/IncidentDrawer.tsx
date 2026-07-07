@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Drawer } from "../design/components";
+import { incidentStateCopy, recoveryReasonCopy } from "./incidents-view";
 import "./incident-drawer.css";
 
 type IncidentRow = {
@@ -18,11 +19,31 @@ type IncidentRow = {
   executionWorkerId?: string | null;
 };
 
+/** P3 recovery view: computed server-side, read-only for the drawer. */
+type IncidentRecovery = {
+  state?: string;
+  eligible?: boolean;
+  reason?: string | null;
+  windowStart?: string | null;
+  windowEnd?: string | null;
+  windowActive?: boolean;
+  authorizationId?: string | null;
+  authorizationStatus?: string | null;
+};
+
 type IncidentDetail = {
   incident: IncidentRow;
+  recovery?: IncidentRecovery;
   timeline?: Array<{ actionType?: string; message?: string; createdAt?: string }>;
   notifications?: Array<{ channel?: string; status?: string; attemptCount?: number }>;
 };
+
+function formatWindowBound(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
 
 export function IncidentDrawer({
   open,
@@ -105,8 +126,17 @@ export function IncidentDrawer({
   }
 
   const incident = detail?.incident;
+  const recovery = detail?.recovery;
   const canAcknowledge = incident?.status === "open";
   const canResolve = incident?.status === "open" || incident?.status === "acknowledged";
+  // P3: "Prêt à relancer" is available ONLY when the backend proved the
+  // incident is recovery-eligible in the still-active window. The click never
+  // launches a run: it arms one authorization consumed by Auto Restart.
+  const canReadyToResume = recovery?.eligible === true;
+  const recoveryStateCopy = recovery?.state && recovery.state !== "none"
+    ? incidentStateCopy(recovery.state === "awaiting_human_resume_authorization" ? "action_required" : recovery.state)
+    : null;
+  const recoveryReason = recoveryReasonCopy(recovery?.reason ?? null);
 
   if (!open) return null;
 
@@ -151,6 +181,44 @@ export function IncidentDrawer({
               </ul>
             </section>
           ) : null}
+          {recovery && (recovery.state !== "none" || recovery.reason) ? (
+            <section className="incident-drawer-recovery" data-testid="incident-drawer-recovery">
+              <h4>Reprise contrôlée</h4>
+              <dl className="incident-drawer-meta">
+                <div>
+                  <dt>État recovery</dt>
+                  <dd data-testid="incident-recovery-state">
+                    {recoveryStateCopy ? recoveryStateCopy.label : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Fenêtre de reprise</dt>
+                  <dd data-testid="incident-recovery-window">
+                    {recovery.windowStart || recovery.windowEnd
+                      ? `${formatWindowBound(recovery.windowStart)} → ${formatWindowBound(recovery.windowEnd)}${recovery.windowActive ? " (active)" : " (fermée)"}`
+                      : "—"}
+                  </dd>
+                </div>
+                {recovery.authorizationStatus ? (
+                  <div>
+                    <dt>Autorisation</dt>
+                    <dd data-testid="incident-recovery-authorization">
+                      {recovery.authorizationStatus === "armed"
+                        ? "Armée — en attente du prochain tick"
+                        : recovery.authorizationStatus === "consumed"
+                          ? "Autorisation consommée"
+                          : recovery.authorizationStatus === "expired"
+                            ? "Fenêtre expirée"
+                            : recovery.authorizationStatus}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+              {!canReadyToResume && recoveryReason ? (
+                <p className="incident-drawer-recovery-reason" data-testid="incident-recovery-reason">{recoveryReason}</p>
+              ) : null}
+            </section>
+          ) : null}
           <section className="incident-drawer-audit" data-testid="incident-drawer-audit-timeline">
             <h4>Canonical audit timeline</h4>
             {detail?.timeline?.length ? (
@@ -171,15 +239,27 @@ export function IncidentDrawer({
                 Acknowledge
               </button>
             ) : null}
+            {canReadyToResume ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                data-testid="botapp-incident-action-ready-to-resume"
+                disabled={Boolean(acting)}
+                onClick={() => void runAction("ready_to_resume", { resolution_note: resolutionNote })}
+              >
+                Prêt à relancer
+              </button>
+            ) : null}
             {canResolve ? (
-              <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-resolve" disabled={Boolean(acting)} onClick={() => void runAction("resolve", { resolution_note: resolutionNote, resume_scheduling: true })}>
+              <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-resolve" disabled={Boolean(acting)} onClick={() => void runAction("resolve", { resolution_note: resolutionNote })}>
                 Resolve after verification
               </button>
             ) : null}
             <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-keep-paused" disabled={Boolean(acting)} onClick={() => void runAction("keep_paused", { resolution_note: resolutionNote })}>
               Keep paused
             </button>
-            {/* P2: no manual retry / relaunch action. Reserved for the next checkpoint. */}
+            {/* No manual retry / relaunch action: "Prêt à relancer" only arms
+                an authorization; Auto Restart alone creates the resume. */}
           </div>
         </div>
       ) : null}

@@ -89,8 +89,14 @@ export interface IncidentViewCounters {
 export function countIncidents(rows: IncidentRowView[]): IncidentViewCounters {
   const operational = rows.filter((row) => !row.isTest);
   return {
-    open: operational.filter((row) => row.displayState === "open" || row.displayState === "acknowledged").length,
-    actionRequired: operational.filter((row) => row.displayState === "action_required").length,
+    open: operational.filter((row) =>
+      row.displayState === "open"
+      || row.displayState === "acknowledged"
+      || row.displayState === "ready_to_resume"
+      || row.displayState === "resume_requested").length,
+    actionRequired: operational.filter((row) =>
+      row.displayState === "action_required"
+      || row.displayState === "reintervention_required").length,
     deliveryDegraded: operational.filter((row) => row.deliveryState === "delivery_degraded").length,
     total: operational.length,
   };
@@ -98,11 +104,38 @@ export function countIncidents(rows: IncidentRowView[]): IncidentViewCounters {
 
 export const INCIDENT_STATE_COPY: Record<string, { label: string; tone: IncidentBadgeTone }> = {
   open: { label: "Open", tone: "warning" },
-  action_required: { label: "Action required", tone: "error" },
+  action_required: { label: "Action requise", tone: "error" },
   acknowledged: { label: "Acknowledged", tone: "info" },
-  resolved: { label: "Resolved", tone: "success" },
+  resolved: { label: "Résolu", tone: "success" },
   ignored: { label: "Ignored", tone: "neutral" },
+  // P3 recovery display states (human-confirmed resume workflow).
+  ready_to_resume: { label: "Prêt à relancer", tone: "info" },
+  resume_requested: { label: "Reprise demandée", tone: "info" },
+  reintervention_required: { label: "Nouvelle intervention requise", tone: "error" },
 };
+
+/**
+ * Safe operator copy for recovery reasons (stable codes from the backend).
+ * The "Prêt à relancer" button itself never creates a run: it arms one
+ * durable authorization consumed only by the Auto Restart tick.
+ */
+export const RECOVERY_REASON_COPY: Record<string, string> = {
+  awaiting_next_scheduler_tick: "Autorisation armée — en attente du prochain tick Auto Restart.",
+  resume_window_closed: "Fenêtre de session fermée — aucune reprise armable.",
+  resume_authorization_expired: "Fenêtre expirée — l'autorisation de reprise a expiré.",
+  resume_authorization_already_armed: "Une autorisation de reprise est déjà armée.",
+  resume_retry_window_exhausted: "Budget de reprise déjà consommé pour cette fenêtre.",
+  resume_plan_missing: "Aucun resume plan pour ce run (run antérieur à P3).",
+  resume_plan_not_recoverable: "Incident non récupérable automatiquement — résolution simple.",
+  incident_not_active: "Incident déjà résolu ou ignoré.",
+  recovery_state_unavailable: "État recovery indisponible pour le moment.",
+};
+
+export function recoveryReasonCopy(reason: string | null | undefined): string | null {
+  const code = str(reason);
+  if (!code) return null;
+  return RECOVERY_REASON_COPY[code] ?? code;
+}
 
 export function incidentStateCopy(displayState: string): { label: string; tone: IncidentBadgeTone } {
   return INCIDENT_STATE_COPY[displayState] ?? { label: displayState || "unknown", tone: "neutral" };

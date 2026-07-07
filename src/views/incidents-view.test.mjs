@@ -9,6 +9,7 @@ import {
   incidentStateCopy,
   normalizeIncidentList,
   normalizeIncidentRow,
+  recoveryReasonCopy,
   severityTone,
   shouldPollIncidents,
 } from "./incidents-view.ts";
@@ -134,6 +135,55 @@ test("Incidents view never exposes a run-relaunch action (P2)", () => {
 test("IncidentDrawer no longer offers manual retry in P2", () => {
   assert.doesNotMatch(drawerSource, /botapp-incident-action-manual-retry/);
   assert.doesNotMatch(drawerSource, /runAction\("manual_retry"\)/);
+});
+
+test("P3 recovery display states have exact French operator labels", () => {
+  assert.equal(incidentStateCopy("ready_to_resume").label, "Prêt à relancer");
+  assert.equal(incidentStateCopy("resume_requested").label, "Reprise demandée");
+  assert.equal(incidentStateCopy("reintervention_required").label, "Nouvelle intervention requise");
+  assert.equal(incidentStateCopy("reintervention_required").tone, "error");
+});
+
+test("P3 recovery states are counted as active incidents", () => {
+  const rows = normalizeIncidentList([
+    { id: "a", status: "open", displayState: "ready_to_resume", incident_type: "run_identity_verification_failed" },
+    { id: "b", status: "open", displayState: "resume_requested", incident_type: "run_identity_verification_failed" },
+    { id: "c", status: "open", displayState: "reintervention_required", incident_type: "run_identity_verification_failed" },
+  ]);
+  const counters = countIncidents(rows);
+  assert.equal(counters.open, 2);
+  assert.equal(counters.actionRequired, 1);
+});
+
+test("recovery reasons map to safe operator copy", () => {
+  assert.match(recoveryReasonCopy("awaiting_next_scheduler_tick"), /prochain tick/);
+  assert.match(recoveryReasonCopy("resume_authorization_expired"), /expirée?/i);
+  assert.match(recoveryReasonCopy("resume_retry_window_exhausted"), /consommé/);
+  assert.equal(recoveryReasonCopy("unknown_reason_code"), "unknown_reason_code");
+  assert.equal(recoveryReasonCopy(""), null);
+});
+
+test("drawer shows 'Prêt à relancer' only for backend-proven eligible incidents", () => {
+  // Exact visible label, gated on recovery.eligible from the detail endpoint.
+  assert.match(drawerSource, /Prêt à relancer/);
+  assert.match(drawerSource, /recovery\?\.eligible === true/);
+  assert.match(drawerSource, /runAction\("ready_to_resume"/);
+  // The button never starts anything locally: no run/tick primitives.
+  assert.doesNotMatch(drawerSource, /runs\/start|Start run|forceTick|auto-restart\/tick/i);
+});
+
+test("drawer displays the resume window and authorization states", () => {
+  assert.match(drawerSource, /incident-recovery-window/);
+  assert.match(drawerSource, /Autorisation consommée/);
+  assert.match(drawerSource, /Fenêtre expirée/);
+  assert.match(drawerSource, /en attente du prochain tick/);
+});
+
+test("drawer keeps a simple resolve action and drops the dead resume flag", () => {
+  assert.match(drawerSource, /runAction\("resolve"/);
+  // resume_scheduling was ignored by the backend; the canonical resume
+  // authorization now goes through ready_to_resume only.
+  assert.doesNotMatch(drawerSource, /resume_scheduling/);
 });
 
 test("App routes the incidents view with account navigation to Profiles", () => {
