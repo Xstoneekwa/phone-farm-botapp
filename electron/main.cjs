@@ -4067,9 +4067,19 @@ function asDashboardDevice(row, index, localAdb) {
     viewUnavailableReason: serial ? localState === "not_seen" ? "Local ADB does not currently see this phone." : null : "ADB serial unavailable.",
     battery: 0,
     cloneCount: instanceCount,
-    activeSession: null,
+    activeSession: row?.ui_lease_status === "active"
+      ? {
+        id: String(row?.ui_lease_request_id || row?.ui_lease_expires_at || id),
+        profileId: String(row?.ui_lease_account_id || ""),
+        username: String(row?.ui_lease_account_username || "active operation"),
+        state: "active_ui",
+        startedAt: String(row?.ui_lease_expires_at || ""),
+      }
+      : null,
     nextBufferEndsAt: null,
-    lockReason: row?.heartbeat_warning || null,
+    lockReason: row?.ui_lease_status === "active"
+      ? String(row?.ui_lease_operator_label || "Device currently in use")
+      : (row?.heartbeat_warning || null),
     backendStatus: String(row?.status || "unknown"),
     backendLastSeenAt: String(row?.heartbeat_last_seen_at || row?.last_seen_at || ""),
     backendHeartbeatDbStatus: String(row?.heartbeat_status || row?.status || "unknown").toLowerCase(),

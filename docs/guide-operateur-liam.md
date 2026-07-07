@@ -140,6 +140,26 @@ vue sont en **anglais** (badges, drawer, boutons recovery).
 
 ---
 
+## Devices — exclusivité téléphone (CP3)
+
+**Règle :** 1 téléphone physique = 1 seule opération UI active (tous clones).
+
+Dans **Devices**, un téléphone leased affiche :
+
+- **Device currently in use** (pas « idle » si une lease active existe) ;
+- **Current operation** (type d’opération : manual run, scheduler, login, etc.) ;
+- heartbeat + lease combinés (auto-refresh inchangé).
+
+Si **Play** ou **Auto Login** est bloqué sur un profil :
+
+- reason **`device_lease_unavailable`** / message **Device currently in use** ;
+- **aucune préemption** : le run en cours sur le téléphone n’est pas stoppé.
+
+Le lease n’est **pas** un Schedule, un slot provisioning (CP6), ni une
+réservation future.
+
+---
+
 ## Cas application noire ou vide
 
 1. Quitter complètement BotApp (`Cmd + Q`).
