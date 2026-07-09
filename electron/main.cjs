@@ -1,6 +1,6 @@
 /* global fetch, setTimeout */
 
-const { app, BrowserWindow, ipcMain, session, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, powerMonitor, powerSaveBlocker, session, shell } = require("electron");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -4706,7 +4706,6 @@ function profileFromManageAccount(account, index, devices) {
   const hardLoginBlock = /checkpoint|challenge|password_invalid|missing_credentials/i.test(String(account?.loginStatus || account?.login_status || ""));
   const blocked = Boolean(
     account?.blockingCampaign
-    || (account?.pendingActionsCount > 0 && !loginVerificationPending)
     || hardLoginBlock,
   );
   const device = resolveProfileDevice(account, devices);
@@ -7181,19 +7180,82 @@ function schedulerRuntimeDeps() {
   };
 }
 
+let schedulerRuntimePowerSaveBlockerId = null;
+let schedulerRuntimeSelfHealHandle = null;
+
+function startSchedulerRuntimePowerSaveBlocker() {
+  if (schedulerRuntimePowerSaveBlockerId !== null) return;
+  schedulerRuntimePowerSaveBlockerId = powerSaveBlocker.start("prevent-app-suspension");
+}
+
+function stopSchedulerRuntimePowerSaveBlocker() {
+  if (schedulerRuntimePowerSaveBlockerId === null) return;
+  powerSaveBlocker.stop(schedulerRuntimePowerSaveBlockerId);
+  schedulerRuntimePowerSaveBlockerId = null;
+}
+
 async function schedulerRuntimeStatus() {
-  return botappSchedulerRuntime.getSchedulerRuntimeStatus(schedulerRuntimeDeps());
+  const local = await botappSchedulerRuntime.getSchedulerRuntimeStatus(schedulerRuntimeDeps());
+  let serverHealth = null;
+  try {
+    serverHealth = await dashboardGet("botapp_scheduler_runtime_health");
+  } catch {
+    serverHealth = null;
+  }
+  const dailyGatePassing = Boolean(serverHealth?.schedulerConnected);
+  return {
+    ...local,
+    server_health: serverHealth,
+    daily_gate_passing: dailyGatePassing,
+    heartbeat_age_seconds: serverHealth?.heartbeatAgeSeconds ?? local.heartbeatAgeSeconds ?? null,
+    daily_gate_reason: serverHealth?.reason || (dailyGatePassing ? "BotApp scheduler runtime is active." : local.message),
+  };
 }
 
 async function ensureSchedulerRuntimeAutostart() {
   if (shouldSkipIntegrationAutostart()) {
     return { ok: false, status: "deferred", message: "Integration autostart skipped." };
   }
-  return botappSchedulerRuntime.startSchedulerRuntime(schedulerRuntimeDeps());
+  const result = await botappSchedulerRuntime.startSchedulerRuntime(schedulerRuntimeDeps());
+  startSchedulerRuntimePowerSaveBlocker();
+  return result;
 }
 
 async function stopSchedulerRuntimeVoluntarily() {
+  stopSchedulerRuntimePowerSaveBlocker();
   return botappSchedulerRuntime.stopSchedulerRuntime(schedulerRuntimeDeps(), { voluntary: true });
+}
+
+function attachSchedulerRuntimeResilienceHooks() {
+  const recoverSchedulerRuntime = () => {
+    void ensureSchedulerRuntimeAutostart().catch(() => undefined);
+  };
+
+  powerMonitor.on("resume", recoverSchedulerRuntime);
+  app.on("activate", recoverSchedulerRuntime);
+
+  if (schedulerRuntimeSelfHealHandle) clearInterval(schedulerRuntimeSelfHealHandle);
+  schedulerRuntimeSelfHealHandle = setInterval(() => {
+    void (async () => {
+      if (shouldSkipIntegrationAutostart()) return;
+      const status = await botappSchedulerRuntime.getSchedulerRuntimeStatus(schedulerRuntimeDeps()).catch(() => null);
+      if (!status) return;
+      if (!status.running && !status.voluntary_shutdown) {
+        await ensureSchedulerRuntimeAutostart().catch(() => undefined);
+        return;
+      }
+      if (!status.running || status.voluntary_shutdown) return;
+      const relay = await botappRelayHealth().catch(() => null);
+      if (!relay?.ok || !relay?.relay_authenticated) return;
+      const ageSeconds = Number(status.heartbeatAgeSeconds);
+      if (!Number.isFinite(ageSeconds) || ageSeconds >= 45) {
+        await botappSchedulerRuntime.tickSchedulerRuntime(schedulerRuntimeDeps(), { force: true }).catch(() => undefined);
+      }
+    })();
+  }, 120_000);
+  if (typeof schedulerRuntimeSelfHealHandle.unref === "function") {
+    schedulerRuntimeSelfHealHandle.unref();
+  }
 }
 
 async function dispatcherStatus() {
@@ -7603,6 +7665,7 @@ app.whenReady().then(async () => {
     attachRelayHeadersForDashboardAvatars();
     registerRuntimeIpc();
     registerDeviceViewIpc();
+    attachSchedulerRuntimeResilienceHooks();
     if (!app.isDefaultProtocolClient("botapp")) {
       app.setAsDefaultProtocolClient("botapp");
     }

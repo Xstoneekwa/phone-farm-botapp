@@ -38,6 +38,11 @@ test("BotApp profile normalization blocks social eligibility until login is conn
   assert.match(mainSource, /readEligibility\(account, blocked, loginStatus\)/);
 });
 
+test("BotApp does not treat CP4 scheduled_session_preflight pending as social blocked", () => {
+  assert.match(mainSource, /const blocked = Boolean\([\s\S]*account\?\.blockingCampaign[\s\S]*hardLoginBlock/);
+  assert.doesNotMatch(mainSource, /pendingActionsCount > 0 && !loginVerificationPending/);
+});
+
 test("BotApp relay consumes backend primaryBlockReason instead of stale generic social blocked", () => {
   assert.match(mainSource, /primaryBlockReason/);
   assert.match(mainSource, /primary_block_reason/);
