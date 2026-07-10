@@ -1617,6 +1617,7 @@ const runtimeIpcHandlers = [
   "botapp:auto-restart:execute",
   "botapp:scheduler:status",
   "botapp:scheduler:set-enabled",
+  "botapp:scheduler:approve-preflight-retry",
   "botapp:incidents:list",
   "botapp:incidents:detail",
   "botapp:incidents:action",
@@ -2456,6 +2457,17 @@ const botappEndpointRegistry = [
     status: "active",
     testStrategy: "fetch",
   },
+  {
+    id: "scheduler_preflight_retry_review",
+    name: "Scheduler preflight retry review",
+    method: "POST",
+    path: "/api/instagram-dashboard/dashboard-actions/preflight-retry-review",
+    usedBy: ["Scheduler"],
+    purpose: "Operator-reviewed preflight retry approval (no direct account_session enqueue)",
+    authRequired: true,
+    status: "active",
+    testStrategy: "safe_post",
+  },
 ];
 
 function endpointById(id) {
@@ -3089,6 +3101,23 @@ async function schedulerSetEnabled(input) {
     auto_restart_enabled: enabled,
   });
   if (!result.ok) return { ok: false, error: result.error || "Could not update the Scheduler switch." };
+  return { ok: true, data: result.data };
+}
+
+async function schedulerApprovePreflightRetry(input) {
+  const actionId = String(input?.action_id || "").trim();
+  const accountId = String(input?.account_id || "").trim();
+  const resolutionNote = String(input?.resolution_note || "").trim();
+  if (!actionId || !accountId) {
+    return { ok: false, error: "Missing preflight retry review payload." };
+  }
+  const result = await dashboardRequestResult("POST", "scheduler_preflight_retry_review", {
+    action_id: actionId,
+    account_id: accountId,
+    source: "botapp_relay",
+    ...(resolutionNote ? { resolution_note: resolutionNote } : {}),
+  });
+  if (!result.ok) return { ok: false, error: result.error || "Could not approve preflight retry." };
   return { ok: true, data: result.data };
 }
 
@@ -4449,6 +4478,15 @@ function readDeviceAvailability(account, device) {
 }
 
 function readProfileStatus(account, blocked) {
+  const activeRequest = String(account?.activeRunRequestStatus || account?.active_run_request_status || "").trim().toLowerCase();
+  const activeRun = String(account?.activeRunStatus || account?.active_run_status || "").trim().toLowerCase();
+  if (
+    activeRequest === "running"
+    || activeRun === "running"
+    || ["claimed", "starting", "stopping", "canceling", "queued"].includes(activeRequest)
+  ) {
+    return "running";
+  }
   const raw = normalizeMatchText(account?.runStatus || account?.run_status || account?.currentRunStatus || account?.current_run_status || account?.status);
   if (raw.includes("running")) return "running";
   if (raw.includes("pause")) return "paused";
@@ -5052,14 +5090,34 @@ function summarizeProfileGroup(profiles) {
   };
 }
 
+const ACTIVE_DEVICE_RUNTIME_STATUSES = new Set(["pending", "queued", "claimed", "running", "starting", "stopping", "canceling"]);
+
+function profileRuntimeActive(profile) {
+  const request = String(profile?.activeRunRequestStatus || profile?.active_run_request_status || "").trim().toLowerCase();
+  const run = String(profile?.activeRunStatus || profile?.active_run_status || "").trim().toLowerCase();
+  const runtimeState = String(profile?.runtimeIndicator?.state || "").trim().toLowerCase();
+  return (
+    profile?.status === "running"
+    || ACTIVE_DEVICE_RUNTIME_STATUSES.has(request)
+    || ACTIVE_DEVICE_RUNTIME_STATUSES.has(run)
+    || runtimeState === "active"
+  );
+}
+
+function resolveGroupPhoneStatus(groupProfiles, fallbackStatus) {
+  if (groupProfiles.some((profile) => profileRuntimeActive(profile))) return "active";
+  return fallbackStatus;
+}
+
 function buildDeviceProfileGroup(device, groupProfiles) {
+  const fallbackStatus = device.status === "offline" ? "inactive" : groupProfiles.some((profile) => profile.status === "running") ? "running" : "idle";
   return {
     deviceId: device.id,
     deviceLabel: device.name,
     deviceSerial: device.adbSerial,
     deviceSerialLabel: device.shortSerial,
     deviceStatus: device.status,
-    phoneStatus: device.status === "offline" ? "inactive" : groupProfiles.some((profile) => profile.status === "running") ? "running" : "idle",
+    phoneStatus: resolveGroupPhoneStatus(groupProfiles, fallbackStatus),
     deviceView: {
       available: device.viewAvailable,
       unavailableReason: device.viewUnavailableReason,
@@ -5096,7 +5154,7 @@ function buildProfileBackedDeviceGroup(deviceId, groupProfiles) {
     deviceSerial: "",
     deviceSerialLabel: requiresAttention ? "Device/app instance requires review" : "Device inventory pending",
     deviceStatus: requiresAttention ? "maintenance" : "reserved",
-    phoneStatus: groupProfiles.some((profile) => profile.status === "running") ? "running" : "idle",
+    phoneStatus: resolveGroupPhoneStatus(groupProfiles, groupProfiles.some((profile) => profile.status === "running") ? "running" : "idle"),
     deviceView: {
       available: false,
       unavailableReason: requiresAttention
@@ -7477,6 +7535,10 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:scheduler:set-enabled", (_event, input) => schedulerSetEnabled(input).catch((error) => ({
     ok: false,
     error: safeRuntimeError(error, "Could not update the Scheduler switch."),
+  })));
+  ipcMain.handle("botapp:scheduler:approve-preflight-retry", (_event, input) => schedulerApprovePreflightRetry(input).catch((error) => ({
+    ok: false,
+    error: safeRuntimeError(error, "Could not approve preflight retry."),
   })));
   ipcMain.handle("botapp:data:overview", () => botappOverviewData());
   ipcMain.handle("botapp:relay:health", () => botappRelayHealth());

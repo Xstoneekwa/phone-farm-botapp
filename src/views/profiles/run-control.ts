@@ -111,11 +111,16 @@ export function shouldPollProfilesLiveCounters(profile: BotProfile) {
   const eligibilityReason = String(profile.eligibilityReason || eligibility.reason || "").trim().toLowerCase();
   const activeRequestStatus = readActiveRunRequestStatus(profile);
   const activeRunStatus = readActiveRunStatus(profile);
+  const runtimeState = String(profile.runtimeIndicator?.state || "").trim().toLowerCase();
+  const profileRunStatus = profile as BotProfile & { currentRunStatus?: string; current_run_status?: string };
+  const currentRunStatus = String(profileRunStatus.currentRunStatus || profileRunStatus.current_run_status || "").trim().toLowerCase();
   return (
     profile.status === "running"
     || profile.runtimeLock !== "none"
     || ACTIVE_RUN_REQUEST_STATUSES.has(activeRequestStatus)
     || ACTIVE_RUN_STATUSES.has(activeRunStatus)
+    || runtimeState === "active"
+    || currentRunStatus === "running"
     || STOPPABLE_REASONS.has(eligibility.reason)
     || STOPPABLE_REASONS.has(eligibilityReason)
   );
@@ -124,7 +129,12 @@ export function shouldPollProfilesLiveCounters(profile: BotProfile) {
 export function runtimeIndicatorState(profile: BotProfile): "idle" | "active" | "error" {
   if (isRuntimeActive(profile)) return "active";
   const state = String(profile.runtimeIndicator?.state || "").trim().toLowerCase();
-  return state === "error" ? "error" : "idle";
+  if (state === "error") return "error";
+  const exitCode = profile.runtimeIndicator?.lastRunExitCode;
+  if (exitCode !== null && exitCode !== undefined && Number(exitCode) !== 0) return "error";
+  const lastRunStatus = String(profile.runtimeIndicator?.lastRunStatus || "").trim().toLowerCase();
+  if (["failed", "error", "aborted"].includes(lastRunStatus)) return "error";
+  return "idle";
 }
 
 export function displayRunCounters(profile: BotProfile) {

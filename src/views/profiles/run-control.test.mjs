@@ -58,6 +58,12 @@ test("Runtime indicator maps active, abnormal, and normal idle states", () => {
   assert.equal(runtimeIndicatorState(profile({ activeRunRequestStatus: "claimed" })), "active");
   assert.equal(runtimeIndicatorState(profile({ runtimeIndicator: { state: "error", reason: "partial_safe_stopped" } })), "error");
   assert.equal(runtimeIndicatorState(profile({ runtimeIndicator: { state: "idle", reason: "last_run_normal" } })), "idle");
+  assert.equal(runtimeIndicatorState(profile({ runtimeIndicator: { state: "idle", lastRunExitCode: 1, lastRunStatus: "failed" } })), "error");
+});
+
+test("Live profile counters poll for schedule-session runtime projection", () => {
+  assert.equal(shouldPollProfilesLiveCounters(profile({ runtimeIndicator: { state: "active", reason: "active_run" } })), true);
+  assert.equal(shouldPollProfilesLiveCounters(profile({ currentRunStatus: "running", eligibility: "blocked_now", eligibilityReason: "already_running" })), true);
 });
 
 test("Displayed counters switch to current run counters while runtime is active", () => {
