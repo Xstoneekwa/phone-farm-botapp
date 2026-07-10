@@ -99,3 +99,68 @@
   color: rgba(148, 163, 184, 0.95);
   white-space: nowrap;
 }
+
+.scheduler-note {
+  margin: 0 0 12px;
+  color: rgba(148, 163, 184, 0.95);
+  font-size: 13px;
+}
+
+.scheduler-pipeline {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.scheduler-pipeline-row {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.scheduler-pipeline-head {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.scheduler-pipeline-meta {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.scheduler-pipeline-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.scheduler-pipeline-details dt {
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.scheduler-pipeline-details dd {
+  margin: 0;
+  font-size: 13px;
+}
+
+.scheduler-pipeline-absent {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.scheduler-note {
+  display: block;
+  margin: 0 0 12px;
+  color: rgba(148, 163, 184, 0.95);
+  font-size: 13px;
+}

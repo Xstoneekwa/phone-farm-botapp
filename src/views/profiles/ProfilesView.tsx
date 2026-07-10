@@ -18,6 +18,7 @@ import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifec
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
 import { buildRestoreLoginScreenPayload } from "./restore-login-screen-flow";
 import { buildStartPayload, buildStopPayload, displayCounterMetrics, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
+import { socialBadge, socialBlockLabel } from "./profile-growth-badge";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
@@ -236,25 +237,7 @@ function connectBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
   return { label: "login pending", tone: "neutral" };
 }
 
-export function socialBlockLabel(reason: string) {
-  const normalized = reason.toLowerCase();
-  if (normalized.includes("review_login_package_mismatch") || normalized.includes("identity_mismatch")) return "social review: account mismatch";
-  if (normalized.includes("blocking_dashboard_action")) return "social review required";
-  if (normalized.includes("welcome_real_send_disabled")) return "growth blocked: Welcome DM disabled";
-  if (normalized.includes("outreach_real_send_disabled")) return "growth blocked: Outreach DM disabled";
-  if (normalized.includes("quota") || normalized.includes("cap")) return "growth blocked: quota";
-  return "social blocked: reason required";
-}
-
-export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
-  if (profile.eligibility === "can_start") return { label: "growth ready", tone: "success" };
-  const reason = `${profile.eligibilityReason} ${profile.eligibilityDetail.primary_block_reason} ${profile.eligibilityDetail.reason_label}`.toLowerCase();
-  if (reason.includes("login")) return { label: "social needs login", tone: "warning" };
-  if (reason.includes("target") || reason.includes("ct")) return { label: "growth needs targets", tone: "warning" };
-  if (reason.includes("schedule") || reason.includes("window")) return { label: "growth waiting slot", tone: "warning" };
-  if (reason.includes("phone") || reason.includes("device") || reason.includes("assignment")) return { label: "growth waiting device", tone: "warning" };
-  return { label: socialBlockLabel(reason), tone: "warning" };
-}
+export { socialBadge, socialBlockLabel } from "./profile-growth-badge";
 
 function AccountRow({
   profile,

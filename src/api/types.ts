@@ -2423,8 +2423,26 @@ export type BotAppSchedulerRuntimeHealth = {
   dispatcher_observed_status: string;
   lastPublishedAt: string | null;
   lastError: string | null;
+  consecutivePublishFailures?: number;
+  heartbeatAgeSeconds?: number | null;
+  heartbeat_age_seconds?: number | null;
+  daily_gate_passing?: boolean;
+  daily_gate_reason?: string | null;
+  server_health?: {
+    status?: string;
+    schedulerConnected?: boolean;
+    heartbeatAgeSeconds?: number | null;
+    reason?: string;
+  } | null;
   message: string;
   checkedAt: string;
+};
+
+export type BotAppSchedulerDailyRuntimeGate = {
+  scheduler_connected: boolean;
+  status: string;
+  heartbeat_age_seconds: number | null;
+  reason: string;
 };
 
 /** Read-only canonical scheduler observability contract (backend read-model). */
@@ -2485,8 +2503,67 @@ export type BotAppSchedulerStatus = {
   recent_decisions: BotAppSchedulerRecentDecision[];
   settings_updated_at: string | null;
   daily_engine?: BotAppSchedulerDailyEngine | null;
+  daily_runtime_gate?: BotAppSchedulerDailyRuntimeGate | null;
   windows_horizon_hours?: number;
   upcoming_windows?: BotAppSchedulerUpcomingWindow[];
+  daily_scheduler_pipeline?: BotAppSchedulerDailyPipeline | null;
+};
+
+export type BotAppSchedulerDailyPipelineGlobal = {
+  last_cron_at: string | null;
+  last_success_at: string | null;
+  accounts_evaluated: number;
+  last_evaluated_account_id: string | null;
+  last_evaluated_username: string | null;
+  last_daily_block_reason: string | null;
+};
+
+export type BotAppSchedulerDailyPipelinePreflight = {
+  preflight_id: string;
+  request_id: string | null;
+  phase: "t10" | "late" | null;
+  status: string;
+  reason_code: string | null;
+  screen_type: string | null;
+  detection_reason: string | null;
+  identity_guard_stage: string | null;
+  expected_username: string | null;
+  actual_logged_in_username: string | null;
+  screenshot_captured: boolean | null;
+  xml_dump_captured: boolean | null;
+  unlock_attempted: boolean | null;
+  unlock_result: string | null;
+  worker_id: string | null;
+  updated_at: string | null;
+};
+
+export type BotAppSchedulerDailyPipelineAccountSession = {
+  exists: boolean;
+  request_id: string | null;
+  status: string | null;
+  worker_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  reason: string | null;
+  phone_state: "idle" | "busy" | "running";
+};
+
+export type BotAppSchedulerDailyPipelineAccount = {
+  account_id: string;
+  username: string | null;
+  phone_name: string | null;
+  package_name: string | null;
+  current_window: string | null;
+  next_window: string | null;
+  pipeline_status: string;
+  preflight: BotAppSchedulerDailyPipelinePreflight | null;
+  account_session: BotAppSchedulerDailyPipelineAccountSession;
+  account_session_absent_reason: string | null;
+};
+
+export type BotAppSchedulerDailyPipeline = {
+  global: BotAppSchedulerDailyPipelineGlobal;
+  accounts: BotAppSchedulerDailyPipelineAccount[];
 };
 
 export type BotAppDispatcherHealth = {

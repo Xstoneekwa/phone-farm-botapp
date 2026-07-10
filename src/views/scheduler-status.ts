@@ -16,14 +16,15 @@ import type {
 } from "../api/types";
 
 /**
- * Refresh cadence: the canonical tick runs every `check_every_minutes`
- * (minutes), so one fetch per minute while the view is visible is more than
- * enough and never aggressive.
+ * Refresh cadence for Daily runtime gate observability.
+ * Heartbeat age is server-projected and should move every few seconds while
+ * this view is open — 15s keeps the UI fresh without spamming the backend.
  */
-export const SCHEDULER_REFRESH_INTERVAL_MS = 60_000;
+export const SCHEDULER_REFRESH_INTERVAL_MS = 15_000;
 
-export function shouldPollScheduler(activeRoute: string, visibilityState: string) {
-  return activeRoute === "scheduler" && visibilityState === "visible";
+/** Poll while the Scheduler route is mounted; window focus must not gate refresh. */
+export function shouldPollScheduler(activeRoute: string) {
+  return activeRoute === "scheduler";
 }
 
 export type SchedulerBadgeTone = "success" | "warning" | "error" | "info" | "neutral";
@@ -99,10 +100,26 @@ const REASON_SHORT_LABELS: Record<string, string> = {
   unexpected_tick_error: "unexpected tick error",
   tick_failed: "tick failed",
   eligibility_query_failed: "eligibility read failed",
+  // CP4 preflight / keyguard
+  device_locked: "device locked",
+  device_locked_requires_operator: "secure lock requires operator",
+  actual_logged_in_username_not_detected: "username not detected",
+  login_screen_detected: "login screen detected",
+  checkpoint: "checkpoint",
+  login_challenge: "challenge",
+  post_login_popup_detected: "post-login popup",
+  late_preflight_blocked: "late preflight blocked",
+  scheduler_launch_blocked: "scheduler launch blocked",
   // Explicit non-answer
   reason_unavailable: REASON_UNAVAILABLE_LABEL,
   unknown: REASON_UNAVAILABLE_LABEL,
 };
+
+export const RESUME_PLAN_MISSING_EXPLANATION =
+  "Resume plan missing — old run cannot be resumed. Not a scheduled run failure.";
+
+export const AUTO_RESTART_DECISIONS_NOTE =
+  "These are resume decisions, not scheduled run attempts.";
 
 export function shortReasonLabel(reason: string): string {
   const normalized = reason.trim();
@@ -215,4 +232,86 @@ export function formatTickInterval(seconds: number | null): string | null {
 /** A decision row is clickable only when a real account exists behind it. */
 export function decisionNavigationAccountId(decision: BotAppSchedulerRecentDecision): string | null {
   return decision.account_id || null;
+}
+
+export function isResumePlanMissingDecision(decision: BotAppSchedulerRecentDecision): boolean {
+  const code = (decision.reason_code || "").trim();
+  if (code === "resume_plan_missing") return true;
+  return decision.reason.includes("resume_plan_missing");
+}
+
+export function decisionReasonDetail(decision: BotAppSchedulerRecentDecision): string | null {
+  if (isResumePlanMissingDecision(decision)) return RESUME_PLAN_MISSING_EXPLANATION;
+  return null;
+}
+
+const PIPELINE_STATUS_LABELS: Record<string, string> = {
+  waiting_for_window: "Waiting for window",
+  waiting_for_t10: "Waiting for T-10",
+  preflight_due: "Preflight due",
+  preflight_queued: "Preflight queued",
+  preflight_claimed: "Preflight claimed",
+  preflight_running: "Preflight running",
+  preflight_ready: "Preflight ready",
+  preflight_blocked: "Preflight blocked",
+  preflight_expired: "Preflight expired",
+  preflight_lease_unavailable: "Preflight lease unavailable",
+  account_session_queued: "Account session queued",
+  account_session_claimed: "Account session claimed",
+  account_session_running: "Account session running",
+  account_session_completed: "Account session completed",
+  account_session_failed: "Account session failed",
+  no_action: "No action",
+};
+
+export function pipelineStatusLabel(status: string): string {
+  return PIPELINE_STATUS_LABELS[status] || status.replaceAll("_", " ");
+}
+
+export function pipelineStatusTone(status: string): SchedulerBadgeTone {
+  if (status === "preflight_ready" || status === "account_session_completed") return "success";
+  if (status.startsWith("account_session_running") || status.startsWith("preflight_running") || status === "account_session_claimed") return "info";
+  if (status.includes("blocked") || status.includes("failed") || status.includes("expired") || status.includes("unavailable")) return "warning";
+  return "neutral";
+}
+
+type PreflightProjection = {
+  status?: string | null;
+  reason_code?: string | null;
+  screen_type?: string | null;
+  detection_reason?: string | null;
+  identity_guard_stage?: string | null;
+  unlock_result?: string | null;
+};
+
+export function preflightBlockedOperatorLabel(preflight: PreflightProjection | null | undefined): string {
+  if (!preflight) return "Preflight blocked";
+  const reason = (preflight.reason_code || "").trim();
+  if (reason === "device_locked") return "Preflight blocked · device locked";
+  if (reason === "device_locked_requires_operator") return "Preflight blocked · secure lock requires operator";
+  if (reason === "login_screen_detected") return "Preflight blocked · login screen detected";
+  if (reason === "checkpoint") return "Preflight blocked · checkpoint";
+  if (reason === "login_challenge") return "Preflight blocked · challenge";
+  if (reason === "post_login_popup_detected") return "Preflight blocked · post-login popup";
+  if (reason === "actual_logged_in_username_not_detected") return "Preflight blocked · username not detected";
+  if (preflight.status === "preflight_ready") return "Preflight ready";
+  if (preflight.status === "preflight_lease_unavailable") return "Preflight lease unavailable";
+  if (reason) return `Preflight blocked · ${shortReasonLabel(reason)}`;
+  return "Preflight blocked";
+}
+
+export function preflightKeyguardContext(preflight: PreflightProjection | null | undefined): string | null {
+  if (!preflight) return null;
+  const parts: string[] = [];
+  if (preflight.screen_type === "device_keyguard") parts.push("Android lock screen detected");
+  if (preflight.unlock_result === "secure_lock_required") {
+    parts.push("PIN/password/pattern required — operator action needed");
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
+
+export function yesNoLabel(value: boolean | null | undefined): string {
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  return "unknown";
 }

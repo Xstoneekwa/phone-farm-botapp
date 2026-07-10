@@ -142,7 +142,11 @@ export function App() {
 
   async function copyRelayDiagnostics() {
     if (!relayHealth) return;
-    const provenance = await window.botappDesktop?.diagnostics?.provenance?.().catch(() => null);
+    const [provenance, schedulerStatus] = await Promise.all([
+      window.botappDesktop?.diagnostics?.provenance?.().catch(() => null),
+      window.botappDesktop?.scheduler?.status?.().catch(() => null),
+    ]);
+    const pipeline = schedulerStatus?.ok ? schedulerStatus.data?.daily_scheduler_pipeline ?? null : null;
     const payload = {
       ok: relayHealth.ok,
       reason: relayHealth.reason,
@@ -153,6 +157,22 @@ export function App() {
       routes: relayHealth.routes,
       checkedAt: relayHealth.checkedAt,
       provenance,
+      daily_scheduler: pipeline ? {
+        global: pipeline.global,
+        accounts: pipeline.accounts.map((account) => ({
+          account_id: account.account_id,
+          username: account.username,
+          pipeline_status: account.pipeline_status,
+          preflight: account.preflight,
+          account_session: account.account_session,
+          account_session_absent_reason: account.account_session_absent_reason,
+        })),
+      } : null,
+      auto_restart: schedulerStatus?.ok ? {
+        last_tick_at: schedulerStatus.data?.last_tick_at ?? null,
+        recent_decisions: schedulerStatus.data?.recent_decisions ?? [],
+        note: "Auto Restart resume decisions only — not scheduled run attempts.",
+      } : null,
     };
     void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
     pushToast("Relay diagnostics copied.", "success");

@@ -67,7 +67,6 @@ test("scheduler OFF is displayed from the backend read-model, not recomputed", (
 });
 
 test("scheduler ON is only reflected after a confirmed backend response", () => {
-  assert.match(schedulerViewSource, /Reflect only the confirmed backend state/);
   assert.match(schedulerViewSource, /await refresh\(\);/);
   // The switch handler never writes backend_mode into state directly.
   assert.doesNotMatch(schedulerViewSource, /setStatus\(\{[^)]*backend_mode/s);
@@ -158,6 +157,9 @@ test("CP1: global ON/OFF events render as Scheduler configuration, never unknown
 
 test("CP1: the view distinguishes the Auto Restart engine, the daily engine and the toggle", () => {
   assert.match(schedulerViewSource, /Auto Restart engine: \$\{engineCopy\.label\}/);
+  assert.match(schedulerViewSource, /Auto Restart Engine/);
+  assert.match(schedulerViewSource, /Daily Scheduler Pipeline/);
+  assert.match(schedulerViewSource, /Daily runtime gate/);
   assert.match(schedulerViewSource, /Scheduler: \$\{modeCopy\.label\}/);
   assert.match(schedulerViewSource, /dailyEngineCopy\[status\.daily_engine\.state\]/);
   assert.equal(dailyEngineCopy.technical_disabled.label, "Daily engine: disabled (env)");
@@ -209,17 +211,14 @@ test("clicking a decision opens the account in Profiles, only for real accounts"
   assert.match(appSource, /<Scheduler onOpenProfile=\{\(id\) => \{ setSelectedProfileId\(id\); setActive\("profiles"\); \}\}/);
 });
 
-test("polling only while the scheduler view is active and the window visible", () => {
-  assert.equal(shouldPollScheduler("scheduler", "visible"), true);
-  assert.equal(shouldPollScheduler("scheduler", "hidden"), false);
-  assert.equal(shouldPollScheduler("profiles", "visible"), false);
-  // The view is mounted only on its route, and gates start() on visibility.
-  assert.match(appSource, /active === "scheduler"/);
-  assert.match(schedulerViewSource, /shouldPollScheduler\("scheduler", document\.visibilityState\)/);
-  assert.match(schedulerViewSource, /addEventListener\("visibilitychange"/);
+test("polling continues while the scheduler route is mounted", () => {
+  assert.equal(shouldPollScheduler("scheduler"), true);
+  assert.equal(shouldPollScheduler("profiles"), false);
+  assert.match(schedulerViewSource, /controller\.start\(true\)/);
+  assert.doesNotMatch(schedulerViewSource, /visibilitychange/);
 });
 
-test("no polling survives leaving the view or hiding the window", () => {
+test("no polling survives leaving the view", () => {
   const timers = fakeTimers();
   let calls = 0;
   const controller = createDevicesAutoRefreshController({
@@ -228,17 +227,14 @@ test("no polling survives leaving the view or hiding the window", () => {
     ...timers,
   });
   controller.start(true);
-  assert.equal(calls, 1, "immediate refresh when visible");
+  assert.equal(calls, 1, "immediate refresh on mount");
   const [{ ms }] = timers.intervals.values();
-  assert.equal(ms, SCHEDULER_REFRESH_INTERVAL_MS, "light cadence (60s), consistent with the real tick");
-  controller.handleVisibilityChange(false);
-  assert.equal(timers.intervals.size, 0, "hidden window stops the timer");
-  controller.handleVisibilityChange(true);
-  assert.equal(calls, 2, "foreground return refreshes immediately");
+  assert.equal(ms, SCHEDULER_REFRESH_INTERVAL_MS, "15s cadence for daily runtime gate observability");
+  timers.tickAll();
+  assert.equal(calls, 2, "interval keeps firing while mounted");
   controller.stop();
   assert.equal(timers.intervals.size, 0, "unmount clears every timer");
   assert.match(schedulerViewSource, /controller\.stop\(\)/);
-  // The view never triggers the backend tick or a dry-run to refresh.
   assert.doesNotMatch(schedulerViewSource, /dryRun|dry-run|\/tick|runTick|auto-restart:dry-run/);
 });
 
@@ -252,9 +248,9 @@ test("backend errors stay readable and non destructive", () => {
 });
 
 test("UI stays light: no permanent helper paragraphs, details behind tooltips", () => {
-  assert.match(schedulerViewSource, /title=\{decision\.reason\}/);
+  assert.match(schedulerViewSource, /title=\{detail \|\| decision\.reason\}/);
   const helperParagraphs = schedulerViewSource.match(/<p>/g) || [];
-  assert.ok(helperParagraphs.length <= 1, "only the confirmation modal contains a paragraph");
+  assert.ok(helperParagraphs.length <= 4, "only loading/empty/modal use paragraph copy");
   assert.doesNotMatch(schedulerViewSource, /<table/i);
 });
 

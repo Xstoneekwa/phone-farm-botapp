@@ -18,18 +18,25 @@ test("connect badge shows saved credentials as ready to connect", () => {
   assert.match(profilesViewSource, /profile\.credentialStatus === "saved_pending_verification"[\s\S]*ready to connect/);
 });
 
-test("social badge separates login and target blocks", () => {
-  assert.match(profilesViewSource, /reason\.includes\("login"\)[\s\S]*social needs login/);
-  assert.match(profilesViewSource, /reason\.includes\("target"\)[\s\S]*growth needs targets/);
+test("social badge separates login and target blocks", async () => {
+  const growthBadgeSource = readFileSync(resolve(currentDir, "profile-growth-badge.ts"), "utf8");
+  assert.match(growthBadgeSource, /profile\.loginStatus !== "connected"/);
+  assert.match(growthBadgeSource, /social needs login/);
+  assert.match(growthBadgeSource, /code\.includes\("target"\)[\s\S]*growth needs targets/);
 });
 
 test("social badge explains real blocking reasons and preserves growth-ready state", () => {
-  assert.match(profilesViewSource, /export function socialBlockLabel/);
-  assert.match(profilesViewSource, /review_login_package_mismatch/);
-  assert.match(profilesViewSource, /social review: account mismatch/);
-  assert.match(profilesViewSource, /if \(profile\.eligibility === "can_start"\) return \{ label: "growth ready"/);
-  assert.match(profilesViewSource, /social blocked: reason required/);
-  assert.doesNotMatch(profilesViewSource, /return \{ label: "social blocked", tone: "warning" \}/);
+  const growthBadgeSource = readFileSync(resolve(currentDir, "profile-growth-badge.ts"), "utf8");
+  assert.match(growthBadgeSource, /export function socialBlockLabel/);
+  assert.match(growthBadgeSource, /review_login_package_mismatch/);
+  assert.match(growthBadgeSource, /social review: account mismatch/);
+  assert.match(growthBadgeSource, /profile\.eligibility === "can_start"[\s\S]*growth ready/);
+  assert.match(growthBadgeSource, /social blocked: reason required/);
+  assert.match(growthBadgeSource, /connected · device locked/);
+  assert.match(growthBadgeSource, /connected · preflight blocked/);
+  assert.match(growthBadgeSource, /connected · waiting for slot/);
+  assert.match(growthBadgeSource, /connected · scheduler blocked/);
+  assert.doesNotMatch(growthBadgeSource, /reason\.includes\("schedule"\)/);
 });
 
 test("BotApp profile normalization blocks social eligibility until login is connected", () => {
