@@ -6,6 +6,7 @@ import {
   AUTO_RESTART_DECISIONS_NOTE,
   SCHEDULER_REFRESH_INTERVAL_MS,
   backendModeCopy,
+  buildAccountAutoRestartStatusRows,
   dailyEngineCopy,
   decisionNavigationAccountId,
   decisionReasonDetail,
@@ -21,8 +22,8 @@ import {
   pipelineStatusTone,
   preflightBlockedOperatorLabel,
   preflightKeyguardContext,
+  restartStateLabel,
   shortReasonLabel,
-  shouldPollScheduler,
   upcomingWindowBadge,
   upcomingWindowDayLabel,
   yesNoLabel,
@@ -97,6 +98,7 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
   const tickInterval = status ? formatTickInterval(status.tick_interval_seconds) : null;
   const dailyEngine = status?.daily_engine ? dailyEngineCopy[status.daily_engine.state] : null;
   const pipeline = status?.daily_scheduler_pipeline ?? null;
+  const accountAutoRestartRows = status ? buildAccountAutoRestartStatusRows(status) : [];
 
   return (
     <div className="scheduler-view" data-testid="scheduler-view">
@@ -274,6 +276,39 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
           </dl>
 
           <span className="scheduler-note" title={AUTO_RESTART_DECISIONS_NOTE}>{AUTO_RESTART_DECISIONS_NOTE}</span>
+
+          <h3 className="scheduler-subtitle">Account Auto Restart status</h3>
+          {accountAutoRestartRows.length === 0 ? (
+            <p className="scheduler-empty">No active scheduled account in the current projection window.</p>
+          ) : (
+            <ul className="scheduler-decisions">
+              {accountAutoRestartRows.map((account) => (
+                <li key={account.account_id}>
+                  <button
+                    type="button"
+                    className="scheduler-decision-account"
+                    title="Open in Profiles"
+                    onClick={() => onOpenProfile(account.account_id)}
+                  >
+                    {account.username}
+                  </button>
+                  <Badge tone={account.restart_state === "scheduled" ? "success" : account.restart_state === "blocked" ? "warning" : "neutral"}>
+                    {restartStateLabel(account.restart_state)}
+                  </Badge>
+                  <span
+                    className="scheduler-decision-reason"
+                    title={account.latest_decision ? decisionReasonDetail(account.latest_decision) || account.latest_decision.reason : account.reason}
+                  >
+                    {account.last_session_state} · {account.reason}
+                    {account.decision_count > 1 ? ` · ${account.decision_count} recent decisions` : ""}
+                  </span>
+                  <span className="scheduler-decision-time">{formatTimestamp(account.timestamp)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h3 className="scheduler-subtitle">Recent Auto Restart decisions</h3>
 
           {status.recent_decisions.length === 0 ? (
             <p className="scheduler-empty">

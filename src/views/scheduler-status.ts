@@ -9,9 +9,11 @@
 
 import type {
   BotAppSchedulerBackendMode,
+  BotAppSchedulerDailyPipelineAccount,
   BotAppSchedulerDailyEngine,
   BotAppSchedulerEngineStatus,
   BotAppSchedulerRecentDecision,
+  BotAppSchedulerStatus,
   BotAppSchedulerUpcomingWindow,
 } from "../api/types";
 
@@ -243,6 +245,90 @@ export function isResumePlanMissingDecision(decision: BotAppSchedulerRecentDecis
 export function decisionReasonDetail(decision: BotAppSchedulerRecentDecision): string | null {
   if (isResumePlanMissingDecision(decision)) return RESUME_PLAN_MISSING_EXPLANATION;
   return null;
+}
+
+export type AccountAutoRestartStatusRow = {
+  account_id: string;
+  username: string;
+  last_session_state: string;
+  restart_state: "restart_needed" | "not_needed" | "blocked" | "scheduled";
+  reason: string;
+  timestamp: string | null;
+  latest_decision: BotAppSchedulerRecentDecision | null;
+  decision_count: number;
+};
+
+function accountStatusSeedFromPipeline(account: BotAppSchedulerDailyPipelineAccount) {
+  const session = account.account_session;
+  return {
+    account_id: account.account_id,
+    username: account.username || account.account_id,
+    last_session_state: session.exists
+      ? (session.status || session.reason || "session observed")
+      : (account.account_session_absent_reason || account.pipeline_status || "no session observed"),
+  };
+}
+
+function accountStatusSeedFromWindow(window: BotAppSchedulerUpcomingWindow) {
+  return {
+    account_id: window.account_id,
+    username: window.username || window.account_id,
+    last_session_state: window.is_open ? "window open" : "planned window",
+  };
+}
+
+function restartStateFromDecision(decision: BotAppSchedulerRecentDecision | null): AccountAutoRestartStatusRow["restart_state"] {
+  if (!decision) return "not_needed";
+  const normalized = `${decision.decision || ""} ${decision.action || ""} ${decision.reason_code || ""} ${decision.reason || ""}`.toLowerCase();
+  if (normalized.includes("enqueued") || normalized.includes("scheduled")) return "scheduled";
+  if (normalized.includes("blocked")) return "blocked";
+  if (normalized.includes("eligible") || normalized.includes("restart_needed")) return "restart_needed";
+  return "not_needed";
+}
+
+export function restartStateLabel(state: AccountAutoRestartStatusRow["restart_state"]): string {
+  if (state === "restart_needed") return "restart needed";
+  if (state === "scheduled") return "scheduled";
+  if (state === "blocked") return "blocked";
+  return "not needed";
+}
+
+export function buildAccountAutoRestartStatusRows(status: BotAppSchedulerStatus): AccountAutoRestartStatusRow[] {
+  const accounts = new Map<string, ReturnType<typeof accountStatusSeedFromPipeline>>();
+  for (const account of status.daily_scheduler_pipeline?.accounts ?? []) {
+    if (account.account_id && !accounts.has(account.account_id)) {
+      accounts.set(account.account_id, accountStatusSeedFromPipeline(account));
+    }
+  }
+  if (!accounts.size) {
+    for (const window of status.upcoming_windows ?? []) {
+      if (window.account_id && !accounts.has(window.account_id)) {
+        accounts.set(window.account_id, accountStatusSeedFromWindow(window));
+      }
+    }
+  }
+
+  const decisionsByAccount = new Map<string, BotAppSchedulerRecentDecision[]>();
+  for (const decision of status.recent_decisions) {
+    if (isSchedulerConfigDecision(decision) || !decision.account_id) continue;
+    decisionsByAccount.set(decision.account_id, [...(decisionsByAccount.get(decision.account_id) ?? []), decision]);
+  }
+
+  return Array.from(accounts.values()).map((account) => {
+    const decisions = (decisionsByAccount.get(account.account_id) ?? [])
+      .slice()
+      .sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""));
+    const latest = decisions[0] ?? null;
+    const restartState = restartStateFromDecision(latest);
+    return {
+      ...account,
+      latest_decision: latest,
+      decision_count: decisions.length,
+      restart_state: restartState,
+      reason: latest ? decisionReasonLabel(latest) : "No restart decision needed",
+      timestamp: latest?.created_at ?? null,
+    };
+  });
 }
 
 const PIPELINE_STATUS_LABELS: Record<string, string> = {

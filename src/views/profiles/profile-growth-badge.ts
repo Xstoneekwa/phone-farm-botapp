@@ -17,6 +17,7 @@ export function socialBlockLabel(reason: string): string {
   if (normalized.includes("review_login_package_mismatch") || normalized.includes("identity_mismatch")) {
     return "social review: account mismatch";
   }
+  if (normalized.includes("operator_review_required")) return "operator review required";
   if (normalized.includes("blocking_dashboard_action")) return "social review required";
   if (normalized.includes("welcome_real_send_disabled")) return "growth blocked: Welcome DM disabled";
   if (normalized.includes("outreach_real_send_disabled")) return "growth blocked: Outreach DM disabled";
