@@ -146,3 +146,8 @@ The renderer build uses relative Vite assets so packaged Electron does not black
 is `/Applications/BotApp.app`, and it may be replaced only after source commit,
 tests/build/package, `app.asar` verification, packaged UI validation, and
 explicit user visual approval.
+
+Current official checkpoint: `/Applications/BotApp.app` was replaced on
+2026-07-13 from commit
+`dcbb85e9a1c9cad9f1a8a49eae9cf1f7e502206d`. The previous bundle is preserved at
+`/Users/admin/phonefarm-botapp-backups/BotApp.app.20260713T000339SAST`.

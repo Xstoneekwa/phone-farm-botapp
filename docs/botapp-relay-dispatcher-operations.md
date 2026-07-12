@@ -175,6 +175,31 @@ démarre ou que le process Electron reste ouvert. Le gate minimal est :
    Runtime, drawer et navigation ;
 8. seulement ensuite installation vers `/Applications/BotApp.app`.
 
+Checkpoint installé 2026-07-13 :
+
+- commit source :
+  `dcbb85e9a1c9cad9f1a8a49eae9cf1f7e502206d`
+  (`fix(botapp): clarify operator review and summarize restart status`);
+- bundle officiel : `/Applications/BotApp.app`;
+- ancien bundle : sauvegardé sous
+  `/Users/admin/phonefarm-botapp-backups/BotApp.app.20260713T000339SAST`;
+- smoke officiel read-only : relay opérationnel, dispatcher actif,
+  Profiles/Devices chargés, Tracker `operator review required`, Mythyl
+  `growth ready`, Scheduler avec `Account Auto Restart status` et
+  `Recent Auto Restart decisions` séparés.
+
+Limitation d'outillage observée pendant ce checkpoint :
+
+- plusieurs copies de BotApp partagent le bundle identifier
+  `com.boostmybusinesses.botapp`; utiliser le chemin complet du bundle pour les
+  smokes et installations ;
+- Computer Use peut retourner une frame stale ou échouer avec
+  `ScreenCaptureKit.SCStreamErrorDomain Code=-3811`. Dans ce cas, ne valider
+  l'installation qu'avec une preuve visuelle opérateur ou une lecture AX fraîche
+  cohérente, jamais avec une capture stale ;
+- cleanup des bundles temporaires/candidats : futur chantier contrôlé, pas une
+  étape implicite du packaging.
+
 ### Gate signature macOS (`scripts/sign-and-verify-macos-bundle.mjs`)
 
 `electron-builder` est configuré avec `identity: null` (aucune identité

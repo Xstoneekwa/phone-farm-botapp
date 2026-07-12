@@ -2,6 +2,41 @@
 
 ## Latest checkpoint
 
+**Message:** `fix(botapp): clarify operator review and summarize restart status`
+
+**Branch:** `baseline-ui-reconciliation`
+
+**Commit:** `dcbb85e9a1c9cad9f1a8a49eae9cf1f7e502206d`
+
+### Scope delivered
+
+- Tracker profile badge shows `operator review required` for
+  `operator_review_required`; no fallback to `social blocked: reason required`.
+- Mythyl remains `growth ready` when backend blockers are resolved and active
+  blockers are empty.
+- Scheduler view adds **Account Auto Restart status** with one synthesis row
+  per active scheduled account.
+- Account with no restart decision shows `No restart decision needed`.
+- **Recent Auto Restart decisions** remains separate and preserves historical
+  multi-entry noise.
+- Official app installed at `/Applications/BotApp.app`.
+- Previous official bundle backed up at
+  `/Users/admin/phonefarm-botapp-backups/BotApp.app.20260713T000339SAST`.
+- Smoke official read-only passed: relay operational, dispatcher active,
+  Profiles/Devices loaded, Tracker operator-review label, Mythyl growth-ready
+  label, Scheduler synthesis + separate history.
+
+### Status
+
+- diagnosed / patched / tested / packaged / installed.
+- Runtime pending: the next natural Welcome/session positive path is still not
+  validated by this BotApp checkpoint.
+- Future housekeeping: controlled cleanup of temporary candidate/backup bundles
+  remains to schedule separately; do not delete them implicitly during feature
+  work.
+
+## Previous checkpoint
+
 **Message:** `feat(botapp): enable client password update requests`
 
 **Branch:** `botapp-mac-foundation`

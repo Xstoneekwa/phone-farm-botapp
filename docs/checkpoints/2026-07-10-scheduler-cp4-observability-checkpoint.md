@@ -1,12 +1,19 @@
 # Scheduler / CP4 / Preflight / BotApp Observability — Interim Checkpoint
 
 ```text
-Status: INTERIM CHECKPOINT — block not fully closed yet.
+Status: FINAL BOTAPP CHECKPOINT — runtime positive path still pending.
 ```
 
-**Checkpoint date (UTC+2):** 2026-07-10 ~17:00  
-**Scope:** Daily Scheduler + CP4 preflight hardening + BotApp pipeline observability  
+**Checkpoint date (UTC+2):** 2026-07-10 ~17:00
+**Scope:** Daily Scheduler + CP4 preflight hardening + BotApp pipeline observability
 **Language:** operator UI remains English-only (BotApp)
+
+**Final BotApp update (UTC+2):** 2026-07-13
+**BotApp commit documented:** `dcbb85e9a1c9cad9f1a8a49eae9cf1f7e502206d`
+(`fix(botapp): clarify operator review and summarize restart status`)
+**Official app:** `/Applications/BotApp.app`
+**Previous bundle backup:**
+`/Users/admin/phonefarm-botapp-backups/BotApp.app.20260713T000339SAST`
 
 ---
 
@@ -104,7 +111,7 @@ Status: INTERIM CHECKPOINT — block not fully closed yet.
 
 ## 4. Corrections BotApp — Daily Scheduler Pipeline Observability
 
-**Repo:** `BotApp-clean`  
+**Repo:** `BotApp-clean`
 **Backup installé:** `/Users/admin/phonefarm-botapp-releases/daily-scheduler-observability-20260710T145509Z.app` → `/Applications/BotApp.app`
 
 - Séparation UI **Daily Scheduler Pipeline** / **Auto Restart Engine**
@@ -117,6 +124,60 @@ Status: INTERIM CHECKPOINT — block not fully closed yet.
   - `device_locked` visible
   - preflight blocked visible
 - Copy diagnostics enrichi (`App.tsx` — daily_scheduler + auto_restart sections)
+
+### Final BotApp stale-blocker / Auto Restart synthesis patch
+
+Status: **diagnosed / patched / tested / packaged / installed**.
+
+- Commit:
+  `dcbb85e9a1c9cad9f1a8a49eae9cf1f7e502206d`
+  (`fix(botapp): clarify operator review and summarize restart status`).
+- The stale packaged state was first cleared operationally with a full Cmd+Q
+  and one reopen. This proved that part of the stale scheduler badge was local
+  app state, not a backend production blocker.
+- `operator_review_required` now maps to the explicit label
+  `operator review required`; BotApp must not fall back to
+  `social blocked: reason required` for this reason.
+- Real current blockers still remain visible when the backend projection marks
+  them as active / `blocking_campaign=true`.
+- **Account Auto Restart status** now shows one synthesis row per active
+  scheduled account.
+- Accounts without a restart decision show `No restart decision needed`.
+- Historical entries remain under **Recent Auto Restart decisions**; multiple
+  old `resume_plan_missing` decisions are not collapsed into the per-account
+  synthesis row.
+- `manual_only` / archived accounts remain excluded by the canonical projection
+  rules.
+
+Validation:
+
+- Targeted lint on the four changed files: passed.
+- Targeted BotApp tests: passed (`30` tests).
+- `npm run build`: passed.
+- `npm run package:mac`: passed from a clean worktree positioned on the commit.
+- `codesign --verify --deep --strict /Applications/BotApp.app`: passed after
+  installation.
+
+Official smoke, read-only:
+
+- Relay operational: `Relay authenticated · dispatcher confirmed running`.
+- Profiles and Devices loaded.
+- Tracker: `connected operator review required`.
+- Mythyl: `connected growth ready`.
+- Scheduler: `Account Auto Restart status` present with Tracker and Mythyl.
+- Mythyl row: `No restart decision needed`.
+- Tracker has one synthesis row in `Account Auto Restart status`.
+- `Recent Auto Restart decisions` remains separate and keeps multiple
+  historical decisions visible.
+
+Computer Use limitation documented:
+
+- Bundle identifier `com.boostmybusinesses.botapp` is ambiguous because many
+  backup/candidate bundles exist on disk.
+- Computer Use sometimes returned stale screenshots or
+  `ScreenCaptureKit.SCStreamErrorDomain Code=-3811`; AX text was used for the
+  final official assertions after operator-provided isolated screenshots.
+- This is an operator tooling limitation, not a BotApp runtime regression.
 
 ---
 
@@ -169,6 +230,12 @@ Runs enqueued (24h) in old view was Auto Restart only.
 - [ ] Run terminalise proprement
 - [ ] Dashboard action résolue
 - [ ] Positive path `get_valid_scheduled_session_preflight → account_session` validé end-to-end
+- [ ] Welcome/session runtime validation after the natural window
+- [ ] Close or resolve the historical critical incident only after runtime
+      validation confirms the path
+- [ ] Controlled cleanup of temporary BotApp bundles/candidates/backups that
+      are no longer needed (future housekeeping only; do not do it during this
+      documentation checkpoint)
 
 ### Backlog technique explicite
 
@@ -205,6 +272,12 @@ Runs enqueued (24h) in old view was Auto Restart only.
 | Composant | ID / chemin |
 |-----------|-------------|
 | Backend Vercel prod | `dpl_2rXNt8A1eebFRdV5PSgdMudkrVF2` (Ready, 2026-07-10 ~16:55 UTC+2) |
+| Backend Vercel prod final | `dpl_4yJbW11sJ4MwoDoz164xYrHvLmMd` (Ready on `www.boostmybusinesses.com`) |
+| Backend final commit | `61d6ccfc334ba084ff73f57b685c7f637e948faa` |
+| Worker Return CT commit | `26cd04cd816c8b358397e5e9d4224360fb5ea54f` |
+| BotApp final commit | `dcbb85e9a1c9cad9f1a8a49eae9cf1f7e502206d` |
+| BotApp official app | `/Applications/BotApp.app` |
+| BotApp previous backup | `/Users/admin/phonefarm-botapp-backups/BotApp.app.20260713T000339SAST` |
 | Backend git (pré-commit local) | `a97c876` — late CP4 expiry + dashboard reconcile |
 | Worker release active | `/Users/admin/phonefarm-worker-releases/b6fedca-preflight-keyguard` |
 | Worker git HEAD (repo) | `b6fedca` — late CP4 + dashboard reconcile |
