@@ -28,6 +28,20 @@ test("active request wins over a stale historical badge", () => {
   assert.equal(runtimeIndicatorState(active), "active");
 });
 
+test("active runtime wins over stale login state", () => {
+  assert.deepEqual(
+    socialBadge(profile({ loginStatus: "ready", activeRunStatus: "running" })),
+    { label: "active", tone: "success" },
+  );
+});
+
+test("unknown non-blocking state never invents social blocked fallback", () => {
+  assert.deepEqual(
+    socialBadge(profile({ eligibility: "blocked_now", eligibilityReason: "unknown_projection" })),
+    { label: "growth status unavailable", tone: "info" },
+  );
+});
+
 test("real current blocker remains visible when there is no active runtime", () => {
   assert.deepEqual(
     socialBadge(profile({ eligibility: "blocked_now", eligibilityReason: "blocking_dashboard_action" })),

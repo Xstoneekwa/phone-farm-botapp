@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   },
   data: {
     overview: () => ipcRenderer.invoke("botapp:data:overview"),
+    profilesLive: (input) => ipcRenderer.invoke("botapp:data:profiles-live", input),
   },
   relay: {
     health: () => ipcRenderer.invoke("botapp:relay:health"),

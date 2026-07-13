@@ -1787,6 +1787,17 @@ const botappEndpointRegistry = [
     testStrategy: "fetch",
   },
   {
+    id: "profiles_live",
+    name: "Profiles live projection",
+    method: "GET",
+    path: "/api/instagram-dashboard/profiles/live",
+    usedBy: ["Profiles"],
+    purpose: "Poll batched run state, verified counters, and current blockers without loading the full overview",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
     id: "profiles_account_details",
     name: "Profile account details",
     method: "GET",
@@ -5473,6 +5484,31 @@ async function botappOverviewData() {
   });
 }
 
+async function botappProfilesLiveData(input) {
+  const accountIds = Array.isArray(input?.accountIds)
+    ? [...new Set(input.accountIds.map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 200)
+    : [];
+  try {
+    const payload = await dashboardGetWithQuery("profiles_live", { account_ids: accountIds.join(",") });
+    return serializeIpcPayload({
+      ok: true,
+      data: {
+        profiles: Array.isArray(payload?.profiles) ? payload.profiles : [],
+        generatedAt: payload?.generated_at || new Date().toISOString(),
+        source: String(payload?.source || "profiles_live_batched_v1"),
+        queryCount: Number(payload?.query_count || 0),
+      },
+      error: null,
+    });
+  } catch (error) {
+    return serializeIpcPayload({
+      ok: false,
+      data: { profiles: [], generatedAt: new Date().toISOString(), source: "profiles_live_unavailable", queryCount: 0 },
+      error: safeRuntimeError(error, "Live Profiles projection unavailable."),
+    });
+  }
+}
+
 function probeRelayUrlRedacted() {
   const origin = dashboardOrigin(compassConfig());
   return origin || maskUrl(process.env.BOTAPP_COMPASS_AI_RELAY_URL || "");
@@ -7546,6 +7582,7 @@ function registerRuntimeIpc() {
     error: safeRuntimeError(error, "Could not approve preflight retry."),
   })));
   ipcMain.handle("botapp:data:overview", () => botappOverviewData());
+  ipcMain.handle("botapp:data:profiles-live", (_event, input) => botappProfilesLiveData(input || {}));
   ipcMain.handle("botapp:relay:health", () => botappRelayHealth());
   ipcMain.handle("botapp:relay:repair", () => repairRelayConnection().catch((error) => ({
     ok: false,

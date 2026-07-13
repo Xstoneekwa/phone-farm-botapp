@@ -160,10 +160,13 @@ export function displayRunCounters(profile: BotProfile) {
 export function displayCounterMetrics(profile: BotProfile) {
   const displayCounters = displayRunCounters(profile);
   if (displayCounters.mode === "run") {
+    const liveSupported = new Set(profile.liveSupportedKinds ?? []);
     return [
-      { key: "follow" as const, current: displayCounters.follow, max: profile.counters.follow.max, label: "F", live: true },
-      { key: "like" as const, current: displayCounters.like, max: profile.counters.like.max, label: "L", live: true },
-      { key: "dm" as const, current: displayCounters.dm, max: profile.counters.dm.max, label: "DM", live: true },
+      { key: "follow" as const, current: displayCounters.follow, max: profile.counters.follow.max, label: "F", live: liveSupported.has("follow") },
+      { key: "unfollow" as const, current: profile.counters.unfollow.current, max: profile.counters.unfollow.max, label: "UF", live: false },
+      { key: "like" as const, current: displayCounters.like, max: profile.counters.like.max, label: "L", live: false },
+      { key: "comment" as const, current: profile.counters.comment.current, max: profile.counters.comment.max, label: "C", live: false },
+      { key: "dm" as const, current: displayCounters.dm, max: profile.counters.dm.max, label: "DM", live: liveSupported.has("dm") },
     ];
   }
   return [

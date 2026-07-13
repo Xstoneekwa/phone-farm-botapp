@@ -22,6 +22,8 @@ import { Settings } from "../views/Settings";
 import { routes, type RouteId } from "./routes";
 import { shouldPollProfilesLiveCounters } from "../views/profiles/run-control";
 import { createProfilesAutoRefreshController, shouldPollProfiles } from "../views/profiles/profiles-auto-refresh";
+import type { ProfilesRefreshContext } from "../views/profiles/profiles-auto-refresh";
+import { mergeProfilesLiveProjection } from "../views/profiles/profiles-live-merge";
 import { createDevicesAutoRefreshController, shouldPollDevices } from "../views/devices-auto-refresh";
 import "./app.css";
 
@@ -97,7 +99,7 @@ export function App() {
     setData(nextData);
   }
 
-  async function loadOverviewData(reason = "manual") {
+  async function loadOverviewData(reason = "manual", isLatest = () => true) {
     console.info("[botapp] profiles_overview_refresh", { reason });
     if (window.botappDesktop?.data?.overview) {
       const result = await window.botappDesktop.data.overview();
@@ -107,9 +109,10 @@ export function App() {
         || dataRef.current.profileGroups.length
         || dataRef.current.devices.length
       );
-      if (result.ok || !hasUsableProjection) {
+      if (isLatest() && (result.ok || !hasUsableProjection)) {
         applyOverviewData(nextData);
       }
+      if (!isLatest()) return;
       setSyncError(result.error ?? null);
       setProfilesMeta(result.profilesMeta ?? null);
       void loadDispatcherHealth();
@@ -120,6 +123,7 @@ export function App() {
     const [profiles, profileGroups, clientAccounts, credentials, compass, autoRestart, devices, notifications, logs, apiKeys, webhooks, settings] = await Promise.all([
       mockClient.listProfiles(), mockClient.listDeviceProfileGroups(), mockClient.listClientAccounts(), mockClient.listCredentialsActions(), mockClient.listCompass(), mockClient.listAutoRestart(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
     ]);
+    if (!isLatest()) return;
     applyOverviewData({
       profiles: profiles.ok ? profiles.data : [],
       profileGroups: profileGroups.ok ? profileGroups.data : [],
@@ -140,6 +144,31 @@ export function App() {
     void loadRelayHealth();
   }
 
+  async function loadProfilesLiveData(reason: string, context: ProfilesRefreshContext) {
+    if (context.full) {
+      await loadOverviewData(`profiles_${reason}`, context.isLatest);
+      return;
+    }
+    const accountIds = dataRef.current.profiles.map((profile) => profile.id);
+    if (!window.botappDesktop?.data?.profilesLive || !accountIds.length) return;
+    console.info("[botapp] profiles_live_refresh", { reason, generation: context.generation, accounts: accountIds.length });
+    const result = await window.botappDesktop.data.profilesLive({ accountIds });
+    if (!context.isLatest()) {
+      console.info("[botapp] profiles_stale_response_ignored", { reason, generation: context.generation });
+      return;
+    }
+    if (!result.ok) {
+      setSyncError(result.error || "Live Profiles projection unavailable.");
+      return;
+    }
+    const nextData = {
+      ...dataRef.current,
+      profiles: mergeProfilesLiveProjection(dataRef.current.profiles, result.data.profiles),
+    };
+    applyOverviewData(nextData);
+    setSyncError(null);
+  }
+
   async function loadDispatcherHealth() {
     const result = await window.botappDesktop?.dispatcher?.status?.();
     if (result) setDispatcherHealth(result);
@@ -156,7 +185,11 @@ export function App() {
     try {
       const result = await window.botappDesktop?.relay?.repair?.();
       if (result?.relay) setRelayHealth(result.relay);
-      await loadOverviewData("relay_repair");
+      if (profilesAutoRefreshRef.current?.isStarted()) {
+        await profilesAutoRefreshRef.current.requestFullRefresh("relay_repair");
+      } else {
+        await loadOverviewData("relay_repair");
+      }
       await loadDispatcherHealth();
       pushToast(result?.message || (result?.ok ? "BotApp connection operational." : "Repair unavailable."), result?.ok ? "success" : "error");
     } finally {
@@ -241,7 +274,7 @@ export function App() {
   useEffect(() => {
     if (active !== "profiles") return;
     const controller = createProfilesAutoRefreshController({
-      refresh: (reason) => loadOverviewData(`profiles_${reason}`),
+      refresh: loadProfilesLiveData,
       isRuntimeActive: () => profilesRuntimeActiveRef.current,
       log: (event, detail) => console.info(`[botapp] ${event}`, detail || {}),
     });
@@ -316,6 +349,15 @@ export function App() {
   function navigate(route: RouteId) {
     setActive(route);
     setCommandOpen(false);
+  }
+
+  function refreshProfiles() {
+    const controller = profilesAutoRefreshRef.current;
+    if (controller?.isStarted()) {
+      void controller.requestFullRefresh("manual_refresh");
+      return;
+    }
+    void loadOverviewData("manual_refresh");
   }
 
   useEffect(() => {
@@ -459,7 +501,7 @@ export function App() {
   let view: React.ReactNode;
   if (loading) view = <div className="empty-state"><strong>Loading backend data</strong><span>BotApp is syncing through the shared backend relay.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
-  else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} dispatcherHealth={dispatcherHealth} syncError={syncError} profilesMeta={profilesMeta} loading={loading} onRefresh={() => loadOverviewData("manual_refresh")} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message, tone) => pushToast(message, tone ?? "success")} />;
+  else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} dispatcherHealth={dispatcherHealth} syncError={syncError} profilesMeta={profilesMeta} loading={loading} onRefresh={refreshProfiles} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message, tone) => pushToast(message, tone ?? "success")} />;
   else if (active === "account") view = data.clientAccounts ? <ClientAccounts overview={data.clientAccounts} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} onOpenCredentials={(account) => { setSelectedCredentialsAccountId(account.accountId); setActive("credentials"); }} onRefresh={() => loadOverviewData()} /> : null;
   else if (active === "credentials") view = data.credentials ? <Credentials overview={data.credentials} selectedAccountId={selectedCredentialsAccountId} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} onRefresh={() => loadOverviewData()} />;

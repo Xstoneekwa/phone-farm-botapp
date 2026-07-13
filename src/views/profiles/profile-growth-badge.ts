@@ -37,18 +37,18 @@ export function socialBlockLabel(reason: string): string {
 }
 
 export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
-  if (profile.loginStatus !== "connected") {
-    const reason = stableBlockCode(profile);
-    if (reason.includes("login")) return { label: "social needs login", tone: "warning" };
-    return { label: "social needs login", tone: "warning" };
-  }
-
   if (hasActiveRuntime(profile)) {
     const staleReason = stableBlockCode(profile);
     if (staleReason && !staleReason.includes("already_running") && !staleReason.includes("active_run")) {
       console.info("[botapp] profiles_stale_badge_ignored", { profileId: profile.id, reason: staleReason });
     }
     return { label: "active", tone: "success" };
+  }
+
+  if (profile.loginStatus !== "connected") {
+    const reason = stableBlockCode(profile);
+    if (reason.includes("login")) return { label: "social needs login", tone: "warning" };
+    return { label: "social needs login", tone: "warning" };
   }
 
   if (profile.eligibility === "can_start") {
@@ -86,9 +86,14 @@ export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTo
     return { label: "connected · session running", tone: "info" };
   }
   if (code.includes("login")) return { label: "social needs login", tone: "warning" };
-  if (code.includes("target") || code.includes("ct")) return { label: "growth needs targets", tone: "warning" };
+  if (
+    code.includes("needs_more_targets")
+    || code.includes("target_accounts_missing")
+    || code.includes("targeting_not_ready")
+    || code.includes("ct_missing")
+  ) return { label: "growth needs targets", tone: "warning" };
   if (code.includes("phone") || code.includes("device") || code.includes("assignment")) {
     return { label: "growth waiting device", tone: "warning" };
   }
-  return { label: socialBlockLabel(code), tone: "warning" };
+  return { label: "growth status unavailable", tone: "info" };
 }
