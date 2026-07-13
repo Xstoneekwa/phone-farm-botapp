@@ -11,6 +11,7 @@ export type ProfilesLivePatch = {
   countersToday?: Partial<Record<"follows" | "unfollows" | "likes" | "comments" | "dms", number>>;
   interactionsToday?: number;
   currentBlocker?: { actionType?: string; status?: string; blockingCampaign?: boolean } | null;
+  followerDelta3d?: BotProfile["followerDelta3d"];
   liveSupportedKinds?: Array<"follow" | "dm">;
 };
 
@@ -60,6 +61,7 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
       activeRunStatus: patch.activeRunStatus ?? null,
       runtimeIndicator: patch.runtimeIndicator ?? profile.runtimeIndicator,
       currentRunCounters: patch.currentRunCounters ?? profile.currentRunCounters,
+      followerDelta3d: patch.followerDelta3d ?? profile.followerDelta3d,
       interactionsToday: Number.isFinite(patch.interactionsToday) ? Number(patch.interactionsToday) : profile.interactionsToday,
       counters: {
         follow: { ...profile.counters.follow, current: countersToday.follows ?? profile.counters.follow.current },

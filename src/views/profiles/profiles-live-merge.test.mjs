@@ -51,3 +51,20 @@ test("a real current blocking action remains visible after the run", () => {
   assert.equal(result.eligibility, "blocked_now");
   assert.equal(result.eligibilityReason, "operator_review_required");
 });
+
+test("light polling refreshes rolling follower growth without a full Profiles refresh", () => {
+  const followerDelta3d = {
+    value: -2,
+    currentFollowers: 12,
+    previousFollowers: 14,
+    from: "2026-07-10T12:00:00.000Z",
+    to: "2026-07-13T12:00:00.000Z",
+    source: "ig_account_follower_snapshots",
+    freshness: "complete",
+  };
+  const result = mergeProfilesLiveProjection([profile({ followerDelta3d: { value: null } })], [{
+    accountId: "account-1",
+    followerDelta3d,
+  }])[0];
+  assert.deepEqual(result.followerDelta3d, followerDelta3d);
+});

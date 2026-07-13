@@ -31,11 +31,17 @@ test("unknown follower growth remains null instead of becoming a red zero", () =
   assert.doesNotMatch(mainSource, /const value = Number\(source\.value\)/);
 });
 
+test("real zero follower growth uses a neutral tone while losses remain red", () => {
+  assert.match(profilesViewSource, /if \(value === 0\) return "zero"/);
+  assert.match(profilesCssSource, /\.delta-pill\.zero\s*\{[^}]*#F3F4F6[^}]*#374151/s);
+  assert.match(profilesCssSource, /\.delta-pill\.down\s*\{[^}]*#FEE2E2[^}]*#991B1B/s);
+});
+
 test("social badge separates login and target blocks", async () => {
   const growthBadgeSource = readFileSync(resolve(currentDir, "profile-growth-badge.ts"), "utf8");
   assert.match(growthBadgeSource, /profile\.loginStatus !== "connected"/);
   assert.match(growthBadgeSource, /social needs login/);
-  assert.match(growthBadgeSource, /code\.includes\("target"\)[\s\S]*growth needs targets/);
+  assert.match(growthBadgeSource, /code\.includes\("needs_more_targets"\)[\s\S]*code\.includes\("target_accounts_missing"\)[\s\S]*growth needs targets/);
 });
 
 test("social badge explains real blocking reasons and preserves growth-ready state", () => {
