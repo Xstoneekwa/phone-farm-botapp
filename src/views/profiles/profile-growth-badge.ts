@@ -12,6 +12,17 @@ function stableBlockCode(profile: BotProfile): string {
     .join(" ");
 }
 
+function hasActiveRuntime(profile: BotProfile): boolean {
+  const requestStatus = String(profile.activeRunRequestStatus || "").trim().toLowerCase();
+  const runStatus = String(profile.activeRunStatus || "").trim().toLowerCase();
+  return (
+    profile.status === "running"
+    || ["pending", "queued", "claimed", "starting", "running", "stopping", "canceling"].includes(requestStatus)
+    || ["pending", "running", "stopping"].includes(runStatus)
+    || profile.runtimeIndicator?.state === "active"
+  );
+}
+
 export function socialBlockLabel(reason: string): string {
   const normalized = reason.toLowerCase();
   if (normalized.includes("review_login_package_mismatch") || normalized.includes("identity_mismatch")) {
@@ -30,6 +41,14 @@ export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTo
     const reason = stableBlockCode(profile);
     if (reason.includes("login")) return { label: "social needs login", tone: "warning" };
     return { label: "social needs login", tone: "warning" };
+  }
+
+  if (hasActiveRuntime(profile)) {
+    const staleReason = stableBlockCode(profile);
+    if (staleReason && !staleReason.includes("already_running") && !staleReason.includes("active_run")) {
+      console.info("[botapp] profiles_stale_badge_ignored", { profileId: profile.id, reason: staleReason });
+    }
+    return { label: "active", tone: "success" };
   }
 
   if (profile.eligibility === "can_start") {
@@ -59,6 +78,9 @@ export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTo
   }
   if (code.includes("scheduler_launch_blocked")) {
     return { label: "connected · scheduler blocked", tone: "warning" };
+  }
+  if (code.includes("operator_review_required") || code.includes("blocking_dashboard_action")) {
+    return { label: socialBlockLabel(code), tone: "warning" };
   }
   if (code.includes("account_session_running") || code.includes("active_run_exists")) {
     return { label: "connected · session running", tone: "info" };

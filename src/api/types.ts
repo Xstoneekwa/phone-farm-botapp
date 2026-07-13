@@ -554,6 +554,11 @@ export type ProfileRunCounters = {
   interactionsTotal: number;
   source?: string;
   runId?: string | null;
+  projectionSource?: string;
+  lastProgressAt?: string | null;
+  canonicalDailyCount?: Partial<ProfileRunCounters>;
+  activeRunVerifiedCount?: Partial<ProfileRunCounters>;
+  projectedDisplayCount?: Partial<ProfileRunCounters>;
 };
 
 export type ProfileRuntimeIndicator = {

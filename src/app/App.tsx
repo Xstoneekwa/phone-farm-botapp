@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { mockClient } from "../api/mock-client";
 import type { ActivityLogEntry, ApiKeySummary, AppSettings, AutoRestartControl, AutoRestartOverview, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotAppDispatcherHealth, BotAppRelayHealth, BotProfile, CompassActionTarget, CompassAnalyzeResult, CompassAiRuntimeStatus, CompassOverview, Device, DeviceProfileGroup, NotificationItem, WebhookSummary } from "../api/types";
 import { Modal, Toasts, type ToastItem } from "../design/components";
@@ -21,6 +21,7 @@ import { APIKeys } from "../views/APIKeys";
 import { Settings } from "../views/Settings";
 import { routes, type RouteId } from "./routes";
 import { shouldPollProfilesLiveCounters } from "../views/profiles/run-control";
+import { createProfilesAutoRefreshController, shouldPollProfiles } from "../views/profiles/profiles-auto-refresh";
 import { createDevicesAutoRefreshController, shouldPollDevices } from "../views/devices-auto-refresh";
 import "./app.css";
 
@@ -58,18 +59,56 @@ export function App() {
   const [relayHealth, setRelayHealth] = useState<BotAppRelayHealth | null>(null);
   const [repairBusy, setRepairBusy] = useState(false);
   const [dispatcherEnsureBusy, setDispatcherEnsureBusy] = useState(false);
+  const dataRef = useRef<AppData>(emptyData);
+  const profilesRuntimeActiveRef = useRef(false);
+  const profilesAutoRefreshRef = useRef<ReturnType<typeof createProfilesAutoRefreshController> | null>(null);
+  const relayWasOperationalRef = useRef(false);
 
-  async function loadOverviewData() {
+  function applyOverviewData(nextData: AppData) {
+    const previousById = new Map(dataRef.current.profiles.map((profile) => [profile.id, profile]));
+    for (const profile of nextData.profiles) {
+      const previous = previousById.get(profile.id);
+      const wasActive = previous ? shouldPollProfilesLiveCounters(previous) : false;
+      const isActive = shouldPollProfilesLiveCounters(profile);
+      if (previous && wasActive !== isActive) {
+        console.info(`[botapp] profiles_runtime_${wasActive ? "active_to_idle" : "idle_to_active"}`, { profileId: profile.id });
+      }
+      if (isActive) {
+        console.info("[botapp] profiles_live_counter_received", {
+          profileId: profile.id,
+          follows: profile.currentRunCounters?.follows ?? 0,
+          likes: profile.currentRunCounters?.likes ?? 0,
+          dms: profile.currentRunCounters?.dms ?? 0,
+          source: profile.currentRunCounters?.projectionSource || profile.currentRunCounters?.source || "unknown",
+          lastProgressAt: profile.currentRunCounters?.lastProgressAt || null,
+        });
+      } else if (previous && wasActive) {
+        console.info("[botapp] profiles_canonical_counter_received", {
+          profileId: profile.id,
+          follows: profile.counters.follow.current,
+          likes: profile.counters.like.current,
+          dms: profile.counters.dm.current,
+          source: "canonical_daily",
+        });
+      }
+    }
+    profilesRuntimeActiveRef.current = nextData.profiles.some(shouldPollProfilesLiveCounters);
+    dataRef.current = nextData;
+    setData(nextData);
+  }
+
+  async function loadOverviewData(reason = "manual") {
+    console.info("[botapp] profiles_overview_refresh", { reason });
     if (window.botappDesktop?.data?.overview) {
       const result = await window.botappDesktop.data.overview();
       const nextData = result.data;
       const hasUsableProjection = Boolean(
-        data.profiles.length
-        || data.profileGroups.length
-        || data.devices.length
+        dataRef.current.profiles.length
+        || dataRef.current.profileGroups.length
+        || dataRef.current.devices.length
       );
       if (result.ok || !hasUsableProjection) {
-        setData(nextData);
+        applyOverviewData(nextData);
       }
       setSyncError(result.error ?? null);
       setProfilesMeta(result.profilesMeta ?? null);
@@ -81,7 +120,7 @@ export function App() {
     const [profiles, profileGroups, clientAccounts, credentials, compass, autoRestart, devices, notifications, logs, apiKeys, webhooks, settings] = await Promise.all([
       mockClient.listProfiles(), mockClient.listDeviceProfileGroups(), mockClient.listClientAccounts(), mockClient.listCredentialsActions(), mockClient.listCompass(), mockClient.listAutoRestart(), mockClient.listDevices(), mockClient.listNotifications(), mockClient.listActivityLogs(), mockClient.listApiKeys(), mockClient.listWebhooks(), mockClient.listSettings(),
     ]);
-    setData({
+    applyOverviewData({
       profiles: profiles.ok ? profiles.data : [],
       profileGroups: profileGroups.ok ? profileGroups.data : [],
       clientAccounts: clientAccounts.ok ? clientAccounts.data : null,
@@ -117,7 +156,7 @@ export function App() {
     try {
       const result = await window.botappDesktop?.relay?.repair?.();
       if (result?.relay) setRelayHealth(result.relay);
-      await loadOverviewData();
+      await loadOverviewData("relay_repair");
       await loadDispatcherHealth();
       pushToast(result?.message || (result?.ok ? "BotApp connection operational." : "Repair unavailable."), result?.ok ? "success" : "error");
     } finally {
@@ -181,11 +220,13 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      await loadOverviewData();
+      await loadOverviewData("startup");
       if (!cancelled) setLoading(false);
     }
     void load();
     return () => { cancelled = true; };
+    // loadOverviewData intentionally runs once for the initial app snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const profilesNeedLiveCounters = useMemo(
@@ -194,12 +235,43 @@ export function App() {
   );
 
   useEffect(() => {
-    if (!profilesNeedLiveCounters) return;
-    const interval = window.setInterval(() => {
-      void loadOverviewData();
-    }, 4000);
-    return () => window.clearInterval(interval);
+    profilesRuntimeActiveRef.current = profilesNeedLiveCounters;
   }, [profilesNeedLiveCounters]);
+
+  useEffect(() => {
+    if (active !== "profiles") return;
+    const controller = createProfilesAutoRefreshController({
+      refresh: (reason) => loadOverviewData(`profiles_${reason}`),
+      isRuntimeActive: () => profilesRuntimeActiveRef.current,
+      log: (event, detail) => console.info(`[botapp] ${event}`, detail || {}),
+    });
+    profilesAutoRefreshRef.current = controller;
+    const onVisibilityChange = () => {
+      const visible = document.visibilityState === "visible";
+      if (visible && !controller.isStarted()) controller.start(true);
+      else controller.handleVisibilityChange(visible);
+    };
+    const onFocus = () => controller.handleFocus();
+    controller.start(shouldPollProfiles(active, document.visibilityState));
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onFocus);
+      controller.stop();
+      if (profilesAutoRefreshRef.current === controller) profilesAutoRefreshRef.current = null;
+    };
+    // Recreate the polling lifecycle only when the active view changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  useEffect(() => {
+    const relayOperational = Boolean(relayHealth?.ok && relayHealth.relay_authenticated);
+    if (relayOperational && !relayWasOperationalRef.current) {
+      profilesAutoRefreshRef.current?.handleRelayReconnect();
+    }
+    relayWasOperationalRef.current = relayOperational;
+  }, [relayHealth]);
 
   // Devices auto-refresh: backend heartbeats advance every ~60s, so keep the
   // Devices view in sync (max ~15s of lag) without manual Refresh clicks.
@@ -387,7 +459,7 @@ export function App() {
   let view: React.ReactNode;
   if (loading) view = <div className="empty-state"><strong>Loading backend data</strong><span>BotApp is syncing through the shared backend relay.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
-  else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} dispatcherHealth={dispatcherHealth} syncError={syncError} profilesMeta={profilesMeta} loading={loading} onRefresh={() => loadOverviewData()} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message, tone) => pushToast(message, tone ?? "success")} />;
+  else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} dispatcherHealth={dispatcherHealth} syncError={syncError} profilesMeta={profilesMeta} loading={loading} onRefresh={() => loadOverviewData("manual_refresh")} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message, tone) => pushToast(message, tone ?? "success")} />;
   else if (active === "account") view = data.clientAccounts ? <ClientAccounts overview={data.clientAccounts} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} onOpenCredentials={(account) => { setSelectedCredentialsAccountId(account.accountId); setActive("credentials"); }} onRefresh={() => loadOverviewData()} /> : null;
   else if (active === "credentials") view = data.credentials ? <Credentials overview={data.credentials} selectedAccountId={selectedCredentialsAccountId} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} onRefresh={() => loadOverviewData()} />;

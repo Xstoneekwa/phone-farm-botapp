@@ -4717,6 +4717,11 @@ function readCurrentRunCounters(account) {
     interactionsTotal: readCount("interactionsTotal", "interactions_total"),
     source: String(source?.source || ""),
     runId: source?.runId || source?.run_id || null,
+    projectionSource: String(source?.projectionSource || source?.projection_source || source?.source || ""),
+    lastProgressAt: source?.lastProgressAt || source?.last_progress_at || null,
+    canonicalDailyCount: source?.canonicalDailyCount || source?.canonical_daily_count || null,
+    activeRunVerifiedCount: source?.activeRunVerifiedCount || source?.active_run_verified_count || null,
+    projectedDisplayCount: source?.projectedDisplayCount || source?.projected_display_count || null,
   };
 }
 
