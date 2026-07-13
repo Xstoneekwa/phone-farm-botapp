@@ -207,7 +207,7 @@ function phoneViewTooltip(group: DeviceProfileGroup, isOpen: boolean) {
 function CounterMetric({ current, max, label }: { current: number; max: number; label: string }) {
   return (
     <span>
-      <strong>{Number.isFinite(current) ? current : "—"}</strong>
+      <strong className="counter-current">{Number.isFinite(current) ? current : "—"}</strong>
       {Number.isFinite(max) ? <><span className="counter-cap">/{max}</span> {label}</> : <> {label}</>}
     </span>
   );

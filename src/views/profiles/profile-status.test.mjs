@@ -18,6 +18,19 @@ test("connect badge shows saved credentials as ready to connect", () => {
   assert.match(profilesViewSource, /profile\.credentialStatus === "saved_pending_verification"[\s\S]*ready to connect/);
 });
 
+test("Profiles emphasizes only counter numerators", () => {
+  assert.match(profilesViewSource, /<strong className="counter-current">/);
+  assert.match(profilesCssSource, /\.profile-counters \.counter-current \{ color: #000; font-weight: 900; \}/);
+  assert.match(profilesViewSource, /<span className="counter-cap">\/{max}<\/span>/);
+});
+
+test("unknown follower growth remains null instead of becoming a red zero", () => {
+  assert.match(mainSource, /function readNullableNumber\(value\)[\s\S]*value === null \|\| value === undefined \|\| value === ""[\s\S]*return null/);
+  assert.match(mainSource, /return readNullableNumber\(account\.followerDelta3d\.value\)/);
+  assert.match(mainSource, /const value = readNullableNumber\(source\.value\)/);
+  assert.doesNotMatch(mainSource, /const value = Number\(source\.value\)/);
+});
+
 test("social badge separates login and target blocks", async () => {
   const growthBadgeSource = readFileSync(resolve(currentDir, "profile-growth-badge.ts"), "utf8");
   assert.match(growthBadgeSource, /profile\.loginStatus !== "connected"/);

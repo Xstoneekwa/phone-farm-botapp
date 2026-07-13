@@ -4681,23 +4681,28 @@ function readAutoLoginRequirement({
   return requirementState(true, "ready", "Ready to connect", "Credentials are saved and the assigned phone/app can run login_provisioning.");
 }
 
+function readNullableNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function readFollowerDelta(account) {
   if (account?.followerDelta3d && typeof account.followerDelta3d === "object") {
-    const value = Number(account.followerDelta3d.value);
-    return Number.isFinite(value) ? value : null;
+    return readNullableNumber(account.followerDelta3d.value);
   }
   return null;
 }
 
 function readFollowerDelta3d(account) {
   const source = account?.followerDelta3d && typeof account.followerDelta3d === "object" ? account.followerDelta3d : {};
-  const value = Number(source.value);
-  const currentFollowers = Number(source.currentFollowers ?? source.current_followers);
-  const previousFollowers = Number(source.previousFollowers ?? source.previous_followers);
+  const value = readNullableNumber(source.value);
+  const currentFollowers = readNullableNumber(source.currentFollowers ?? source.current_followers);
+  const previousFollowers = readNullableNumber(source.previousFollowers ?? source.previous_followers);
   return {
-    value: Number.isFinite(value) ? value : null,
-    currentFollowers: Number.isFinite(currentFollowers) ? currentFollowers : null,
-    previousFollowers: Number.isFinite(previousFollowers) ? previousFollowers : null,
+    value,
+    currentFollowers,
+    previousFollowers,
     from: source.from || null,
     to: source.to || null,
     source: String(source.source || "pending_account_follower_snapshots"),
