@@ -49,6 +49,20 @@ test("real current blocker remains visible when there is no active runtime", () 
   );
 });
 
+test("structured Welcome failures expose operator review instead of unavailable", () => {
+  assert.deepEqual(
+    socialBadge(profile({ eligibility: "blocked_now", eligibilityReason: "recovered_snapshot_rejected" })),
+    { label: "operator review required", tone: "warning" },
+  );
+});
+
+test("unstructured worker failure remains an explicit business blocker", () => {
+  assert.deepEqual(
+    socialBadge(profile({ eligibility: "blocked_now", eligibilityReason: "worker_exit_nonzero" })),
+    { label: "growth blocked: worker failure", tone: "warning" },
+  );
+});
+
 test("terminal idle preserves canonical counters instead of returning to zero", () => {
   const terminal = profile({ currentRunCounters: { follows: 0, likes: 0, dms: 0, interactionsTotal: 0 } });
   assert.deepEqual(displayRunCounters(terminal), { mode: "today", follow: 10, like: 10, dm: 0, total: 0 });

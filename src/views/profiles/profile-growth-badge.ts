@@ -82,6 +82,16 @@ export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTo
   if (code.includes("operator_review_required") || code.includes("blocking_dashboard_action")) {
     return { label: socialBlockLabel(code), tone: "warning" };
   }
+  if (
+    code.includes("welcome_surface_unstable")
+    || code.includes("followers_surface_missing_at_start")
+    || code.includes("recovered_snapshot_rejected")
+  ) {
+    return { label: "operator review required", tone: "warning" };
+  }
+  if (code.includes("run_worker_failure") || code.includes("worker_exit_nonzero")) {
+    return { label: "growth blocked: worker failure", tone: "warning" };
+  }
   if (code.includes("account_session_running") || code.includes("active_run_exists")) {
     return { label: "connected · session running", tone: "info" };
   }
