@@ -257,9 +257,23 @@ test("operator review uses the canonical backend endpoint through IPC", () => {
   assert.match(electronMainSource, /path: "\/api\/instagram-dashboard\/dashboard-actions\/review"/);
   assert.match(electronMainSource, /review_status: "reviewed"/);
   assert.match(electronMainSource, /source: "botapp_relay"/);
+  assert.match(electronMainSource, /operator_id: botappOperatorId\(\)/);
+  assert.match(electronMainSource, /BOTAPP_OPERATOR_ID/);
   assert.match(electronMainSource, /botapp:incidents:mark-reviewed/);
   assert.match(preloadSource, /markReviewed/);
   assert.doesNotMatch(drawerSource, /\.update\(/);
+});
+
+test("operator review backend errors remain visible without a false resolution", () => {
+  const handler = drawerSource.slice(
+    drawerSource.indexOf("async function markOperatorReviewed"),
+    drawerSource.indexOf("const incident = detail?.incident"),
+  );
+  assert.match(handler, /if \(!result\?\.ok\)/);
+  assert.match(handler, /setError\(message\)/);
+  assert.match(handler, /setActionProof\(\{ action: "mark_reviewed", ok: false, message \}\)/);
+  assert.match(handler, /return;/);
+  assert.match(handler, /message: "Operator review recorded\."/);
 });
 
 test("P3.1: the main process always requests test incidents for the toggle", () => {

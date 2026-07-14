@@ -1528,6 +1528,19 @@ function relayHeaders(cfg = compassConfig()) {
   return headers;
 }
 
+function botappOperatorId() {
+  const configured = String(process.env.BOTAPP_OPERATOR_ID || "").trim().toLowerCase();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(configured)) {
+    return configured;
+  }
+  const localIdentity = `${os.userInfo().username}@${os.hostname()}`.toLowerCase();
+  const bytes = crypto.createHash("sha256").update(`botapp-operator:${localIdentity}`).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function safeSha256Prefix(value) {
   const normalized = String(value || "");
   if (!normalized) return null;
@@ -3011,6 +3024,7 @@ async function performOperatorReviewAction(input = {}) {
     const data = await dashboardPost("dashboard_action_review", {
       action_id: actionId,
       account_id: accountId,
+      operator_id: botappOperatorId(),
       review_status: "reviewed",
       source: "botapp_relay",
       note: String(input?.note || "").trim() || null,
