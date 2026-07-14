@@ -170,7 +170,7 @@ export function IncidentDrawer({
         note: reviewNote.trim() || null,
       });
       if (!result?.ok) {
-        const message = result?.error || "Operator review action failed.";
+        const message = "Could not mark reviewed. Please try again.";
         setError(message);
         setActionProof({ action: "mark_reviewed", ok: false, message });
         return;
@@ -180,8 +180,8 @@ export function IncidentDrawer({
       await reload();
       onChanged?.();
       onProfilesChanged?.();
-    } catch (exc) {
-      setError(exc instanceof Error ? exc.message : "Operator review action failed.");
+    } catch {
+      setError("Could not mark reviewed. Please try again.");
     } finally {
       setActing(null);
     }

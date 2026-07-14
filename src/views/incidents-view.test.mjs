@@ -28,6 +28,7 @@ const appSource = readFileSync(new URL("../app/App.tsx", import.meta.url), "utf8
 const routesSource = readFileSync(new URL("../app/routes.tsx", import.meta.url), "utf8");
 const electronMainSource = readFileSync(new URL("../../electron/main.cjs", import.meta.url), "utf8");
 const preloadSource = readFileSync(new URL("../../electron/preload.cjs", import.meta.url), "utf8");
+const operatorReviewActionSource = readFileSync(new URL("../../electron/operator-review-action.cjs", import.meta.url), "utf8");
 
 const mythylLikeIncident = {
   id: "inc-1",
@@ -258,6 +259,7 @@ test("operator review uses the canonical backend endpoint through IPC", () => {
   assert.match(electronMainSource, /review_status: "reviewed"/);
   assert.match(electronMainSource, /source: "botapp_relay"/);
   assert.match(electronMainSource, /operator_id: botappOperatorId\(\)/);
+  assert.match(electronMainSource, /extractOperatorReviewActionId/);
   assert.match(electronMainSource, /BOTAPP_OPERATOR_ID/);
   assert.match(electronMainSource, /botapp:incidents:mark-reviewed/);
   assert.match(preloadSource, /markReviewed/);
@@ -274,6 +276,10 @@ test("operator review backend errors remain visible without a false resolution",
   assert.match(handler, /setActionProof\(\{ action: "mark_reviewed", ok: false, message \}\)/);
   assert.match(handler, /return;/);
   assert.match(handler, /message: "Operator review recorded\."/);
+  assert.match(handler, /Could not mark reviewed\. Please try again\./);
+  assert.doesNotMatch(handler, /exc instanceof Error \? exc\.message/);
+  assert.match(operatorReviewActionSource, /value\.id/);
+  assert.doesNotMatch(operatorReviewActionSource, /JSON\.stringify/);
 });
 
 test("P3.1: the main process always requests test incidents for the toggle", () => {

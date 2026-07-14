@@ -28,6 +28,7 @@ const {
 } = require("./relay-runtime-bootstrap.cjs");
 const botappSchedulerRuntime = require("./botapp-scheduler-runtime.cjs");
 const { findNonCloneablePath, serializeIpcPayload, toRedactedIpcError } = require("./ipc-structured-clone.cjs");
+const { extractOperatorReviewActionId } = require("./operator-review-action.cjs");
 const {
   runtimeControllerPathFromEnv,
   runtimeControllerCwd,
@@ -3015,10 +3016,10 @@ async function performIncidentAction(input = {}) {
 }
 
 async function performOperatorReviewAction(input = {}) {
-  const actionId = String(input?.action_id || input?.actionId || "").trim();
+  const actionId = extractOperatorReviewActionId(input?.action_id || input?.actionId);
   const accountId = String(input?.account_id || input?.accountId || "").trim();
   if (!actionId || !accountId) {
-    return { ok: false, error: "operator_review_payload_invalid" };
+    return { ok: false, error: "Invalid review action." };
   }
   try {
     const data = await dashboardPost("dashboard_action_review", {
@@ -3034,8 +3035,8 @@ async function performOperatorReviewAction(input = {}) {
       },
     });
     return { ok: true, data };
-  } catch (error) {
-    return { ok: false, error: safeRuntimeError(error, "Operator review action failed.") };
+  } catch {
+    return { ok: false, error: "Could not mark reviewed. Please try again." };
   }
 }
 
