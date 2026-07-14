@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { URL } from "node:url";
 import {
   INCIDENTS_LIST_STATUS,
   INCIDENTS_REFRESH_INTERVAL_MS,
@@ -25,6 +26,8 @@ const incidentsViewSource = readFileSync(new URL("./incidents-view.ts", import.m
 const drawerSource = readFileSync(new URL("./IncidentDrawer.tsx", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../app/App.tsx", import.meta.url), "utf8");
 const routesSource = readFileSync(new URL("../app/routes.tsx", import.meta.url), "utf8");
+const electronMainSource = readFileSync(new URL("../../electron/main.cjs", import.meta.url), "utf8");
+const preloadSource = readFileSync(new URL("../../electron/preload.cjs", import.meta.url), "utf8");
 
 const mythylLikeIncident = {
   id: "inc-1",
@@ -237,6 +240,26 @@ test("drawer keeps a simple resolve action and drops the dead resume flag", () =
   // resume_scheduling was ignored by the backend; the canonical resume
   // authorization now goes through ready_to_resume only.
   assert.doesNotMatch(drawerSource, /resume_scheduling/);
+});
+
+test("drawer exposes linked operator review as a separate confirmed workflow", () => {
+  assert.match(drawerSource, /operatorReviewAction/);
+  assert.match(drawerSource, /Mark reviewed/);
+  assert.match(drawerSource, /Confirm review/);
+  assert.match(drawerSource, /Review note \(optional\)/);
+  assert.match(drawerSource, /incidents\?\.markReviewed/);
+  assert.match(drawerSource, /onProfilesChanged\?\.\(\)/);
+  assert.match(drawerSource, /resolveButtonLabel/);
+});
+
+test("operator review uses the canonical backend endpoint through IPC", () => {
+  assert.match(electronMainSource, /id: "dashboard_action_review"/);
+  assert.match(electronMainSource, /path: "\/api\/instagram-dashboard\/dashboard-actions\/review"/);
+  assert.match(electronMainSource, /review_status: "reviewed"/);
+  assert.match(electronMainSource, /source: "botapp_relay"/);
+  assert.match(electronMainSource, /botapp:incidents:mark-reviewed/);
+  assert.match(preloadSource, /markReviewed/);
+  assert.doesNotMatch(drawerSource, /\.update\(/);
 });
 
 test("P3.1: the main process always requests test incidents for the toggle", () => {

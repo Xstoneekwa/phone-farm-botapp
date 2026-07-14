@@ -508,7 +508,7 @@ export function App() {
   else if (active === "activity") view = <ActivityLog logs={data.logs} />;
   else if (active === "email-history") view = <EmailHistory />;
   else if (active === "runtime") view = <RuntimeHealth />;
-  else if (active === "incidents") view = <Incidents onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} />;
+  else if (active === "incidents") view = <Incidents onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} onProfilesChanged={() => void loadOverviewData("operator_review")} />;
   else if (active === "incident-notifications") view = <IncidentNotificationsSettingsView />;
   else if (active === "compass") view = data.compass ? <Compass overview={data.compass} onNavigate={navigateCompassTarget} onAnalyze={analyzeCompass} /> : null;
   else if (active === "auto-restart") view = data.autoRestart ? <AutoRestart overview={data.autoRestart} relayHealth={relayHealth} dispatcherHealth={dispatcherHealth} onRefresh={refreshAutoRestart} onDryRun={runAutoRestartDryRun} onNavigate={navigateAutoRestartTarget} onAction={requestAction} /> : null;

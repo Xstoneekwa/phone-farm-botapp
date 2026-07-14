@@ -44,6 +44,12 @@ type IncidentRecovery = {
 type IncidentDetail = {
   incident: IncidentRow;
   recovery?: IncidentRecovery;
+  operatorReviewAction?: {
+    id: string;
+    accountId: string;
+    status: string;
+    blockingCampaign: boolean;
+  } | null;
   timeline?: Array<{ actionType?: string; message?: string; createdAt?: string }>;
   notifications?: Array<{ channel?: string; status?: string; attemptCount?: number }>;
 };
@@ -69,16 +75,20 @@ export function IncidentDrawer({
   incidentId,
   onClose,
   onChanged,
+  onProfilesChanged,
 }: {
   open: boolean;
   incidentId: string | null;
   onClose: () => void;
   onChanged?: () => void;
+  onProfilesChanged?: () => void;
 }) {
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
+  const [reviewNote, setReviewNote] = useState("");
+  const [confirmingReview, setConfirmingReview] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
   const [actionProof, setActionProof] = useState<{ action: string; ok: boolean; message: string; status?: string | null } | null>(null);
 
@@ -103,12 +113,16 @@ export function IncidentDrawer({
   }, [incidentId]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- drawer state follows the selected incident lifecycle */
     if (open && incidentId) void reload();
     if (!open) {
       setDetail(null);
       setResolutionNote("");
+      setReviewNote("");
+      setConfirmingReview(false);
       setError(null);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, incidentId, reload]);
 
   async function runAction(action: string, extra: Record<string, unknown> = {}) {
@@ -144,6 +158,35 @@ export function IncidentDrawer({
     }
   }
 
+  async function markOperatorReviewed() {
+    const reviewAction = detail?.operatorReviewAction;
+    if (!reviewAction || acting) return;
+    setActing("mark_reviewed");
+    setError(null);
+    try {
+      const result = await window.botappDesktop?.incidents?.markReviewed?.({
+        action_id: reviewAction.id,
+        account_id: reviewAction.accountId,
+        note: reviewNote.trim() || null,
+      });
+      if (!result?.ok) {
+        const message = result?.error || "Operator review action failed.";
+        setError(message);
+        setActionProof({ action: "mark_reviewed", ok: false, message });
+        return;
+      }
+      setConfirmingReview(false);
+      setActionProof({ action: "mark_reviewed", ok: true, message: "Operator review recorded.", status: "resolved" });
+      await reload();
+      onChanged?.();
+      onProfilesChanged?.();
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "Operator review action failed.");
+    } finally {
+      setActing(null);
+    }
+  }
+
   const incident = detail?.incident;
   const recovery = detail?.recovery;
   const canAcknowledge = incident?.status === "open";
@@ -155,6 +198,7 @@ export function IncidentDrawer({
   const armedOrPending = isArmedOrPendingRecovery(recovery);
   const recoveryReason = recoveryReasonCopy(recovery?.reason ?? null);
   const recoveryStateText = recoveryStateLabel(recovery);
+  const operatorReviewAction = detail?.operatorReviewAction;
 
   if (!open) return null;
 
@@ -246,6 +290,38 @@ export function IncidentDrawer({
               </ul>
             ) : <p>No canonical audit events loaded yet.</p>}
           </section>
+          {operatorReviewAction ? (
+            <section className="incident-drawer-operator-review" data-testid="incident-drawer-operator-review">
+              {confirmingReview ? (
+                <div role="group" aria-label="Confirm operator review">
+                  <p>Confirm this action has been reviewed by a human operator.</p>
+                  <label className="incident-drawer-note">
+                    Review note (optional)
+                    <textarea
+                      data-testid="botapp-operator-review-note"
+                      value={reviewNote}
+                      maxLength={500}
+                      rows={2}
+                      disabled={Boolean(acting)}
+                      onChange={(event) => setReviewNote(event.target.value)}
+                    />
+                  </label>
+                  <div className="incident-drawer-actions">
+                    <button type="button" className="btn btn-primary" data-testid="botapp-operator-review-confirm" disabled={Boolean(acting)} onClick={() => void markOperatorReviewed()}>
+                      {acting === "mark_reviewed" ? "Marking…" : "Confirm review"}
+                    </button>
+                    <button type="button" className="btn btn-secondary" disabled={Boolean(acting)} onClick={() => setConfirmingReview(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="btn btn-primary" data-testid="botapp-operator-review-mark" disabled={Boolean(acting)} onClick={() => setConfirmingReview(true)}>
+                  Mark reviewed
+                </button>
+              )}
+            </section>
+          ) : null}
           {(showAcknowledge || showResolve || showKeepPaused || showReadyToResume) ? (
             <>
               <label className="incident-drawer-note">

@@ -22,7 +22,13 @@ import {
  * the audited incident drawer; clicking an account jumps to Profiles. Nothing
  * in this view starts, retries or schedules a run.
  */
-export function Incidents({ onOpenProfile }: { onOpenProfile: (accountId: string) => void }) {
+export function Incidents({
+  onOpenProfile,
+  onProfilesChanged,
+}: {
+  onOpenProfile: (accountId: string) => void;
+  onProfilesChanged?: () => void;
+}) {
   const [rows, setRows] = useState<IncidentRowView[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -170,6 +176,7 @@ export function Incidents({ onOpenProfile }: { onOpenProfile: (accountId: string
         incidentId={drawerIncidentId}
         onClose={() => setDrawerIncidentId(null)}
         onChanged={() => void refresh()}
+        onProfilesChanged={onProfilesChanged}
       />
     </div>
   );

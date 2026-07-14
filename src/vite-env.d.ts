@@ -257,6 +257,7 @@ interface Window {
       list: (input?: { status?: string; limit?: number }) => Promise<{ ok: boolean; openCount?: number; incidents?: Array<Record<string, unknown>>; message?: string; authorizedHostMachine?: string | null; scopeMode?: string | null }>;
       detail: (incidentId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
       action: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
+      markReviewed: (input: { action_id: string; account_id: string; note?: string | null }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
       notificationSettings: () => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
       patchNotificationSettings: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
       testNotification: (input: { channel: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;

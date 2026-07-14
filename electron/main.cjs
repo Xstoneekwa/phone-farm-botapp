@@ -1621,6 +1621,7 @@ const runtimeIpcHandlers = [
   "botapp:incidents:list",
   "botapp:incidents:detail",
   "botapp:incidents:action",
+  "botapp:incidents:mark-reviewed",
   "botapp:incidents:notification-settings",
   "botapp:incidents:notification-settings-patch",
   "botapp:incidents:notification-test",
@@ -2123,6 +2124,17 @@ const botappEndpointRegistry = [
     path: "/api/instagram-dashboard/incidents/action",
     usedBy: ["Runtime Health"],
     purpose: "Acknowledge, resolve, keep paused, or manual retry through audited incident actions",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "dashboard_action_review",
+    name: "Operator review action",
+    method: "POST",
+    path: "/api/instagram-dashboard/dashboard-actions/review",
+    usedBy: ["Incidents"],
+    purpose: "Complete one linked operator review through the canonical audited backend transition",
     authRequired: true,
     status: "active",
     testStrategy: "none",
@@ -2986,6 +2998,30 @@ async function performIncidentAction(input = {}) {
     return { ok: true, data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Incident action failed.") };
+  }
+}
+
+async function performOperatorReviewAction(input = {}) {
+  const actionId = String(input?.action_id || input?.actionId || "").trim();
+  const accountId = String(input?.account_id || input?.accountId || "").trim();
+  if (!actionId || !accountId) {
+    return { ok: false, error: "operator_review_payload_invalid" };
+  }
+  try {
+    const data = await dashboardPost("dashboard_action_review", {
+      action_id: actionId,
+      account_id: accountId,
+      review_status: "reviewed",
+      source: "botapp_relay",
+      note: String(input?.note || "").trim() || null,
+      metadata_safe: {
+        review_surface: "botapp_incidents",
+        operator_review_completed: true,
+      },
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Operator review action failed.") };
   }
 }
 
@@ -7565,6 +7601,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:incidents:list", (_event, input) => incidentsOverview(input || {}));
   ipcMain.handle("botapp:incidents:detail", (_event, incidentId) => incidentsDetail(incidentId));
   ipcMain.handle("botapp:incidents:action", (_event, input) => performIncidentAction(input || {}));
+  ipcMain.handle("botapp:incidents:mark-reviewed", (_event, input) => performOperatorReviewAction(input || {}));
   ipcMain.handle("botapp:incidents:notification-settings", () => incidentsNotificationSettings());
   ipcMain.handle("botapp:incidents:notification-settings-patch", (_event, input) => patchIncidentsNotificationSettings(input || {}));
   ipcMain.handle("botapp:incidents:notification-test", (_event, input) => testIncidentsNotification(input || {}));
