@@ -128,6 +128,8 @@ test("delivery degraded is surfaced with a readable label and error tone", () =>
 
 test("state and severity copy are stable", () => {
   assert.equal(incidentStateCopy("action_required").tone, "error");
+  assert.equal(incidentStateCopy("reviewed").label, "Reviewed");
+  assert.equal(incidentStateCopy("reviewed").tone, "success");
   assert.equal(incidentStateCopy("resolved").tone, "success");
   assert.equal(incidentStateCopy("unexpected_state").label, "unexpected_state");
   assert.equal(severityTone("critical"), "error");
@@ -265,6 +267,8 @@ test("drawer exposes linked operator review as a separate confirmed workflow", (
   assert.match(drawerSource, /incidents\?\.markReviewed/);
   assert.match(drawerSource, /onProfilesChanged\?\.\(\)/);
   assert.match(drawerSource, /resolveButtonLabel/);
+  assert.match(drawerSource, /operatorReviewStatus === "reviewed" \? "Reviewed"/);
+  assert.match(drawerSource, /incidentStateCopy\(incident\?\.displayState/);
 });
 
 test("operator review uses the canonical backend endpoint through IPC", () => {

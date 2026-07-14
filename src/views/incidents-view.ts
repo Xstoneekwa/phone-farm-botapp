@@ -103,6 +103,7 @@ export function countIncidents(rows: IncidentRowView[]): IncidentViewCounters {
   return {
     open: operational.filter((row) =>
       row.displayState === "open"
+      || row.displayState === "reviewed"
       || row.displayState === "acknowledged"
       || row.displayState === "ready_to_resume"
       || row.displayState === "resume_requested").length,
@@ -117,6 +118,7 @@ export function countIncidents(rows: IncidentRowView[]): IncidentViewCounters {
 export const INCIDENT_STATE_COPY: Record<string, { label: string; tone: IncidentBadgeTone }> = {
   open: { label: "Open", tone: "warning" },
   action_required: { label: "Action required", tone: "error" },
+  reviewed: { label: "Reviewed", tone: "success" },
   acknowledged: { label: "Acknowledged", tone: "info" },
   resolved: { label: "Resolved", tone: "success" },
   ignored: { label: "Ignored", tone: "neutral" },

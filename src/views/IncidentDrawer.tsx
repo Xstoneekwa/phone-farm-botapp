@@ -16,6 +16,8 @@ import "./incident-drawer.css";
 type IncidentRow = {
   id: string;
   status?: string;
+  displayState?: string;
+  operatorReviewStatus?: "pending" | "reviewed" | "none";
   severity?: string;
   reason?: string;
   actionRequired?: string;
@@ -199,6 +201,7 @@ export function IncidentDrawer({
   const recoveryReason = recoveryReasonCopy(recovery?.reason ?? null);
   const recoveryStateText = recoveryStateLabel(recovery);
   const operatorReviewAction = detail?.operatorReviewAction;
+  const incidentState = incidentStateCopy(incident?.displayState || incident?.status || "open");
 
   if (!open) return null;
 
@@ -220,11 +223,14 @@ export function IncidentDrawer({
         <div className="incident-drawer-body" data-testid="incident-drawer-loaded">
           <div className="incident-drawer-header">
             <Badge tone={incident.severity === "critical" ? "error" : "warning"}>{incident.severity || "warning"}</Badge>
-            <Badge tone="neutral">{incident.status || "open"}</Badge>
+            <Badge tone={incidentState.tone}>{incidentState.label}</Badge>
             <span className="mono">{incident.reason || "—"}</span>
           </div>
           <dl className="incident-drawer-meta" data-testid="incident-drawer-detail-ready">
-            <div><dt>Action required</dt><dd>{incident.actionRequired || "Human review"}</dd></div>
+            <div>
+              <dt>{incident.operatorReviewStatus === "pending" ? "Action required" : "Review status"}</dt>
+              <dd>{incident.operatorReviewStatus === "reviewed" ? "Reviewed" : incident.actionRequired || "No operator action pending"}</dd>
+            </div>
             <div><dt>Account</dt><dd>{incident.accountUsername || "—"}</dd></div>
             <div><dt>Device</dt><dd>{incident.deviceLabel || "—"}</dd></div>
             <div><dt>Host</dt><dd>{incident.hostMachine || "—"}</dd></div>
