@@ -40,13 +40,25 @@ function str(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+const LEGACY_ENGLISH_COPY: Record<string, string> = {
+  "Échec worker sans raison structurée": "Worker process failure",
+  "Échec runtime du run": "Run runtime failure",
+  "Le worker s'est terminé en erreur sans raison structurée. Vérifier les logs internes du run.":
+    "The worker exited with an error and no structured reason. Review the internal run logs.",
+};
+
+function englishCopy(value: unknown) {
+  const text = str(value);
+  return LEGACY_ENGLISH_COPY[text] || text;
+}
+
 /** Normalize one raw incident record from the IPC bridge into a view row. */
 export function normalizeIncidentRow(raw: Record<string, unknown>): IncidentRowView | null {
   const id = str(raw.id);
   if (!id) return null;
   const incidentType = str(raw.incidentType) || str(raw.incident_type) || "unknown_incident";
   const status = (str(raw.status) || "open").toLowerCase();
-  const actionRequired = str(raw.actionRequired) || str(raw.action_required) || "";
+  const actionRequired = englishCopy(raw.actionRequired) || englishCopy(raw.action_required) || "";
   const displayState = str(raw.displayState)
     || (status === "open" && actionRequired ? "action_required" : status);
   const occurrenceRaw = Number(raw.occurrenceCount ?? raw.occurrence_count);
@@ -56,7 +68,7 @@ export function normalizeIncidentRow(raw: Record<string, unknown>): IncidentRowV
     severity: (str(raw.severity) || "warning").toLowerCase(),
     incidentType,
     reasonCode: str(raw.reasonCode) || str(raw.reason) || incidentType,
-    operatorLabel: str(raw.operatorLabel) || incidentType,
+    operatorLabel: englishCopy(raw.operatorLabel) || incidentType,
     actionRequired: actionRequired || null,
     accountId: str(raw.accountId) || str(raw.account_id) || null,
     accountUsername: str(raw.accountUsername) || str(raw.account_username) || null,

@@ -73,6 +73,20 @@ test("normalizeIncidentRow accepts snake_case fallbacks from the bridge", () => 
   assert.equal(row.occurrenceCount, 2);
 });
 
+test("normalizeIncidentRow translates known legacy French incident copy", () => {
+  const row = normalizeIncidentRow({
+    id: "legacy-worker-failure",
+    incident_type: "run_worker_failure",
+    operatorLabel: "Échec worker sans raison structurée",
+    action_required: "Le worker s'est terminé en erreur sans raison structurée. Vérifier les logs internes du run.",
+  });
+  assert.equal(row.operatorLabel, "Worker process failure");
+  assert.equal(
+    row.actionRequired,
+    "The worker exited with an error and no structured reason. Review the internal run logs.",
+  );
+});
+
 test("normalizeIncidentRow derives action_required from open + action", () => {
   const row = normalizeIncidentRow({
     id: "inc-3",
