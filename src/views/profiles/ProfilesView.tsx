@@ -18,6 +18,7 @@ import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifec
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
 import { buildRestoreLoginScreenPayload } from "./restore-login-screen-flow";
 import { buildStartPayload, buildStopPayload, displayCounterMetrics, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
+import { mergeGroupedProfiles } from "./profiles-live-merge";
 import { socialBadge, socialBlockLabel } from "./profile-growth-badge";
 import "./profiles.css";
 
@@ -108,18 +109,19 @@ function buildFallbackGroups(profiles: BotProfile[]): DeviceProfileGroup[] {
 }
 
 function mergeProfileGroups(groups: DeviceProfileGroup[], profiles: BotProfile[]) {
-  const groupedCount = groups.reduce((total, group) => total + group.profiles.length, 0);
-  if (groupedCount >= profiles.length) return groups;
-  const groupedIds = new Set(groups.flatMap((group) => group.profiles.map((profile) => profile.id)));
+  const refreshedGroups = mergeGroupedProfiles(groups, profiles);
+  const groupedCount = refreshedGroups.reduce((total, group) => total + group.profiles.length, 0);
+  if (groupedCount >= profiles.length) return refreshedGroups;
+  const groupedIds = new Set(refreshedGroups.flatMap((group) => group.profiles.map((profile) => profile.id)));
   const missing = profiles.filter((profile) => !groupedIds.has(profile.id));
-  if (!missing.length) return groups;
-  const unassigned = groups.find((group) => group.deviceId === "unassigned-live-profiles");
+  if (!missing.length) return refreshedGroups;
+  const unassigned = refreshedGroups.find((group) => group.deviceId === "unassigned-live-profiles");
   if (unassigned) {
-    return groups.map((group) => group.deviceId === "unassigned-live-profiles"
+    return refreshedGroups.map((group) => group.deviceId === "unassigned-live-profiles"
       ? { ...group, profiles: [...group.profiles, ...missing], summary: { ...group.summary, total: group.profiles.length + missing.length } }
       : group);
   }
-  return [...groups, ...buildFallbackGroups(missing)];
+  return [...refreshedGroups, ...buildFallbackGroups(missing)];
 }
 
 function profileMatchesSearch(profile: BotProfile, group: DeviceProfileGroup, query: string) {

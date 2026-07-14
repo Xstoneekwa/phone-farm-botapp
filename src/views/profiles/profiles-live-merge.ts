@@ -1,4 +1,4 @@
-import type { BotProfile, ProfileRunCounters } from "../../api/types";
+import type { BotProfile, DeviceProfileGroup, ProfileRunCounters } from "../../api/types";
 
 export type ProfilesLivePatch = {
   accountId: string;
@@ -13,6 +13,8 @@ export type ProfilesLivePatch = {
   currentBlocker?: { actionType?: string; status?: string; blockingCampaign?: boolean } | null;
   followerDelta3d?: BotProfile["followerDelta3d"];
   liveSupportedKinds?: Array<"follow" | "dm">;
+  runControlPhase?: BotProfile["runControlPhase"];
+  runControlLabel?: string | null;
 };
 
 const activeStatuses = new Set(["pending", "queued", "claimed", "starting", "running", "stopping", "canceling"]);
@@ -59,6 +61,8 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
       activeRunRequestStatus: patch.activeRunRequestStatus ?? null,
       activeRunId: patch.activeRunId ?? null,
       activeRunStatus: patch.activeRunStatus ?? null,
+      runControlPhase: patch.runControlPhase ?? null,
+      runControlLabel: patch.runControlLabel ?? null,
       runtimeIndicator: patch.runtimeIndicator ?? profile.runtimeIndicator,
       currentRunCounters: patch.currentRunCounters ?? profile.currentRunCounters,
       followerDelta3d: patch.followerDelta3d ?? profile.followerDelta3d,
@@ -81,4 +85,15 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
       liveSupportedKinds: patch.liveSupportedKinds ?? ["follow", "dm"],
     };
   });
+}
+
+export function mergeGroupedProfiles(
+  groups: DeviceProfileGroup[],
+  profiles: BotProfile[],
+): DeviceProfileGroup[] {
+  const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
+  return groups.map((group) => ({
+    ...group,
+    profiles: group.profiles.map((profile) => profilesById.get(profile.id) ?? profile),
+  }));
 }

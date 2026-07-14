@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mergeProfilesLiveProjection } from "./profiles-live-merge.ts";
+import { mergeGroupedProfiles, mergeProfilesLiveProjection } from "./profiles-live-merge.ts";
 
 function profile(overrides = {}) {
   return {
@@ -67,4 +67,41 @@ test("light polling refreshes rolling follower growth without a full Profiles re
     followerDelta3d,
   }])[0];
   assert.deepEqual(result.followerDelta3d, followerDelta3d);
+});
+
+test("existing device groups receive scheduler activity and terminal updates from light polling", () => {
+  const stale = profile({ status: "ready", activeRunRequestStatus: null });
+  const group = {
+    deviceId: "phone-1",
+    deviceLabel: "Samsung A16-01",
+    deviceSerial: "RFGL145VCKE",
+    deviceSerialLabel: "RFGL…VCKE",
+    deviceStatus: "online",
+    phoneStatus: "idle",
+    deviceView: { available: true, unavailableReason: null },
+    summary: { total: 1, normal: 1, dual: 0, other: 0 },
+    profiles: [stale],
+  };
+  const schedulerActive = profile({ status: "running", activeRunRequestStatus: "running", runtimeIndicator: { state: "active", reason: "active_run" } });
+  const activeGroup = mergeGroupedProfiles([group], [schedulerActive])[0];
+  assert.equal(activeGroup.profiles[0].status, "running");
+  assert.equal(activeGroup.profiles[0].activeRunRequestStatus, "running");
+
+  const terminal = profile({ status: "blocked", activeRunRequestStatus: null, activeRunStatus: null, runtimeIndicator: { state: "error", reason: "failed" } });
+  const terminalGroup = mergeGroupedProfiles([activeGroup], [terminal])[0];
+  assert.equal(terminalGroup.profiles[0].status, "blocked");
+  assert.equal(terminalGroup.profiles[0].activeRunRequestStatus, null);
+  assert.equal(terminalGroup.profiles[0].runtimeIndicator.state, "error");
+});
+
+test("stopping remains active in grouped profiles until the terminal patch arrives", () => {
+  const group = {
+    deviceId: "phone-1", deviceLabel: "Samsung A16-01", deviceSerial: "RFGL145VCKE", deviceSerialLabel: "RFGL…VCKE",
+    deviceStatus: "online", phoneStatus: "active", deviceView: { available: true, unavailableReason: null },
+    summary: { total: 1, normal: 1, dual: 0, other: 0 }, profiles: [profile()],
+  };
+  const stopping = profile({ status: "running", activeRunRequestStatus: "stopping", activeRunStatus: "stopping", runControlPhase: "stopping" });
+  const projected = mergeGroupedProfiles([group], [stopping])[0].profiles[0];
+  assert.equal(projected.status, "running");
+  assert.equal(projected.runControlPhase, "stopping");
 });
