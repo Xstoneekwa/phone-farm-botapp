@@ -364,6 +364,10 @@ Le renderer copie un JSON avec :
 - `provenance` : commit/marque BotApp, date package, chemin bundle/app, root
   runtime actif, commit runtime actif, sans secret
 
+Le futur `package-provenance.json` doit fournir uniquement la partie package
+immuable. Le root/commit worker demeure une observation runtime séparée. Au
+2026-07-14, ce fichier est **PLANNED, NOT IMPLEMENTED** dans `b812370`.
+
 **Ne doit jamais apparaître :**
 
 - Valeur de `botappRelayKey` ou token Bearer complet
@@ -374,6 +378,31 @@ Le renderer copie un JSON avec :
 ---
 
 ## Dépannage développeur
+
+### Future génération et vérification de provenance
+
+Cette procédure est un contrat prévu ; les commandes/scripts ne sont pas encore
+branchés au package officiel :
+
+1. exiger un worktree propre au commit Git complet et une ref distante prouvée ;
+2. lancer tests, lint et build canoniques ;
+3. générer `package-provenance.json` depuis une liste triée de sources et assets
+   critiques, avec les champs définis dans
+   [botapp-relay-dispatcher-architecture.md](botapp-relay-dispatcher-architecture.md) ;
+4. refuser toute valeur secrète, chemin utilisateur absolu ou donnée runtime ;
+5. inclure le manifeste dans les ressources `app.asar` avant signature ;
+6. extraire/lire le manifeste du bundle construit et recalculer chaque hash ;
+7. signer et vérifier le bundle ;
+8. calculer le SHA-256 externe final de `app.asar`, installer le bundle, puis
+   comparer hash et taille entre build et installation officielle ;
+9. vérifier séparément le commit/CWD du worker actif et le symlink runtime ;
+10. enregistrer build, installation, activation et validation physique comme
+    états distincts dans le registre de release.
+
+La provenance doit échouer fermée si Git, un fichier critique ou un hash est
+indéterminé. Une branche seule ne prouve jamais le contenu ; le SHA complet est
+l'identité normative. L'ajout du générateur et la modification du build/package
+nécessitent une tâche et un GO séparés.
 
 ### Build / package officiels
 

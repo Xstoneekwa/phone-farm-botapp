@@ -91,9 +91,66 @@ toute distribution multi-Mac exigera Developer ID + notarisation (chantier
 séparé, non implémenté).
 
 La provenance discrète à exposer dans About, Diagnostics ou Runtime Health doit
-inclure : commit BotApp, chemin du bundle, date de packaging, root runtime actif
-et commit runtime worker. Ne pas afficher ces informations comme bannière
-permanente.
+séparer deux vérités :
+
+1. **provenance immuable du package BotApp**, écrite au build dans un futur
+   `package-provenance.json` ;
+2. **provenance dynamique du runtime worker**, lue à l'exécution (symlink,
+   root, commit/CWD et heartbeat) car elle peut changer sans reconstruire
+   BotApp.
+
+Ne pas afficher ces informations comme bannière permanente.
+
+### Contrat futur `package-provenance.json`
+
+Statut au commit `b812370` (2026-07-14) : **PLANNED, NOT IMPLEMENTED**. Le
+bundle construit et installé ne contient pas ce fichier. Une ancienne branche
+locale possède un prototype `scripts/write-package-provenance.mjs` ; il est une
+preuve historique, pas le contrat actif, et n'a pas été repris dans cette tâche.
+
+Contenu attendu, sans secret ni donnée client :
+
+```json
+{
+  "schemaVersion": 1,
+  "generatedAt": "ISO-8601 UTC",
+  "repository": "phone-farm-botapp",
+  "commitSha": "full Git SHA",
+  "gitRef": "branch or detached ref, informational",
+  "gitDirty": false,
+  "packageVersion": "package.json version",
+  "appId": "Electron bundle id",
+  "platform": "darwin",
+  "arch": "arm64",
+  "toolchain": {
+    "node": "version",
+    "npm": "version",
+    "electron": "version",
+    "electronBuilder": "version"
+  },
+  "buildCommand": "canonical package command name",
+  "sourceFingerprint": "sha256 over sorted source manifest",
+  "sourceFiles": [{ "path": "repo-relative path", "sha256": "hex" }],
+  "distFiles": [{ "path": "repo-relative path", "sha256": "hex" }]
+}
+```
+
+Règles :
+
+- génération déterministe depuis un checkout propre et un commit complet ;
+- chemins relatifs, liste triée, aucun chemin utilisateur absolu ;
+- aucun token, URL relay privée, variable d'environnement, contenu Keychain,
+  mot de passe ou donnée client ;
+- échec du package si le worktree est sale ou si un fichier critique manque ;
+- le commit/runtime worker ne doit pas être figé dans ce fichier ; il appartient
+  aux diagnostics live ;
+- le SHA-256 final de `app.asar` ne peut pas être stocké à l'intérieur du même
+  `app.asar` sans auto-référence. Il doit être enregistré dans un manifeste de
+  release externe ou dans le registre d'installation, puis comparé au bundle
+  installé.
+
+L'implémentation du générateur, son branchement au build et la modification du
+package sont explicitement hors périmètre de ce checkpoint documentaire.
 
 `npm run electron:start` et toute fenêtre Electron dev noire sont **réservés aux développeurs** et ne doivent jamais être utilisés pour valider ou exploiter BotApp en production opérateur.
 

@@ -2,6 +2,42 @@
 
 ## Latest checkpoint
 
+**Verified:** `2026-07-14 14:55 SAST`
+
+**Message:** `fix(botapp): add incident operator review action`
+
+**Branch:** `codex/botapp-incident-mark-reviewed-20260714`
+
+**Commit:** `b8123709ae03cdf4dace6f6e54e4a0f4dd4ab2ec`
+
+### Scope delivered
+
+- Incident drawers receive the exact linked Operator Review action from the
+  deployed backend projection.
+- `Mark reviewed` is available only for a reviewable linked action and uses the
+  canonical transition route.
+- Official package was built and installed as the macOS Applications bundle.
+- Built and installed `app.asar` matched byte-for-byte: SHA-256
+  `259667d0b6174a7b2206cd67656b7282c8950eaf250d25e96996435e82ed4c5d`,
+  size `10515106`, mtime `2026-07-14 14:40:32 SAST`.
+- Relay and dispatcher were operational; Incidents displayed
+  `followers_surface_lost` and `recovered_snapshot_rejected`.
+
+### Status
+
+- Git pushed / package built / official app installed: **PROVED**.
+- Scheduler runtime heartbeat fresh: **PROVED**; directly attributable macOS
+  PID at snapshot: **UNKNOWN**.
+- Incident rows visible: **PROVED**.
+- Drawer and `Mark reviewed` end-to-end interaction:
+  **NOT PHYSICALLY VALIDATED** (`noWindowsAvailable` prevented the final UI
+  check; no review action was executed).
+- `package-provenance.json`: **PLANNED, NOT IMPLEMENTED** in this branch. See
+  the architecture and operations documents. The build/package was not changed
+  by this documentation checkpoint.
+
+## Previous checkpoint — 2026-07-13
+
 **Message:** `fix(botapp): clarify operator review and summarize restart status`
 
 **Branch:** `baseline-ui-reconciliation`
@@ -35,7 +71,7 @@
   remains to schedule separately; do not delete them implicitly during feature
   work.
 
-## Previous checkpoint
+## Earlier checkpoint
 
 **Message:** `feat(botapp): enable client password update requests`
 
