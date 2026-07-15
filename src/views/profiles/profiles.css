@@ -46,6 +46,8 @@
 .platform-logo-tiktok svg { fill: currentColor; filter: drop-shadow(-1px 0 #25F4EE) drop-shadow(1px 0 #FE2C55); }
 .profile-index { flex: 0 0 auto; font-size: 10px; line-height: 1; }
 .profile-owner-cell { min-width: 0; display: grid; gap: 1px; line-height: 1.05; }
+.profile-owner-cell strong,
+.profile-counters .counter-current { font-family: var(--font-sans); font-weight: 700; color: var(--fg-primary); letter-spacing: 0; }
 .profile-owner-cell strong { font-size: 12px; line-height: 1.08; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-owner-cell span { color: var(--fg-tertiary); font-size: 10.5px; line-height: 1.05; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-badges { display: flex; gap: 3px; min-width: 0; overflow: hidden; }
@@ -57,7 +59,6 @@
 .timeslot-pill { background: #111827; color: #fff; border-radius: var(--radius-full); padding: 3px 6px; font-size: 10px; text-align: center; white-space: nowrap; justify-self: start; }
 .profile-counters { display: inline-flex; justify-content: space-between; gap: 6px; font-size: 9.5px; color: var(--fg-secondary); white-space: nowrap; overflow: hidden; padding-left: 2px; }
 .profile-counters span { min-width: 0; }
-.profile-counters .counter-current { color: #000; font-weight: 700; }
 .counter-cap { color: var(--fg-secondary); font-weight: 500; }
 .profile-row-metrics { display: inline-flex; align-items: center; gap: 4px; justify-self: start; }
 .delta-pill { border-radius: var(--radius-full); padding: 2px 6px; font-size: 9.5px; font-weight: 700; text-align: center; }

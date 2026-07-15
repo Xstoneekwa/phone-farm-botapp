@@ -21,7 +21,10 @@ test("connect badge shows saved credentials as ready to connect", () => {
 
 test("Profiles emphasizes only counter numerators", () => {
   assert.match(profilesViewSource, /<strong className="counter-current">/);
-  assert.match(profilesCssSource, /\.profile-counters \.counter-current \{ color: #000; font-weight: 700; \}/);
+  assert.match(
+    profilesCssSource,
+    /\.profile-owner-cell strong,\s*\.profile-counters \.counter-current \{ font-family: var\(--font-sans\); font-weight: 700; color: var\(--fg-primary\); letter-spacing: 0; \}/,
+  );
   assert.match(profilesViewSource, /<span className="counter-cap">\/{max}<\/span>/);
 });
 
