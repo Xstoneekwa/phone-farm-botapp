@@ -12,7 +12,7 @@ export type ProfilesLivePatch = {
   interactionsToday?: number;
   currentBlocker?: { actionType?: string; status?: string; blockingCampaign?: boolean } | null;
   followerDelta3d?: BotProfile["followerDelta3d"];
-  liveSupportedKinds?: Array<"follow" | "dm">;
+  liveSupportedKinds?: Array<"follow" | "like" | "dm">;
   runControlPhase?: BotProfile["runControlPhase"];
   runControlLabel?: string | null;
 };
@@ -82,7 +82,7 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
         primary_block_reason: eligibilityReason === "ready" ? "" : eligibilityReason,
         reason_label: eligibilityReason === "ready" ? "Ready" : profile.eligibilityDetail.reason_label,
       },
-      liveSupportedKinds: patch.liveSupportedKinds ?? ["follow", "dm"],
+      liveSupportedKinds: patch.liveSupportedKinds ?? ["follow", "like", "dm"],
     };
   });
 }

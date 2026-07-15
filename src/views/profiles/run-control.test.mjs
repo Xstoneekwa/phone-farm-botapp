@@ -85,10 +85,10 @@ test("Displayed counters switch to current run counters while runtime is active"
   assert.deepEqual(active, { mode: "run", follow: 1, like: 1, dm: 0, total: 2 });
 });
 
-test("Counter metrics preserve unsupported values and mark only proven live producers", () => {
+test("Counter metrics mark only the asynchronously projected live producers", () => {
   const active = displayCounterMetrics(profile({
     activeRunStatus: "running",
-    liveSupportedKinds: ["follow", "dm"],
+    liveSupportedKinds: ["follow", "like", "dm"],
     currentRunCounters: {
       follows: 1,
       unfollows: 0,
@@ -103,7 +103,7 @@ test("Counter metrics preserve unsupported values and mark only proven live prod
   assert.deepEqual(active, [
     { key: "follow", current: 1, max: 80, label: "F", live: true },
     { key: "unfollow", current: 0, max: 100, label: "UF", live: false },
-    { key: "like", current: 1, max: 100, label: "L", live: false },
+    { key: "like", current: 1, max: 100, label: "L", live: true },
     { key: "comment", current: 0, max: 0, label: "C", live: false },
     { key: "dm", current: 0, max: 1, label: "DM", live: true },
   ]);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
+import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
 import emojiRegex from "emoji-regex";
 
@@ -20,7 +21,7 @@ test("connect badge shows saved credentials as ready to connect", () => {
 
 test("Profiles emphasizes only counter numerators", () => {
   assert.match(profilesViewSource, /<strong className="counter-current">/);
-  assert.match(profilesCssSource, /\.profile-counters \.counter-current \{ color: #000; font-weight: 900; \}/);
+  assert.match(profilesCssSource, /\.profile-counters \.counter-current \{ color: #000; font-weight: 700; \}/);
   assert.match(profilesViewSource, /<span className="counter-cap">\/{max}<\/span>/);
 });
 
