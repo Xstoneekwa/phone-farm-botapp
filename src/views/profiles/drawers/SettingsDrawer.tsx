@@ -16,6 +16,7 @@ import type {
   ProfileSourceSavePayload,
 } from "../../../api/types";
 import { Badge, Button, Drawer } from "../../../design/components";
+import { resolveFollowCapProjection } from "../follow-cap-projection";
 import { FilterSettingsPanel, buildFiltersSavePayload, filtersValidationError, sameFiltersDraft } from "./FilterSettingsPanel";
 
 const tabs = ["General", "Schedule", "Follow", "DM", "Followback", "Sources", "Filters"] as const;
@@ -860,14 +861,18 @@ function buildSettingsFromProfileDetails(
   const legacyMaxFollowPerRun = readOptionalNumber(settings, ["max_follow_per_run"]);
   const warmupApplied = readBoolean(effectiveCapsPreview, ["warmup_applied"], false);
   const warmupFollowDayCap = readOptionalNumber(effectiveCapsPreview, ["warmup_follow_day_cap"]);
-  const followCap = Math.max(0, Math.min(
-    packageDefaultFollowCap,
-    manualFollowDayOverride ?? packageDefaultFollowCap,
-    warmupApplied && warmupFollowDayCap !== null ? warmupFollowDayCap : packageDefaultFollowCap,
-  ));
-  const followSessionCap = manualFollowSessionOverride ?? packageDefaultFollowSessionCap;
-  const followCapSource: ProfileSettings["follow"]["capSource"] = manualFollowDayOverride !== null || manualFollowSessionOverride !== null ? "manual" : warmupApplied ? "warmup" : "package";
-  const followLimitingReason = followCapSource === "manual" ? "admin_override_active" : followCapSource === "warmup" ? "limited_by_warmup" : "package_default";
+  const followCapProjection = resolveFollowCapProjection({
+    packageDayCap: packageDefaultFollowCap,
+    packageSessionCap: packageDefaultFollowSessionCap,
+    manualDayCap: manualFollowDayOverride,
+    manualSessionCap: manualFollowSessionOverride,
+    warmupApplied,
+    warmupDayCap: warmupFollowDayCap,
+  });
+  const followCap = followCapProjection.effectiveDayCap;
+  const followSessionCap = followCapProjection.effectiveSessionCap;
+  const followCapSource: ProfileSettings["follow"]["capSource"] = followCapProjection.capSource;
+  const followLimitingReason = followCapProjection.limitingReason;
   const unfollowCap = readNumber(settings, ["daily_unfollow_cap", "unfollow_per_day_limit", "unfollow_per_day"], profile.counters.unfollow.max);
   const unfollowSessionCap = readNumber(settings, ["session_unfollow_cap", "unfollow_per_session_limit", "unfollow_per_session"], Math.min(unfollowCap, 50));
   const timeslotStart = readString(settings, ["timeslot_start", "start_time", "window_start"], profile.activeWindow.split("-")[0] ?? "");
