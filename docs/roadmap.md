@@ -1,5 +1,12 @@
 # BotApp Checkpoint And Roadmap
 
+## Production baseline - 2026-07-16
+
+The installed operator baseline before worker performance optimization is
+[JULY_16_PRODUCTION_BASELINE](./checkpoints/2026-07-16-production-baseline-botapp.md).
+It supersedes the older checkpoint below for current production provenance;
+historical entries remain unchanged.
+
 ## Latest checkpoint
 
 **Verified:** `2026-07-14 14:55 SAST`

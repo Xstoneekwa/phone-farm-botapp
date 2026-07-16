@@ -1,5 +1,9 @@
 # BotApp — Architecture relay et dispatcher
 
+> **Production baseline - 2026-07-16.** Electron is an authenticated operator
+> and observability surface, not scheduler launch authority. See
+> [JULY_16_PRODUCTION_BASELINE](./checkpoints/2026-07-16-production-baseline-botapp.md).
+
 Documentation technique pour développeurs. Décrit le runtime packagé macOS, le relay sécurisé et le dispatcher local.
 
 **Documents associés :**

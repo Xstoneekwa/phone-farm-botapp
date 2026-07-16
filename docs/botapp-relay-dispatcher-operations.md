@@ -1,5 +1,10 @@
 # BotApp — Opérations relay et dispatcher
 
+> **Production baseline - 2026-07-16.** Official application:
+> `/Applications/BotApp.app`. Runtime provenance, polling and incident workflow
+> are frozen in
+> [JULY_16_PRODUCTION_BASELINE](./checkpoints/2026-07-16-production-baseline-botapp.md).
+
 Runbook développeur : configuration, bootstrap, réparation, validation et dépannage.
 Complète [l’architecture relay/dispatcher](./botapp-relay-dispatcher-architecture.md).
 

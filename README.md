@@ -1,5 +1,9 @@
 # BotApp
 
+> Current production checkpoint:
+> [JULY_16_PRODUCTION_BASELINE](./docs/checkpoints/2026-07-16-production-baseline-botapp.md).
+> The official installed application is `/Applications/BotApp.app`.
+
 BotApp is the macOS operator application for the Phone Farm system at Boost My Businesses. It provides a dense desktop control surface for phones, Instagram/TikTok profiles, runtime state, logs, target accounts, settings, and safety-gated actions.
 
 The current checkpoint delivers the complete **Profiles** workspace, the **Devices** phone inventory workspace, the **Client Accounts** admin-parity worklist, the **Credentials** operator worklist, and the **Activity Log** interaction investigation lab with local data only. Operator UI labels are product-ready; write actions prepare admin-backed payloads and do **not** call the real backend until a secure BotApp API relay is validated.

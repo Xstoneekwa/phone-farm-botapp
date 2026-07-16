@@ -1,14 +1,18 @@
 # Guide opérateur — BotApp (Liam)
 
+> **Application officielle depuis le 16 juillet 2026 :**
+> `/Applications/BotApp.app`. Le checkpoint de référence est
+> [JULY_16_PRODUCTION_BASELINE](./checkpoints/2026-07-16-production-baseline-botapp.md).
+
 Ce guide décrit comment utiliser **BotApp** au quotidien, sans terminal, sans Cursor et sans connaissance technique.
 
 ## Application à utiliser
 
 **Seule application normale pour l’exploitation :**
 
-`/Users/admin/Projects/BotApp/release/mac-arm64/BotApp.app`
+`/Applications/BotApp.app`
 
-Dans Finder : ouvrir le dossier `release/mac-arm64`, puis **double-cliquer sur BotApp**.
+Dans Finder : ouvrir `Applications`, puis **double-cliquer sur BotApp**.
 
 Ne pas utiliser d’autre copie de BotApp (par exemple une ancienne version sur le Bureau).
 
