@@ -121,6 +121,20 @@ test("Settings drawer loads runtime follow settings defaults", () => {
   assert.match(settingsDrawerSource, /readBoolean\(filters, \["skip_private_profiles", "dont_follow_private_accounts"\], true\)/);
   assert.match(settingsDrawerSource, /\["manual_follow_day_cap", "max_actions_per_day"\]/);
   assert.match(settingsDrawerSource, /\["manual_follow_session_cap", "follow_limit"\]/);
+  assert.match(settingsDrawerSource, /label="Follow cap\/day"/);
+  assert.match(settingsDrawerSource, /label="Follow cap\/session"/);
+  assert.match(settingsDrawerSource, /label="Effective cap\/day"/);
+  assert.match(settingsDrawerSource, /label="Effective cap\/session"/);
+  assert.match(settingsDrawerSource, /label="Warmup cap today"/);
+  assert.match(settingsDrawerSource, /Maximum follows allowed per day for this account\./);
+  assert.match(settingsDrawerSource, /Maximum follows allowed during one session\./);
+  assert.doesNotMatch(settingsDrawerSource, /Draft override cap/);
+});
+
+test("Settings drawer persists and reloads the canonical Follow session cap", () => {
+  assert.match(settingsDrawerSource, /manual_follow_session_cap:\s*follow\.manualFollowSessionCap/);
+  assert.match(settingsDrawerSource, /\["manual_follow_session_cap", "follow_limit"\]/);
+  assert.match(settingsDrawerSource, /await refreshSettingsFromBackend\("Supabase-backed API · Follow settings saved"\)/);
 });
 
 test("Settings drawer DM save becomes ready when backend DM settings are connected", () => {
