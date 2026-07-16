@@ -1,5 +1,39 @@
 export type FollowCapSource = "manual" | "warmup" | "package";
 
+type WarmupPresentationInput = {
+  warmupEnabled: boolean;
+  warmupApplied: boolean;
+  warmupStatus: string;
+  warmupDay: number;
+  packageStartedAt: string;
+};
+
+export function resolveWarmupPresentation(input: WarmupPresentationInput) {
+  const warmupDay = Math.max(0, Math.floor(input.warmupDay));
+  const normalizedStatus = input.warmupStatus.trim().toLowerCase();
+  const hasPackageStart = Boolean(input.packageStartedAt.trim())
+    && input.packageStartedAt !== "not_available";
+
+  if (!input.warmupEnabled) {
+    return { title: "Warmup disabled", badge: "disabled", tone: "warning" } as const;
+  }
+  if (normalizedStatus === "pending_package_start" || !hasPackageStart || warmupDay < 1) {
+    return { title: "Warmup pending", badge: "pending", tone: "warning" } as const;
+  }
+  if (warmupDay >= 4 && input.warmupApplied) {
+    return {
+      title: `Warmup completed — Day ${warmupDay}`,
+      badge: "completed",
+      tone: "success",
+    } as const;
+  }
+  return {
+    title: `Warmup — Day ${warmupDay}`,
+    badge: "in progress",
+    tone: "info",
+  } as const;
+}
+
 type FollowCapProjectionInput = {
   packageDayCap: number;
   packageSessionCap: number;
