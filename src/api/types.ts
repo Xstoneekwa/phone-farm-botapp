@@ -602,6 +602,18 @@ export type BotProfile = {
   followsToday: number;
   dmsToday: number;
   counters: ProfileCounters;
+  followCapSummary?: {
+    packageDay: number | null;
+    packageSession: number | null;
+    adminDay: number | null;
+    adminSession: number | null;
+    warmupDay: number | null;
+    effectiveDay: number | null;
+    effectiveSession: number | null;
+    dailyRemaining: number | null;
+    source: string;
+    limitingReason: string;
+  };
   twoFactorEnabled: boolean;
   credentialStatus: CredentialStatus;
   loginStatus: ProfileLoginStatus;

@@ -4766,6 +4766,26 @@ function readInteractionsToday(account) {
   return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
+function readFollowCapSummary(account) {
+  const summary = account?.capSummary && typeof account.capSummary === "object" ? account.capSummary : {};
+  const packageCaps = summary?.package && typeof summary.package === "object" ? summary.package : {};
+  const admin = summary?.adminOverride && typeof summary.adminOverride === "object" ? summary.adminOverride : {};
+  const warmup = summary?.warmup && typeof summary.warmup === "object" ? summary.warmup : {};
+  const effective = summary?.effective && typeof summary.effective === "object" ? summary.effective : {};
+  return {
+    packageDay: readNullableNumber(packageCaps.followDay),
+    packageSession: readNullableNumber(packageCaps.followSession),
+    adminDay: readNullableNumber(admin.followDay),
+    adminSession: readNullableNumber(admin.followSession),
+    warmupDay: readNullableNumber(warmup.followDayCap),
+    effectiveDay: readNullableNumber(effective.followDay),
+    effectiveSession: readNullableNumber(effective.followSession),
+    dailyRemaining: readNullableNumber(effective.dailyRemaining),
+    source: String(effective.source || "package_default"),
+    limitingReason: String(effective.limitingReason || "limited_by_package"),
+  };
+}
+
 function readCurrentRunCounters(account) {
   const source = account?.currentRunCounters && typeof account.currentRunCounters === "object"
     ? account.currentRunCounters
@@ -4883,6 +4903,7 @@ function profileFromManageAccount(account, index, devices) {
     followsToday: Number(account?.followsToday || account?.follows_today || 0),
     dmsToday: Number(account?.dmsToday || account?.dms_today || 0),
     counters: profileCounters(account),
+    followCapSummary: readFollowCapSummary(account),
     twoFactorEnabled: /enabled/i.test(String(account?.twoFactorDisplay || "")),
     credentialStatus,
     loginStatus,

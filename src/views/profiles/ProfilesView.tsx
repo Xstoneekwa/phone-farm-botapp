@@ -206,9 +206,9 @@ function phoneViewTooltip(group: DeviceProfileGroup, isOpen: boolean) {
   return isOpen ? "Focus phone view" : "Open phone view";
 }
 
-function CounterMetric({ current, max, label }: { current: number; max: number; label: string }) {
+function CounterMetric({ current, max, label, tooltip }: { current: number; max: number; label: string; tooltip?: string }) {
   return (
-    <span>
+    <span title={tooltip}>
       <strong className="counter-current">{Number.isFinite(current) ? current : "—"}</strong>
       {Number.isFinite(max) ? <><span className="counter-cap">/{max}</span> {label}</> : <> {label}</>}
     </span>
@@ -260,6 +260,9 @@ function AccountRow({
   const lifecycle = profileLifecycle(profile);
   const restoreDate = formatRestoreDate(profile.scheduledDeleteAt || profile.scheduledTrashAt);
   const runtimeState = runtimeIndicatorState(profile);
+  const followCapTooltip = profile.followCapSummary
+    ? `Effective cap ${profile.followCapSummary.effectiveDay ?? profile.counters.follow.max}/day · ${profile.followCapSummary.effectiveSession ?? profile.counters.follow.max}/session · limited by ${profile.followCapSummary.source.replaceAll("_", " ")}`
+    : undefined;
   const runtimeTitle = runtimeState === "active"
     ? "Runtime active: queued, claimed, running, stopping, or canceling."
     : runtimeState === "error"
@@ -300,7 +303,7 @@ function AccountRow({
 
       <div className="profile-counters mono">
         {counterMetrics.map((metric) => (
-          <CounterMetric key={metric.key} current={metric.current} max={metric.max} label={metric.label} />
+          <CounterMetric key={metric.key} current={metric.current} max={metric.max} label={metric.label} tooltip={metric.key === "follow" ? followCapTooltip : undefined} />
         ))}
       </div>
 

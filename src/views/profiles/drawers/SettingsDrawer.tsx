@@ -869,10 +869,15 @@ function buildSettingsFromProfileDetails(
     warmupApplied,
     warmupDayCap: warmupFollowDayCap,
   });
-  const followCap = followCapProjection.effectiveDayCap;
-  const followSessionCap = followCapProjection.effectiveSessionCap;
-  const followCapSource: ProfileSettings["follow"]["capSource"] = followCapProjection.capSource;
-  const followLimitingReason = followCapProjection.limitingReason;
+  const followCap = readNumber(settings, ["effective_follow_cap_today"], followCapProjection.effectiveDayCap);
+  const followSessionCap = readNumber(settings, ["effective_follow_session_cap"], followCapProjection.effectiveSessionCap);
+  const backendCapSource = readString(settings, ["follow_cap_source"], "");
+  const followCapSource: ProfileSettings["follow"]["capSource"] = backendCapSource === "admin_override"
+    ? "manual"
+    : backendCapSource === "warmup"
+      ? "warmup"
+      : followCapProjection.capSource;
+  const followLimitingReason = readString(settings, ["follow_limiting_reason"], followCapProjection.limitingReason);
   const unfollowCap = readNumber(settings, ["daily_unfollow_cap", "unfollow_per_day_limit", "unfollow_per_day"], profile.counters.unfollow.max);
   const unfollowSessionCap = readNumber(settings, ["session_unfollow_cap", "unfollow_per_session_limit", "unfollow_per_session"], Math.min(unfollowCap, 50));
   const timeslotStart = readString(settings, ["timeslot_start", "start_time", "window_start"], profile.activeWindow.split("-")[0] ?? "");
@@ -999,7 +1004,7 @@ function buildSettingsFromProfileDetails(
       day3FollowCap: readNumber(effectiveCapsPreview, ["day_3_follow_cap", "day3_follow_cap"], 40),
       day4PlusFollowCap: readNumber(effectiveCapsPreview, ["day_4_plus_follow_cap", "day4_plus_follow_cap"], packageDefaultFollowCap),
       effectiveWarmupCapToday: warmupApplied && warmupFollowDayCap !== null ? warmupFollowDayCap : packageDefaultFollowCap,
-      followDayRemaining: Math.max(0, followCap - profile.counters.follow.current),
+      followDayRemaining: readNumber(settings, ["follow_day_remaining"], Math.max(0, followCap - profile.counters.follow.current)),
       limitingReason: followLimitingReason,
       capSource: followCapSource,
       runtimeStatus: settingsStatus === "connected" ? "active" : "read_only",
