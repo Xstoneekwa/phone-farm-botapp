@@ -43,6 +43,25 @@ test("active becomes idle and an old resolved dashboard blocker is cleared", () 
   assert.equal(result.eligibilityReason, "ready");
 });
 
+test("terminal polling clears stale already_running eligibility", () => {
+  const result = mergeProfilesLiveProjection([profile({
+    status: "running",
+    eligibility: "blocked_now",
+    eligibilityReason: "already_running",
+    eligibilityDetail: { status: "blocked_now", primary_block_reason: "account_session_running", reason_label: "Running" },
+  })], [{
+    accountId: "account-1",
+    activeRunRequestStatus: null,
+    activeRunStatus: null,
+    runtimeIndicator: { state: "idle", reason: "last_run_normal" },
+    currentBlocker: null,
+  }])[0];
+
+  assert.equal(result.status, "ready");
+  assert.equal(result.eligibility, "can_start");
+  assert.equal(result.eligibilityReason, "ready");
+});
+
 test("a real current blocking action remains visible after the run", () => {
   const result = mergeProfilesLiveProjection([profile()], [{
     accountId: "account-1",

@@ -68,13 +68,13 @@ test("Live profile counters poll for schedule-session runtime projection", () =>
 
 test("Displayed counters switch to current run counters while runtime is active", () => {
   const idle = displayRunCounters(profile());
-  assert.deepEqual(idle, { mode: "today", follow: 5, like: 3, dm: 0, total: 8 });
+  assert.deepEqual(idle, { mode: "today", follow: 5, unfollow: 0, like: 3, dm: 0, total: 8 });
 
   const active = displayRunCounters(profile({
     activeRunRequestStatus: "queued",
     currentRunCounters: {
       follows: 1,
-      unfollows: 0,
+      unfollows: 2,
       likes: 1,
       comments: 0,
       dms: 0,
@@ -82,16 +82,16 @@ test("Displayed counters switch to current run counters while runtime is active"
       interactionsTotal: 2,
     },
   }));
-  assert.deepEqual(active, { mode: "run", follow: 1, like: 1, dm: 0, total: 2 });
+  assert.deepEqual(active, { mode: "run", follow: 1, unfollow: 2, like: 1, dm: 0, total: 2 });
 });
 
 test("Counter metrics mark only the asynchronously projected live producers", () => {
   const active = displayCounterMetrics(profile({
     activeRunStatus: "running",
-    liveSupportedKinds: ["follow", "like", "dm"],
+    liveSupportedKinds: ["follow", "unfollow", "like", "dm"],
     currentRunCounters: {
       follows: 1,
-      unfollows: 0,
+      unfollows: 2,
       likes: 1,
       comments: 0,
       dms: 0,
@@ -102,7 +102,7 @@ test("Counter metrics mark only the asynchronously projected live producers", ()
 
   assert.deepEqual(active, [
     { key: "follow", current: 1, max: 80, label: "F", live: true },
-    { key: "unfollow", current: 0, max: 100, label: "UF", live: false },
+    { key: "unfollow", current: 2, max: 100, label: "UF", live: true },
     { key: "like", current: 1, max: 100, label: "L", live: true },
     { key: "comment", current: 0, max: 0, label: "C", live: false },
     { key: "dm", current: 0, max: 1, label: "DM", live: true },

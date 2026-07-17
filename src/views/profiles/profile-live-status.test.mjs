@@ -65,5 +65,5 @@ test("unstructured worker failure remains an explicit business blocker", () => {
 
 test("terminal idle preserves canonical counters instead of returning to zero", () => {
   const terminal = profile({ currentRunCounters: { follows: 0, likes: 0, dms: 0, interactionsTotal: 0 } });
-  assert.deepEqual(displayRunCounters(terminal), { mode: "today", follow: 10, like: 10, dm: 0, total: 0 });
+  assert.deepEqual(displayRunCounters(terminal), { mode: "today", follow: 10, unfollow: 0, like: 10, dm: 0, total: 0 });
 });

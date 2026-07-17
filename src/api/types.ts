@@ -598,7 +598,7 @@ export type BotProfile = {
   followerDelta3d?: ProfileFollowerDelta3d;
   interactionsToday?: number;
   currentRunCounters?: ProfileRunCounters;
-  liveSupportedKinds?: Array<"follow" | "like" | "dm">;
+  liveSupportedKinds?: Array<"follow" | "unfollow" | "like" | "dm">;
   followsToday: number;
   dmsToday: number;
   counters: ProfileCounters;
