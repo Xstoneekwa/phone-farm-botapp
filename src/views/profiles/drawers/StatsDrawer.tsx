@@ -113,7 +113,7 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
             <table className="stats-history-table">
               <thead>
                 <tr>
-                  <th>SESSION TIME</th>
+                  <th>DAY / LATEST SESSION</th>
                   <th>FOLLOWERS</th>
                   <th>FOLLOWINGS</th>
                   <th>FOLLOW</th>
