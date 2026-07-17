@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { mergeGroupedProfiles, mergeProfilesLiveProjection } from "./profiles-live-merge.ts";
 
@@ -108,6 +109,46 @@ test("light polling refreshes rolling follower growth without a full Profiles re
     followerDelta3d,
   }])[0];
   assert.deepEqual(result.followerDelta3d, followerDelta3d);
+});
+
+test("an older follower snapshot response cannot overwrite a newer projection", () => {
+  const current = { value: 3, to: "2026-07-17T00:30:00.000Z", source: "ig_account_follower_snapshots" };
+  const older = { value: 1, to: "2026-07-16T00:30:00.000Z", source: "ig_account_follower_snapshots" };
+  const result = mergeProfilesLiveProjection([profile({ followerDelta3d: current })], [{
+    accountId: "account-1",
+    followerDelta3d: older,
+  }])[0];
+  assert.deepEqual(result.followerDelta3d, current);
+});
+
+test("insufficient history cannot replace a known follower delta with null", () => {
+  const current = { value: -2, to: "2026-07-17T00:30:00.000Z", source: "ig_account_follower_snapshots" };
+  const insufficient = { value: null, to: "2026-07-18T00:30:00.000Z", source: "ig_account_follower_snapshots", freshness: "insufficient_history" };
+  const result = mergeProfilesLiveProjection([profile({ followerDelta3d: current })], [{
+    accountId: "account-1",
+    followerDelta3d: insufficient,
+  }])[0];
+  assert.deepEqual(result.followerDelta3d, current);
+});
+
+test("follower deltas remain isolated by account", () => {
+  const profiles = [profile({ id: "tracker" }), profile({ id: "mythyl" })];
+  const result = mergeProfilesLiveProjection(profiles, [
+    { accountId: "tracker", followerDelta3d: { value: 0, to: "2026-07-17T00:30:00.000Z" } },
+    { accountId: "mythyl", followerDelta3d: { value: null, to: "2026-07-17T00:30:00.000Z" } },
+  ]);
+  assert.equal(result[0].followerDelta3d.value, 0);
+  assert.equal(result[1].followerDelta3d.value, null);
+});
+
+test("Profiles uses the canonical rolling 72h accessible label", () => {
+  const source = readFileSync(
+    new globalThis.URL("./ProfilesView.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /title="Followers change — rolling 72h"/);
+  assert.match(source, /aria-label="Followers change — rolling 72h"/);
+  assert.doesNotMatch(source, /Followers gain 3d/);
 });
 
 test("existing device groups receive scheduler activity and terminal updates from light polling", () => {

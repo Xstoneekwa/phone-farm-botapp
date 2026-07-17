@@ -33,6 +33,23 @@ function isStaleRuntimeReason(reason: string) {
   return /already_running|already_requested|active_run|account_session_running|stop_cleanup_in_progress/.test(reason.toLowerCase());
 }
 
+function followerDeltaTimestamp(value: BotProfile["followerDelta3d"]) {
+  const timestamp = Date.parse(String(value?.to ?? ""));
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function mergeFollowerDelta3d(
+  current: BotProfile["followerDelta3d"],
+  incoming: BotProfile["followerDelta3d"],
+) {
+  if (!incoming) return current;
+  if (incoming.value === null && current?.value !== null && current?.value !== undefined) return current;
+  const currentTimestamp = followerDeltaTimestamp(current);
+  const incomingTimestamp = followerDeltaTimestamp(incoming);
+  if (currentTimestamp !== null && (incomingTimestamp === null || incomingTimestamp < currentTimestamp)) return current;
+  return incoming;
+}
+
 export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: ProfilesLivePatch[]): BotProfile[] {
   const byId = new Map(patches.map((patch) => [patch.accountId, patch]));
   return profiles.map((profile) => {
@@ -71,7 +88,7 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
       runControlLabel: patch.runControlLabel ?? null,
       runtimeIndicator: patch.runtimeIndicator ?? profile.runtimeIndicator,
       currentRunCounters: patch.currentRunCounters ?? profile.currentRunCounters,
-      followerDelta3d: patch.followerDelta3d ?? profile.followerDelta3d,
+      followerDelta3d: mergeFollowerDelta3d(profile.followerDelta3d, patch.followerDelta3d),
       interactionsToday: Number.isFinite(patch.interactionsToday) ? Number(patch.interactionsToday) : profile.interactionsToday,
       counters: {
         follow: { ...profile.counters.follow, current: countersToday.follows ?? profile.counters.follow.current },

@@ -307,7 +307,8 @@ function AccountRow({
       <div className="profile-row-metrics">
         <span
           className={`delta-pill ${followerDeltaTone(followerDelta3dValue)}`}
-          title={`Followers gain 3d · ${profile.followerDelta3d?.source ?? "pending"}`}
+          title="Followers change — rolling 72h"
+          aria-label="Followers change — rolling 72h"
         >
           {followerDeltaLabel(followerDelta3dValue)}
         </span>
