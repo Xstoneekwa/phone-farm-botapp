@@ -189,7 +189,9 @@ export function resolveDeviceRuntimeStatus<T extends Pick<BotProfile, "activeRun
     const run = String(profile.activeRunStatus || "").trim().toLowerCase();
     return profile.status === "running" || ACTIVE_DEVICE_STATUSES.has(request) || ACTIVE_DEVICE_STATUSES.has(run);
   });
-  return active ? "active" : fallbackStatus;
+  if (active) return "active";
+  if (profiles.length > 0 && ["active", "running"].includes(fallbackStatus.trim().toLowerCase())) return "idle";
+  return fallbackStatus;
 }
 
 export function stopDisabledReason(profile: BotProfile) {

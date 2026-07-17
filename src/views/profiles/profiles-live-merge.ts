@@ -30,7 +30,7 @@ function isDashboardBlockReason(reason: string) {
 }
 
 function isStaleRuntimeReason(reason: string) {
-  return /already_running|already_requested|active_run|account_session_running/.test(reason.toLowerCase());
+  return /already_running|already_requested|active_run|account_session_running|stop_cleanup_in_progress/.test(reason.toLowerCase());
 }
 
 export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: ProfilesLivePatch[]): BotProfile[] {

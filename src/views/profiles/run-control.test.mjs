@@ -52,6 +52,8 @@ test("Device status is active when any profile has an active runtime state", () 
   assert.equal(resolveDeviceRuntimeStatus([profile(), profile({ activeRunRequestStatus: "queued" })], "inactive"), "active");
   assert.equal(resolveDeviceRuntimeStatus([profile(), profile({ activeRunStatus: "running" })], "inactive"), "active");
   assert.equal(resolveDeviceRuntimeStatus([profile(), profile()], "inactive"), "inactive");
+  assert.equal(resolveDeviceRuntimeStatus([profile()], "active"), "idle");
+  assert.equal(resolveDeviceRuntimeStatus([profile()], "running"), "idle");
 });
 
 test("Runtime indicator maps active, abnormal, and normal idle states", () => {

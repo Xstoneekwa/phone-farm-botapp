@@ -62,6 +62,28 @@ test("terminal polling clears stale already_running eligibility", () => {
   assert.equal(result.eligibilityReason, "ready");
 });
 
+test("terminal polling clears stale stop cleanup eligibility", () => {
+  const result = mergeProfilesLiveProjection([profile({
+    status: "running",
+    eligibility: "blocked_now",
+    eligibilityReason: "stop_cleanup_in_progress",
+    eligibilityDetail: { status: "blocked_now", primary_block_reason: "stop_cleanup_in_progress", reason_label: "Stopping" },
+    runControlPhase: "stopping",
+  })], [{
+    accountId: "account-1",
+    activeRunRequestStatus: null,
+    activeRunStatus: null,
+    runControlPhase: null,
+    runtimeIndicator: { state: "idle", reason: "failed" },
+    currentBlocker: null,
+  }])[0];
+
+  assert.equal(result.status, "ready");
+  assert.equal(result.eligibility, "can_start");
+  assert.equal(result.eligibilityReason, "ready");
+  assert.equal(result.runControlPhase, null);
+});
+
 test("a real current blocking action remains visible after the run", () => {
   const result = mergeProfilesLiveProjection([profile()], [{
     accountId: "account-1",
