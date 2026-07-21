@@ -4583,6 +4583,7 @@ function readAutoLoginRequirement({
 
 function readFollowerDelta(account) {
   if (account?.followerDelta3d && typeof account.followerDelta3d === "object") {
+    if (account.followerDelta3d.value === null || account.followerDelta3d.value === undefined || account.followerDelta3d.value === "") return null;
     const value = Number(account.followerDelta3d.value);
     return Number.isFinite(value) ? value : null;
   }
@@ -4591,17 +4592,55 @@ function readFollowerDelta(account) {
 
 function readFollowerDelta3d(account) {
   const source = account?.followerDelta3d && typeof account.followerDelta3d === "object" ? account.followerDelta3d : {};
-  const value = Number(source.value);
-  const currentFollowers = Number(source.currentFollowers ?? source.current_followers);
-  const previousFollowers = Number(source.previousFollowers ?? source.previous_followers);
+  const readOptionalNumber = (raw) => {
+    if (raw === null || raw === undefined || raw === "") return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  };
+  const value = readOptionalNumber(source.value);
+  const currentFollowers = readOptionalNumber(source.currentFollowers ?? source.current_followers);
+  const previousFollowers = readOptionalNumber(source.previousFollowers ?? source.previous_followers);
   return {
-    value: Number.isFinite(value) ? value : null,
-    currentFollowers: Number.isFinite(currentFollowers) ? currentFollowers : null,
-    previousFollowers: Number.isFinite(previousFollowers) ? previousFollowers : null,
+    window: String(source.window || "rolling_72h"),
+    periodHours: readOptionalNumber(source.periodHours ?? source.period_hours) ?? 72,
+    value,
+    currentFollowers,
+    previousFollowers,
     from: source.from || null,
     to: source.to || null,
     source: String(source.source || "pending_account_follower_snapshots"),
-    freshness: String(source.freshness || "no_snapshot_table"),
+    windowCoverage: String(source.windowCoverage || source.window_coverage || "insufficient_data"),
+    dataFreshness: String(source.dataFreshness || source.data_freshness || "unknown"),
+    latestSnapshotAt: source.latestSnapshotAt || source.latest_snapshot_at || null,
+    baselineSnapshotAt: source.baselineSnapshotAt || source.baseline_snapshot_at || null,
+    deltaFrom: source.deltaFrom || source.delta_from || source.from || null,
+    deltaTo: source.deltaTo || source.delta_to || source.to || null,
+    staleAfterHours: readOptionalNumber(source.staleAfterHours ?? source.stale_after_hours) ?? 36,
+  };
+}
+
+function readUnfollowTruthfulness(account) {
+  const source = account?.unfollowTruthfulness && typeof account.unfollowTruthfulness === "object"
+    ? account.unfollowTruthfulness
+    : {};
+  const optionalNumber = (raw) => {
+    if (raw === null || raw === undefined || raw === "") return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  };
+  const optionalString = (raw) => typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  return {
+    unfollowDoneToday: optionalNumber(source.unfollowDoneToday ?? source.unfollow_done_today) ?? 0,
+    unfollowDailyCap: optionalNumber(source.unfollowDailyCap ?? source.unfollow_daily_cap) ?? 0,
+    unfollowEffectiveLimit: optionalNumber(source.unfollowEffectiveLimit ?? source.unfollow_effective_limit),
+    lastRunEligibleAtStart: optionalNumber(source.lastRunEligibleAtStart ?? source.last_run_eligible_at_start),
+    lastRunAttempted: optionalNumber(source.lastRunAttempted ?? source.last_run_attempted),
+    lastRunVerified: optionalNumber(source.lastRunVerified ?? source.last_run_verified),
+    lastRunRemainingEligible: optionalNumber(source.lastRunRemainingEligible ?? source.last_run_remaining_eligible),
+    lastRunCoverageStatus: optionalString(source.lastRunCoverageStatus ?? source.last_run_coverage_status),
+    lastRunStopReason: optionalString(source.lastRunStopReason ?? source.last_run_stop_reason),
+    metricsAsOf: optionalString(source.metricsAsOf ?? source.metrics_as_of),
+    source: String(source.source || "unavailable"),
   };
 }
 
@@ -4718,6 +4757,7 @@ function profileFromManageAccount(account, index, devices) {
     followers: Number(account?.followerDelta3d?.currentFollowers ?? account?.followersCount ?? account?.followers_count ?? account?.followers ?? 0),
     followerDelta: readFollowerDelta(account) ?? 0,
     followerDelta3d: readFollowerDelta3d(account),
+    unfollowTruthfulness: readUnfollowTruthfulness(account),
     interactionsToday: readInteractionsToday(account),
     currentRunCounters: readCurrentRunCounters(account),
     followsToday: Number(account?.followsToday || account?.follows_today || 0),

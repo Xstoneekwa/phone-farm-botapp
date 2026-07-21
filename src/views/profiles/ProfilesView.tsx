@@ -18,6 +18,7 @@ import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifec
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
 import { buildRestoreLoginScreenPayload } from "./restore-login-screen-flow";
 import { buildStartPayload, buildStopPayload, displayCounterMetrics, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
+import { followerDeltaTooltip, unfollowMetricTooltip } from "./profile-metric-contract";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
@@ -203,11 +204,13 @@ function phoneViewTooltip(group: DeviceProfileGroup, isOpen: boolean) {
   return isOpen ? "Focus phone view" : "Open phone view";
 }
 
-function CounterMetric({ current, max, label }: { current: number; max: number; label: string }) {
+function CounterMetric({ current, max, label, separateCap = false, title }: { current: number; max: number; label: string; separateCap?: boolean; title?: string }) {
   return (
-    <span>
+    <span title={title}>
       <strong>{Number.isFinite(current) ? current : "—"}</strong>
-      {Number.isFinite(max) ? <><span className="counter-cap">/{max}</span> {label}</> : <> {label}</>}
+      {separateCap
+        ? <>{` ${label}`} {Number.isFinite(max) ? <span className="counter-cap">cap {max}</span> : null}</>
+        : Number.isFinite(max) ? <><span className="counter-cap">/{max}</span> {label}</> : <> {label}</>}
     </span>
   );
 }
@@ -315,14 +318,21 @@ function AccountRow({
 
       <div className="profile-counters mono">
         {counterMetrics.map((metric) => (
-          <CounterMetric key={metric.key} current={metric.current} max={metric.max} label={metric.label} />
+          <CounterMetric
+            key={metric.key}
+            current={metric.current}
+            max={metric.max}
+            label={metric.label}
+            separateCap={metric.key === "unfollow"}
+            title={metric.key === "unfollow" ? unfollowMetricTooltip(profile.unfollowTruthfulness) : undefined}
+          />
         ))}
       </div>
 
       <div className="profile-row-metrics">
         <span
           className={`delta-pill ${followerDeltaTone(followerDelta3dValue)}`}
-          title={`Followers gain 3d · ${profile.followerDelta3d?.source ?? "pending"}`}
+          title={followerDeltaTooltip(profile.followerDelta3d)}
         >
           {followerDeltaLabel(followerDelta3dValue)}
         </span>
