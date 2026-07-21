@@ -1581,7 +1581,7 @@ function attachRelayHeadersForDashboardAvatars() {
 }
 
 const endpointTestState = new Map();
-const botappBuildCommit = "dm-drawer-emoji-assets-v10";
+const botappBuildCommit = "botapp-white-screen-hotfix-20260721";
 const botappIpcProbeBuildId = "ipc-probe-v11-notification-audit";
 const INTEGRATION_HOST_MACHINE = "integration-mac-a";
 const runtimeIpcHandlers = [
@@ -7574,11 +7574,39 @@ function createMainWindow() {
     },
   });
 
-  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
-    console.error("[BotApp] renderer load failed", { errorCode, errorDescription, validatedURL });
+  mainWindow.webContents.on("did-start-loading", () => {
+    writeStartupTrace("renderer_load_started");
+  });
+
+  mainWindow.webContents.on("dom-ready", () => {
+    writeStartupTrace("renderer_dom_ready");
+  });
+
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, _ignoredURL, isMainFrame) => {
+    writeStartupTrace(
+      "renderer_load_failed",
+      `code=${String(errorCode)} mainFrame=${String(isMainFrame)} description=${safeRuntimeError(errorDescription, "unknown")}`,
+    );
+    console.error("[BotApp] renderer load failed", { errorCode, errorDescription, isMainFrame });
+  });
+
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    writeStartupTrace(
+      "renderer_process_gone",
+      `reason=${safeRuntimeError(details?.reason, "unknown")} exitCode=${String(details?.exitCode ?? "unknown")}`,
+    );
+  });
+
+  mainWindow.on("unresponsive", () => {
+    writeStartupTrace("renderer_unresponsive");
+  });
+
+  mainWindow.on("responsive", () => {
+    writeStartupTrace("renderer_responsive");
   });
 
   mainWindow.once("ready-to-show", () => {
+    writeStartupTrace("renderer_ready_to_show");
     mainWindow.show();
   });
 
@@ -7607,6 +7635,7 @@ function createMainWindow() {
   }
 
   mainWindow.webContents.on("did-finish-load", () => {
+    writeStartupTrace("renderer_load_finished");
     if (isIpcBridgeProbeMode()) {
       void finishIpcBridgeProbe(mainWindow);
       return;
@@ -7645,6 +7674,7 @@ if (!hasSingleInstanceLock) {
   });
 
 app.whenReady().then(async () => {
+  let startupWindowCreated = false;
   writeStartupTrace("when_ready", `packaged=${String(app.isPackaged)} userData=${app.getPath("userData")}`);
   try {
     const bootstrapStatus = bootstrapRelayConfig();
@@ -7679,8 +7709,16 @@ app.whenReady().then(async () => {
         renderer: null,
       }, "botapp-ipc-bridge-probe.partial.json");
       createMainWindow();
+      startupWindowCreated = true;
+      writeStartupTrace("main_window_requested", "mode=ipc_probe");
       return;
     }
+
+    // Keep the operator shell independent from backend and local runtime latency.
+    // The existing IPC paths populate health and data states after the window mounts.
+    createMainWindow();
+    startupWindowCreated = true;
+    writeStartupTrace("main_window_requested", "mode=operator");
 
     const relay = await botappRelayHealth();
     let dispatcher = null;
@@ -7713,8 +7751,6 @@ app.whenReady().then(async () => {
       void handleOpenDeviceViewDeepLink(deepLink);
     }
 
-    createMainWindow();
-
     if (process.env.BOTAPP_STARTUP_DIAGNOSTICS) {
       setTimeout(() => app.quit(), 2500);
     }
@@ -7728,7 +7764,11 @@ app.whenReady().then(async () => {
       lastError: safeRuntimeError(error, "startup_bootstrap_failed"),
       checkedAt: new Date().toISOString(),
     });
-    createMainWindow();
+    if (!startupWindowCreated) {
+      createMainWindow();
+      startupWindowCreated = true;
+      writeStartupTrace("main_window_requested", "mode=startup_fallback");
+    }
     if (process.env.BOTAPP_STARTUP_DIAGNOSTICS) {
       setTimeout(() => app.quit(), 2500);
     }
