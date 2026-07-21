@@ -204,13 +204,11 @@ function phoneViewTooltip(group: DeviceProfileGroup, isOpen: boolean) {
   return isOpen ? "Focus phone view" : "Open phone view";
 }
 
-function CounterMetric({ current, max, label, separateCap = false, title }: { current: number; max: number; label: string; separateCap?: boolean; title?: string }) {
+function CounterMetric({ current, max, label, title }: { current: number; max: number; label: string; title?: string }) {
   return (
     <span title={title}>
       <strong>{Number.isFinite(current) ? current : "—"}</strong>
-      {separateCap
-        ? <>{` ${label}`} {Number.isFinite(max) ? <span className="counter-cap">cap {max}</span> : null}</>
-        : Number.isFinite(max) ? <><span className="counter-cap">/{max}</span> {label}</> : <> {label}</>}
+      {Number.isFinite(max) ? <><span className="counter-cap">/{max}</span> {label}</> : <> {label}</>}
     </span>
   );
 }
@@ -323,7 +321,6 @@ function AccountRow({
             current={metric.current}
             max={metric.max}
             label={metric.label}
-            separateCap={metric.key === "unfollow"}
             title={metric.key === "unfollow" ? unfollowMetricTooltip(profile.unfollowTruthfulness) : undefined}
           />
         ))}

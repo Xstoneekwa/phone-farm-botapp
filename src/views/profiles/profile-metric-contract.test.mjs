@@ -41,6 +41,7 @@ test("BotApp mapping preserves null follower delta and renders no misleading Unf
   const view = readFileSync(new URL("./ProfilesView.tsx", import.meta.url), "utf8");
   const stats = readFileSync(new URL("./drawers/StatsDrawer.tsx", import.meta.url), "utf8");
   assert.match(main, /account\.followerDelta3d\.value === null[\s\S]*return null/);
-  assert.match(view, /separateCap=\{metric\.key === "unfollow"\}/);
+  assert.doesNotMatch(view, /separateCap|cap \{max\}/);
+  assert.match(view, /counter-cap">\/\{max\}/);
   assert.doesNotMatch(stats, /<ActionPill kind="unfollow"/);
 });
