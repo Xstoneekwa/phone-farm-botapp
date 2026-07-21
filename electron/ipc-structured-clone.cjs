@@ -83,8 +83,43 @@ function jsonReplacer(_key, value) {
   return value;
 }
 
+function serializeIpcPayload(value, depth = 0, ancestors = new WeakSet()) {
+  if (value === null || value === undefined || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "bigint") return String(value);
+  if (typeof value === "string") return value.length > 4000 ? `${value.slice(0, 4000)}…` : value;
+  if (typeof value === "function" || typeof value === "symbol") return `[${typeof value}]`;
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Error) return toRedactedIpcError(value, "ipc_error");
+  if (depth >= 16) return "[max_depth]";
+  if (ancestors.has(value)) return "[circular]";
+
+  ancestors.add(value);
+  if (Array.isArray(value)) {
+    const result = value.map((item) => serializeIpcPayload(item, depth + 1, ancestors));
+    ancestors.delete(value);
+    return result;
+  }
+  if (value instanceof Map) {
+    const result = serializeIpcPayload(Object.fromEntries(value), depth + 1, ancestors);
+    ancestors.delete(value);
+    return result;
+  }
+  if (value instanceof Set) {
+    const result = serializeIpcPayload([...value], depth + 1, ancestors);
+    ancestors.delete(value);
+    return result;
+  }
+
+  const result = {};
+  for (const [key, child] of Object.entries(value)) {
+    result[key] = serializeIpcPayload(child, depth + 1, ancestors);
+  }
+  ancestors.delete(value);
+  return result;
+}
+
 function toIpcSafe(value) {
-  return JSON.parse(JSON.stringify(value, jsonReplacer));
+  return serializeIpcPayload(value);
 }
 
 function toRedactedIpcError(error, fallbackCode = "ipc_error") {
@@ -112,7 +147,7 @@ module.exports = {
   assertIpcCloneable,
   describeValue,
   findNonCloneablePath,
-  serializeIpcPayload: toIpcSafe,
+  serializeIpcPayload,
   toRedactedIpcError,
   toIpcSafe,
 };

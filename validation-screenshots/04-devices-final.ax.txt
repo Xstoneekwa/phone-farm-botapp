@@ -1,0 +1,102 @@
+Window: "BotApp", App: BotApp.
+0 fenêtre standard BotApp, Secondary Actions: Raise
+	1 container BotApp
+		2 container
+			3 Contenu HTML BotApp, URL: file:///Applications/BotApp.app/Contents/Resources/app.asar/dist/index.html
+				4 container
+					5 container BotApp · Phone Farm OS
+						6 texte B
+						7 container
+							8 text BotApp Phone Farm OS
+					9 container
+						10 texte Ops
+						11 bouton Overview
+						12 bouton Profiles
+							13 texte Profiles
+							14 texte 3
+						15 bouton Client Accounts
+						16 bouton Credentials
+						17 bouton Devices
+							18 texte Devices
+							19 texte 3
+						20 texte Monitoring
+						21 bouton Activity Log
+						22 bouton Email History
+						23 bouton Runtime Health
+						24 bouton Incidents
+						25 bouton Incident Notifications
+						26 bouton Compass
+						27 texte Automation
+						28 bouton Auto Restart
+						29 bouton Scheduler
+						30 texte Admin
+						31 bouton API / Webhooks / Keys
+						32 bouton Settings
+					33 container Default operator
+						34 texte D
+						35 container
+							36 text Default Operator
+					37 container
+						38 text BOTAPP /  OPS
+						39 en-tête Devices, Value: 1
+							40 texte Devices
+						41 bouton Command palette
+					42 texte Dispatcher stopped.
+					43 texte Dispatcher is running but cannot process jobs.
+					44 bouton Start dispatcher
+					45 bouton Retry
+					46 bouton Copy diagnostics
+					47 container
+						48 en-tête Devices, Value: 2
+							49 texte Devices
+						50 text 3  saved 2  active 1  offline Heartbeats backend :  2  actifs /  0  expirés /  0  inconnus
+						51 texte Assignations prêtes : 2 Samsung actifs
+						52 container Saved phones
+							53 container
+								54 bouton Description: Open Entry 2C Emulator Full Cycle view, Help: Open phone view
+								55 text Entry 2C Emulator Full Cycle emul...5554
+								56 texte 4
+								57 texte Not seen locally
+								58 bouton Restart Entry 2C Emulator Full Cycle
+								59 text Backend  available Local ADB  not_seen Last seen  25/05/2026 01:40:32 Source  shared backend API Free  4 Occupied  0 Local ADB does not currently see this phone. Instagram primary  ·  com.instagram.android available Instagram 1 clone 1  ·  com.instagram.androie available Instagram 2 clone 2  ·  com.instagram.androif available Instagram 3 clone 3  ·  com.instagram.androig available 4  selectable 0  occupied
+							60 container
+								61 bouton Description: Open Samsung A16-01 view, Help: Open phone view
+								62 text Samsung A16-01 RFGL...VCKE
+								63 texte 4
+								64 texte Connected
+								65 bouton Restart Samsung A16-01
+								66 text Backend  available Local ADB  device Last seen  22/07/2026 01:12:54 Source  shared backend API Free  3 Occupied  1 Heartbeat backend :  Actif
+								67 container 22/07/2026 01:12:54
+									68 text Dernier signal  il y a 3 min
+								69 text Prêt pour une nouvelle assignation Samsung A16-01 primary primary  ·  com.instagram.android available Samsung A16-01 clone 1 clone 1  ·  com.instagram.androie occupied  · @i_m_your_traker reserved  ·  83de9cc9 Samsung A16-01 clone 2 clone 2  ·  com.instagram.androif available Samsung A16-01 clone 3 clone 3  ·  com.instagram.androig available 3  selectable 1  occupied
+							70 container
+								71 bouton Description: Open Samsung A16-02 view, Help: Open phone view
+								72 text Samsung A16-02 RFGL...LZHE
+								73 texte 4
+								74 texte Connected
+								75 bouton Restart Samsung A16-02
+								76 text Backend  available Local ADB  device Last seen  22/07/2026 01:12:53 Source  shared backend API Free  3 Occupied  1 Heartbeat backend :  Actif
+								77 container 22/07/2026 01:12:53
+									78 text Dernier signal  il y a 3 min
+								79 text Prêt pour une nouvelle assignation Samsung A16-02 primary primary  ·  com.instagram.android available Samsung A16-02 clone 1 clone 1  ·  com.instagram.androie available Samsung A16-02 clone 2 clone 2  ·  com.instagram.androif occupied  · @mythyl_fitness reserved  ·  0d299d1e Samsung A16-02 clone 3 clone 3  ·  com.instagram.androig available 3  selectable 1  occupied
+						80 container Device actions
+							81 bouton + Add
+							82 bouton Refresh
+							83 bouton Relancer les heartbeats
+							84 bouton Open All
+							85 bouton Close All
+							86 bouton Restart All
+							87 bouton History
+							88 bouton Edit
+							89 bouton Delete
+							90 text 3  devices saved
+						91 texte Outils locaux disponibles · Chemin masqué pour sécurité
+	92 Bouton de fermeture
+	93 bouton plein écran Help: ce bouton peut également agrandir ou réduire la fenêtre, Secondary Actions: réduire/agrandir la fenêtre
+	94 bouton de minimisation
+95 menu bar
+	96 BotApp
+	97 File
+	98 Edit
+	99 View
+	100 Window

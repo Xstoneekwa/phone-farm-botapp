@@ -1600,7 +1600,7 @@ function attachRelayHeadersForDashboardAvatars() {
 }
 
 const endpointTestState = new Map();
-const botappBuildCommit = "dm-drawer-emoji-assets-v10";
+const botappBuildCommit = "botapp-restore-good-baseline-20260722";
 const botappIpcProbeBuildId = "ipc-probe-v11-notification-audit";
 const INTEGRATION_HOST_MACHINE = "integration-mac-a";
 const runtimeIpcHandlers = [
@@ -4751,13 +4751,40 @@ function readFollowerDelta3d(account) {
   const currentFollowers = readNullableNumber(source.currentFollowers ?? source.current_followers);
   const previousFollowers = readNullableNumber(source.previousFollowers ?? source.previous_followers);
   return {
+    window: String(source.window || "rolling_72h"),
+    periodHours: readNullableNumber(source.periodHours ?? source.period_hours) ?? 72,
     value,
     currentFollowers,
     previousFollowers,
     from: source.from || null,
     to: source.to || null,
     source: String(source.source || "pending_account_follower_snapshots"),
-    freshness: String(source.freshness || "no_snapshot_table"),
+    windowCoverage: String(source.windowCoverage || source.window_coverage || "insufficient_data"),
+    dataFreshness: String(source.dataFreshness || source.data_freshness || "unknown"),
+    latestSnapshotAt: source.latestSnapshotAt || source.latest_snapshot_at || null,
+    baselineSnapshotAt: source.baselineSnapshotAt || source.baseline_snapshot_at || null,
+    deltaFrom: source.deltaFrom || source.delta_from || source.from || null,
+    deltaTo: source.deltaTo || source.delta_to || source.to || null,
+    staleAfterHours: readNullableNumber(source.staleAfterHours ?? source.stale_after_hours) ?? 36,
+  };
+}
+
+function readUnfollowTruthfulness(account) {
+  if (!account?.unfollowTruthfulness || typeof account.unfollowTruthfulness !== "object") return null;
+  const source = account.unfollowTruthfulness;
+  const optionalString = (raw) => typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  return {
+    unfollowDoneToday: readNullableNumber(source.unfollowDoneToday ?? source.unfollow_done_today) ?? 0,
+    unfollowDailyCap: readNullableNumber(source.unfollowDailyCap ?? source.unfollow_daily_cap) ?? 0,
+    unfollowEffectiveLimit: readNullableNumber(source.unfollowEffectiveLimit ?? source.unfollow_effective_limit),
+    lastRunEligibleAtStart: readNullableNumber(source.lastRunEligibleAtStart ?? source.last_run_eligible_at_start),
+    lastRunAttempted: readNullableNumber(source.lastRunAttempted ?? source.last_run_attempted),
+    lastRunVerified: readNullableNumber(source.lastRunVerified ?? source.last_run_verified),
+    lastRunRemainingEligible: readNullableNumber(source.lastRunRemainingEligible ?? source.last_run_remaining_eligible),
+    lastRunCoverageStatus: optionalString(source.lastRunCoverageStatus ?? source.last_run_coverage_status),
+    lastRunStopReason: optionalString(source.lastRunStopReason ?? source.last_run_stop_reason),
+    metricsAsOf: optionalString(source.metricsAsOf ?? source.metrics_as_of),
+    source: String(source.source || "unavailable"),
   };
 }
 
@@ -4898,6 +4925,7 @@ function profileFromManageAccount(account, index, devices) {
     followers: Number(account?.followerDelta3d?.currentFollowers ?? account?.followersCount ?? account?.followers_count ?? account?.followers ?? 0),
     followerDelta: readFollowerDelta(account) ?? 0,
     followerDelta3d: readFollowerDelta3d(account),
+    unfollowTruthfulness: readUnfollowTruthfulness(account) || undefined,
     interactionsToday: readInteractionsToday(account),
     currentRunCounters: readCurrentRunCounters(account),
     followsToday: Number(account?.followsToday || account?.follows_today || 0),
@@ -7768,11 +7796,28 @@ function createMainWindow() {
     },
   });
 
-  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
-    console.error("[BotApp] renderer load failed", { errorCode, errorDescription, validatedURL });
+  mainWindow.webContents.on("did-start-loading", () => {
+    writeStartupTrace("renderer_load_started");
   });
 
+  mainWindow.webContents.on("dom-ready", () => {
+    writeStartupTrace("renderer_dom_ready");
+  });
+
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, _ignoredURL, isMainFrame) => {
+    writeStartupTrace("renderer_load_failed", `code=${String(errorCode)} mainFrame=${String(isMainFrame)} description=${safeRuntimeError(errorDescription, "unknown")}`);
+    console.error("[BotApp] renderer load failed", { errorCode, errorDescription, isMainFrame });
+  });
+
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    writeStartupTrace("renderer_process_gone", `reason=${safeRuntimeError(details?.reason, "unknown")} exitCode=${String(details?.exitCode ?? "unknown")}`);
+  });
+
+  mainWindow.on("unresponsive", () => writeStartupTrace("renderer_unresponsive"));
+  mainWindow.on("responsive", () => writeStartupTrace("renderer_responsive"));
+
   mainWindow.once("ready-to-show", () => {
+    writeStartupTrace("renderer_ready_to_show");
     mainWindow.show();
   });
 
@@ -7801,6 +7846,7 @@ function createMainWindow() {
   }
 
   mainWindow.webContents.on("did-finish-load", () => {
+    writeStartupTrace("renderer_load_finished");
     if (isIpcBridgeProbeMode()) {
       void finishIpcBridgeProbe(mainWindow);
       return;
@@ -7839,6 +7885,7 @@ if (!hasSingleInstanceLock) {
   });
 
 app.whenReady().then(async () => {
+  let startupWindowCreated = false;
   writeStartupTrace("when_ready", `packaged=${String(app.isPackaged)} userData=${app.getPath("userData")}`);
   try {
     const bootstrapStatus = bootstrapRelayConfig();
@@ -7874,8 +7921,14 @@ app.whenReady().then(async () => {
         renderer: null,
       }, "botapp-ipc-bridge-probe.partial.json");
       createMainWindow();
+      startupWindowCreated = true;
+      writeStartupTrace("main_window_requested", "mode=ipc_probe");
       return;
     }
+
+    createMainWindow();
+    startupWindowCreated = true;
+    writeStartupTrace("main_window_requested", "mode=operator");
 
     const relay = await botappRelayHealth();
     let dispatcher = null;
@@ -7908,8 +7961,6 @@ app.whenReady().then(async () => {
       void handleOpenDeviceViewDeepLink(deepLink);
     }
 
-    createMainWindow();
-
     if (process.env.BOTAPP_STARTUP_DIAGNOSTICS) {
       setTimeout(() => app.quit(), 2500);
     }
@@ -7923,7 +7974,11 @@ app.whenReady().then(async () => {
       lastError: safeRuntimeError(error, "startup_bootstrap_failed"),
       checkedAt: new Date().toISOString(),
     });
-    createMainWindow();
+    if (!startupWindowCreated) {
+      createMainWindow();
+      startupWindowCreated = true;
+      writeStartupTrace("main_window_requested", "mode=startup_fallback");
+    }
     if (process.env.BOTAPP_STARTUP_DIAGNOSTICS) {
       setTimeout(() => app.quit(), 2500);
     }

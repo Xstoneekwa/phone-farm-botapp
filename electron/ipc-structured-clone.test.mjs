@@ -47,3 +47,9 @@ test("toIpcSafe preserves shared object references without [circular] corruption
   assert.equal(safe.profileGroups[0].profiles[0].counters.follow.current, 1);
   assert.notEqual(safe.profileGroups[0].profiles[0], "[circular]");
 });
+
+test("toIpcSafe stops actual recursive cycles without throwing", () => {
+  const payload = { name: "root" };
+  payload.self = payload;
+  assert.deepEqual(toIpcSafe(payload), { name: "root", self: "[circular]" });
+});

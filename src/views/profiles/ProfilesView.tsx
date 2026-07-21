@@ -18,6 +18,7 @@ import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifec
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
 import { buildRestoreLoginScreenPayload } from "./restore-login-screen-flow";
 import { buildStartPayload, buildStopPayload, displayCounterMetrics, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
+import { followerDeltaTooltip, unfollowMetricTooltip } from "./profile-metric-contract";
 import { mergeGroupedProfiles } from "./profiles-live-merge";
 import { socialBadge, socialBlockLabel } from "./profile-growth-badge";
 import "./profiles.css";
@@ -303,14 +304,20 @@ function AccountRow({
 
       <div className="profile-counters mono">
         {counterMetrics.map((metric) => (
-          <CounterMetric key={metric.key} current={metric.current} max={metric.max} label={metric.label} tooltip={metric.key === "follow" ? followCapTooltip : undefined} />
+          <CounterMetric
+            key={metric.key}
+            current={metric.current}
+            max={metric.max}
+            label={metric.label}
+            tooltip={metric.key === "follow" ? followCapTooltip : metric.key === "unfollow" ? unfollowMetricTooltip(profile.unfollowTruthfulness, metric.current, metric.max) : undefined}
+          />
         ))}
       </div>
 
       <div className="profile-row-metrics">
         <span
           className={`delta-pill ${followerDeltaTone(followerDelta3dValue)}`}
-          title={`Followers gain 3d · ${profile.followerDelta3d?.source ?? "pending"}`}
+          title={followerDeltaTooltip(profile.followerDelta3d)}
         >
           {followerDeltaLabel(followerDelta3dValue)}
         </span>

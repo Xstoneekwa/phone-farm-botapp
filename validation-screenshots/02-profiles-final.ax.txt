@@ -1,0 +1,253 @@
+Window: "BotApp", App: BotApp.
+0 fenêtre standard BotApp, Secondary Actions: Raise
+	1 container BotApp
+		2 container
+			3 Contenu HTML BotApp, URL: file:///Applications/BotApp.app/Contents/Resources/app.asar/dist/index.html
+				4 container
+					5 container BotApp · Phone Farm OS
+						6 texte B
+						7 container
+							8 text BotApp Phone Farm OS
+					9 container
+						10 texte Ops
+						11 bouton Overview
+						12 bouton Profiles
+							13 texte Profiles
+							14 texte 3
+						15 bouton Client Accounts
+						16 bouton Credentials
+						17 bouton Devices
+							18 texte Devices
+							19 texte 3
+						20 texte Monitoring
+						21 bouton Activity Log
+						22 bouton Email History
+						23 bouton Runtime Health
+						24 bouton Incidents
+						25 bouton Incident Notifications
+						26 bouton Compass
+						27 texte Automation
+						28 bouton Auto Restart
+						29 bouton Scheduler
+						30 texte Admin
+						31 bouton API / Webhooks / Keys
+						32 bouton Settings
+					33 container Default operator
+						34 texte D
+						35 container
+							36 text Default Operator
+					37 container
+						38 text BOTAPP /  OPS
+						39 en-tête Profiles, Value: 1
+							40 texte Profiles
+						41 bouton Command palette
+					42 texte Dispatcher stopped.
+					43 texte Dispatcher is running but cannot process jobs.
+					44 bouton Start dispatcher
+					45 bouton Retry
+					46 bouton Copy diagnostics
+					47 container
+						48 en-tête Profiles / Accounts, Value: 3
+							49 texte Profiles / Accounts
+						50 texte Profiles patch active: manage-sync-v1 · Source: Shared backend API · 3 accounts (profiles_endpoint)
+						51 bouton All
+						52 bouton Instagram
+						53 bouton TikTok
+						54 bouton Active
+						55 bouton Archived
+						56 bouton Bin
+						57 bouton Refresh
+						58 champ de texte (settable, string) Search username, name, package, phone, platform, timeslot
+						59 bouton + New profile
+					60 container
+						61 container
+							62 text Samsung A16-01  ·  RFGL...VCKE idle
+						63 texte 1 profiles · idle
+						64 bouton Open phone view
+						65 texte Open phone view
+						66 container Runtime idle: no active run and last run normal.
+						67 bouton i_m_your_traker
+						68 text connected operator review required
+						69 container Instagram
+						70 texte 1
+						71 text i_m_your_traker Pro 11:19:05 2026-07-19 Manual
+						72 container Effective cap 120/day · 20/session · limited by package default
+							73 texte 0
+							74 text / 120 F
+						75 container 0 unfollows verified today · daily cap 120 · detailed last-run coverage unavailable.
+							76 texte 0
+							77 text / 120 UF
+						78 text 0 / 100 L 0 / 0 C 0 / 1 DM
+						79 texte +10
+						80 texte 0
+						81 barre d'outils Profile actions
+							82 bouton Stats
+								83 image
+							84 texte Stats
+							85 bouton Logs / History
+								86 image
+							87 texte Logs / History
+							88 bouton Targets
+								89 image
+							90 texte Targets
+							91 bouton (disabled) Start run
+								92 image
+							93 texte Start run · operator review required
+							94 bouton Auto Login
+								95 image
+							96 texte Auto Login · Ready to connect: Credentials are saved and the assigned phone/app can run login_provisioning.
+							97 bouton (disabled) Restore login screen
+								98 image
+							99 texte Restore login screen · Orphan challenge not confirmed: Restore login screen is only available when an orphan email-code challenge is confirmed for this assigned clone.
+							100 bouton Refresh readiness
+								101 image
+							102 texte Refresh readiness · Ready: Refresh saved credentials, login status, assignment, and connect readiness.
+							103 bouton (disabled) Stop
+								104 image
+							105 texte Stop · No active run or run request is known for this account.
+							106 bouton Settings
+								107 image
+							108 texte Settings
+							109 bouton Filters
+								110 image
+							111 texte Filters
+							112 bouton (disabled) Assign Now
+								113 image
+							114 texte Assign Now · Blocked: Runtime or credential gate blocked
+							115 bouton Archive
+								116 image
+							117 texte Archive
+							118 bouton Delete
+								119 image
+							120 texte Delete
+					121 container
+						122 container
+							123 text Samsung A16-02  ·  RFGL...LZHE idle
+						124 texte 1 profiles · idle
+						125 bouton Open phone view
+						126 texte Open phone view
+						127 container Runtime idle: no active run and last run normal.
+						128 bouton mythyl_fitness
+						129 text connected growth ready
+						130 container Instagram
+						131 texte 2
+						132 text mythyl_fitness Pro 17:05:16 2026-07-21 18:00-00:00
+						133 container Effective cap 120/day · 40/session · limited by package default
+							134 texte 40
+							135 text / 120 F
+						136 container 11 unfollows verified today · daily cap 120 · detailed last-run coverage unavailable.
+							137 texte 11
+							138 text / 120 UF
+						139 text 38 / 100 L 0 / 0 C 0 / 2 DM
+						140 texte +20
+						141 texte 89
+						142 barre d'outils Profile actions
+							143 bouton Stats
+								144 image
+							145 texte Stats
+							146 bouton Logs / History
+								147 image
+							148 texte Logs / History
+							149 bouton Targets
+								150 image
+							151 texte Targets
+							152 bouton Start run
+								153 image
+							154 texte Start account run through the secure BotApp runtime relay.
+							155 bouton Auto Login
+								156 image
+							157 texte Auto Login · Ready to connect: Credentials are saved and the assigned phone/app can run login_provisioning.
+							158 bouton (disabled) Restore login screen
+								159 image
+							160 texte Restore login screen · Orphan challenge not confirmed: Restore login screen is only available when an orphan email-code challenge is confirmed for this assigned clone.
+							161 bouton Refresh readiness
+								162 image
+							163 texte Refresh readiness · Ready: Refresh saved credentials, login status, assignment, and connect readiness.
+							164 bouton (disabled) Stop
+								165 image
+							166 texte Stop · No active run or run request is known for this account.
+							167 bouton Settings
+								168 image
+							169 texte Settings
+							170 bouton Filters
+								171 image
+							172 texte Filters
+							173 bouton Assign Now
+								174 image
+							175 texte Assign Now
+							176 bouton Archive
+								177 image
+							178 texte Archive
+							179 bouton Delete
+								180 image
+							181 texte Delete
+					182 container
+						183 container
+							184 text Unassigned / backend profiles  ·  No device idle
+						185 texte 1 profiles · idle
+						186 bouton (disabled) Open phone view
+						187 texte No ADB serial is attached to this backend account row.
+						188 container Runtime idle: no active run and last run normal.
+						189 bouton j_automatise_pour_toi
+						190 text login pending social needs login
+						191 container Instagram
+						192 texte P
+						193 text j_automatise_pour_toi Growth 23:09:12 2026-07-21 Unassigned
+						194 container Effective cap 10/day · 10/session · limited by warmup
+							195 texte 0
+							196 text / 10 F
+						197 container 0 unfollows verified today · daily cap 80 · detailed last-run coverage unavailable.
+							198 texte 0
+							199 text / 80 UF
+						200 text 0 / 100 L 0 / 0 C 0 / 2 DM
+						201 texte —
+						202 texte 0
+						203 barre d'outils Profile actions
+							204 bouton Stats
+								205 image
+							206 texte Stats
+							207 bouton Logs / History
+								208 image
+							209 texte Logs / History
+							210 bouton Targets
+								211 image
+							212 texte Targets
+							213 bouton (disabled) Start run
+								214 image
+							215 texte Start run · Device not assigned
+							216 bouton (disabled) Auto Login
+								217 image
+							218 texte Auto Login · Device not assigned: Assign a phone and Instagram app instance before Auto Login.
+							219 bouton (disabled) Restore login screen
+								220 image
+							221 texte Restore login screen · Orphan challenge not confirmed: Restore login screen is only available when an orphan email-code challenge is confirmed for this assigned clone.
+							222 bouton (disabled) Refresh readiness
+								223 image
+							224 texte Refresh readiness · Device not assigned: Assign a phone and Instagram app instance first.
+							225 bouton (disabled) Stop
+								226 image
+							227 texte Stop · No active run or run request is known for this account.
+							228 bouton Settings
+								229 image
+							230 texte Settings
+							231 bouton Filters
+								232 image
+							233 texte Filters
+							234 bouton Assign Now
+								235 image
+							236 texte Assign Now
+							237 bouton Archive
+								238 image
+							239 texte Archive
+							240 bouton Delete
+								241 image
+							242 texte Delete
+	243 Bouton de fermeture
+	244 bouton plein écran Help: ce bouton peut également agrandir ou réduire la fenêtre, Secondary Actions: réduire/agrandir la fenêtre
+	245 bouton de minimisation
+246 menu bar
+	247 BotApp
+	248 File
+	249 Edit
+	250 View
+	251 Window

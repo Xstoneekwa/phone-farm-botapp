@@ -1,0 +1,62 @@
+Window: "BotApp", App: BotApp.
+0 fenêtre standard BotApp, Secondary Actions: Raise
+	1 container BotApp
+		2 container
+			3 Contenu HTML BotApp, URL: file:///Applications/BotApp.app/Contents/Resources/app.asar/dist/index.html
+				4 container
+					5 container BotApp · Phone Farm OS
+						6 texte B
+						7 container
+							8 text BotApp Phone Farm OS
+					9 container
+						10 texte Ops
+						11 bouton Overview
+						12 bouton Profiles
+							13 texte Profiles
+							14 texte 3
+						15 bouton Client Accounts
+						16 bouton Credentials
+						17 bouton Devices
+							18 texte Devices
+							19 texte 3
+						20 texte Monitoring
+						21 bouton Activity Log
+						22 bouton Email History
+						23 bouton Runtime Health
+						24 bouton Incidents
+						25 bouton Incident Notifications
+						26 bouton Compass
+						27 texte Automation
+						28 bouton Auto Restart
+						29 bouton Scheduler
+						30 texte Admin
+						31 bouton API / Webhooks / Keys
+						32 bouton Settings
+					33 container Default operator
+						34 texte D
+						35 container
+							36 text Default Operator
+					37 container
+						38 text BOTAPP /  MONITORING
+						39 en-tête Incidents, Value: 1
+							40 texte Incidents
+						41 bouton Command palette
+					42 texte Dispatcher stopped.
+					43 texte Dispatcher is running but cannot process jobs.
+					44 bouton Start dispatcher
+					45 bouton Retry
+					46 bouton Copy diagnostics
+					47 container
+						48 en-tête Incidents, Value: 3
+							49 texte Incidents
+						50 text Canonical runtime incidents — true failure reasons, Slack/Discord delivery state, human review. Action required: 0 Open: 0
+						51 bouton Refresh
+	52 Bouton de fermeture
+	53 bouton plein écran Help: ce bouton peut également agrandir ou réduire la fenêtre, Secondary Actions: réduire/agrandir la fenêtre
+	54 bouton de minimisation
+55 menu bar
+	56 BotApp
+	57 File
+	58 Edit
+	59 View
+	60 Window

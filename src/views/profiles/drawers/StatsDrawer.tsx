@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 import { Button, Drawer } from "../../../design/components";
 import type { BotProfile } from "../../../api/types";
+import { snapshotStatusSummary } from "../stats-snapshot-contract";
 
 type StatsHistoryDay = {
   date: string;
   session_time: string | null;
   followers_count: number | null;
   followings_count: number | null;
+  followers_snapshot_at?: string | null;
+  followers_snapshot_source?: string | null;
+  followers_freshness_status?: "available" | "stale" | "no_data";
+  followings_freshness_status?: "unavailable" | "available" | "stale" | "no_data";
   follow_count: number;
   follow_cap: number;
   unfollow_count: number;
@@ -26,10 +31,23 @@ type StatsHistoryPayload = {
   days: StatsHistoryDay[];
   source?: Record<string, string>;
   missing_sources?: string[];
+  business_timezone?: string;
+  generated_at?: string;
+  source_status?: {
+    followers?: { status?: string; latestAt?: string | null; latest_at?: string | null; source?: string | null };
+    followings?: { status?: string; latestAt?: string | null; latest_at?: string | null; source?: string | null; reason?: string };
+  };
 };
 
 function numberOrDash(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("en-US") : "—";
+}
+
+function SnapshotCell({ value, status, capturedAt, source }: { value: number | null | undefined; status?: string; capturedAt?: string | null; source?: string | null }) {
+  if (status === "unavailable") return <span title="No canonical snapshot source exists.">Unavailable</span>;
+  if (status === "no_data" && value == null) return <span title="Canonical snapshot source exists, but no real value is available yet.">Pending</span>;
+  const title = [status, capturedAt, source].filter(Boolean).join(" · ");
+  return <span title={title || undefined}>{numberOrDash(value)}{status === "stale" ? <em> · stale</em> : null}</span>;
 }
 
 function actionPillClass(kind: "follow" | "unfollow" | "like" | "neutral" | "total", value = 0) {
@@ -42,7 +60,7 @@ function actionPillClass(kind: "follow" | "unfollow" | "like" | "neutral" | "tot
 }
 
 function ActionPill({ kind, current, cap }: { kind: "follow" | "unfollow" | "like" | "neutral"; current: number; cap?: number | null }) {
-  return <span className={actionPillClass(kind)}>{current}/{typeof cap === "number" ? cap : 0}</span>;
+  return <span className={actionPillClass(kind)}>{current}/{typeof cap === "number" ? cap : "—"}</span>;
 }
 
 function WatchPill({ value }: { value: number }) {
@@ -104,7 +122,7 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
       <div className="stats-history-panel">
         <div className="stats-source-line">
           <span>Supabase-backed API · 30 days · social actions</span>
-          {data.missing_sources?.length ? <em>Followers/followings snapshots pending</em> : null}
+          <em>{snapshotStatusSummary(data)}</em>
         </div>
         {loading ? <div className="empty-state">Loading statistics from shared backend…</div> : null}
         {!loading && error ? <div className="empty-state"><strong>Statistics unavailable</strong><span>{error}</span></div> : null}
@@ -129,8 +147,8 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
                 {data.days.length ? data.days.map((day) => (
                   <tr key={day.date}>
                     <td className="session-time"><span className="clock-icon">◷</span>{day.session_time ?? day.date}</td>
-                    <td className="stats-strong">{numberOrDash(day.followers_count)}</td>
-                    <td className="stats-strong">{numberOrDash(day.followings_count)}</td>
+                    <td className="stats-strong"><SnapshotCell value={day.followers_count} status={day.followers_freshness_status} capturedAt={day.followers_snapshot_at} source={day.followers_snapshot_source} /></td>
+                    <td className="stats-strong"><SnapshotCell value={day.followings_count} status={day.followings_freshness_status ?? data.source_status?.followings?.status} /></td>
                     <td><ActionPill kind="follow" current={day.follow_count} cap={day.follow_cap} /></td>
                     <td><ActionPill kind="unfollow" current={day.unfollow_count} cap={day.unfollow_cap} /></td>
                     <td><ActionPill kind="like" current={day.like_count} cap={day.like_cap} /></td>
