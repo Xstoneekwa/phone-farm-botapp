@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, Drawer } from "../../../design/components";
 import type { BotProfile } from "../../../api/types";
-import { snapshotStatusSummary } from "../stats-snapshot-contract";
+import { formatSnapshotMetric, snapshotStatusSummary } from "../stats-snapshot-contract";
 
 type StatsHistoryDay = {
   date: string;
@@ -46,15 +46,13 @@ type StatsHistoryPayload = {
   };
 };
 
-function numberOrDash(value: number | null | undefined) {
-  return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("en-US") : "—";
-}
-
 function SnapshotCell({ value, status, capturedAt, source }: { value: number | null | undefined; status?: string; capturedAt?: string | null; source?: string | null }) {
-  if (status === "unavailable") return <span title="No canonical snapshot source exists.">Unavailable</span>;
-  if (status === "no_data" && value == null) return <span title="Canonical snapshot source exists, but no real value is available yet.">Pending</span>;
-  const title = [status, capturedAt, source].filter(Boolean).join(" · ");
-  return <span title={title || undefined}>{numberOrDash(value)}{status === "stale" ? <em> · stale</em> : null}</span>;
+  const formatted = formatSnapshotMetric(value);
+  const hasValue = formatted !== "—";
+  const title = hasValue
+    ? [status, capturedAt, source].filter(Boolean).join(" · ")
+    : "No persisted value for this observation.";
+  return <span title={title}>{formatted}{hasValue && status === "stale" ? <em> · stale</em> : null}</span>;
 }
 
 function actionPillClass(kind: "follow" | "unfollow" | "like" | "neutral" | "total", value = 0) {

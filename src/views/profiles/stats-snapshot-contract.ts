@@ -5,7 +5,21 @@ export type SnapshotSourceStatus = {
     posts?: { status?: string };
   };
   missing_sources?: string[];
+  days?: Array<{
+    followers_count?: unknown;
+    followings_count?: unknown;
+    posts_count?: unknown;
+  }>;
 };
+
+export function formatSnapshotMetric(value: unknown) {
+  return typeof value === "number"
+    && Number.isFinite(value)
+    && Number.isInteger(value)
+    && value >= 0
+    ? value.toLocaleString("en-US")
+    : "—";
+}
 
 export function snapshotStatusSummary(data: SnapshotSourceStatus) {
   const followers = data.source_status?.followers?.status
