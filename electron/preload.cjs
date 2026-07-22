@@ -105,6 +105,7 @@ contextBridge.exposeInMainWorld("botappDesktop", {
     assignNow: (input) => ipcRenderer.invoke("botapp:profiles:assign-now", input),
     readinessNow: (input) => ipcRenderer.invoke("botapp:profiles:readiness-now", input),
     autoLogin: (input) => ipcRenderer.invoke("botapp:profiles:auto-login", input),
+    submitVerificationCode: (input) => ipcRenderer.invoke("botapp:profiles:submit-verification-code", input),
     restoreLoginScreen: (input) => ipcRenderer.invoke("botapp:profiles:restore-login-screen", input),
     startRun: (input) => ipcRenderer.invoke("botapp:profiles:run-start", input),
     stopRun: (input) => ipcRenderer.invoke("botapp:profiles:run-stop", input),

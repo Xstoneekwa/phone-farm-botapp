@@ -16,6 +16,10 @@ const profilesViewSource = readFileSync(resolve(currentDir, "ProfilesView.tsx"),
 const modalSource = readFileSync(resolve(currentDir, "AutoLoginFlowModal.tsx"), "utf8");
 const autoLoginFlowSource = readFileSync(resolve(currentDir, "auto-login-flow.ts"), "utf8");
 const credentialsSource = readFileSync(resolve(currentDir, "../Credentials.tsx"), "utf8");
+const toolbarSource = readFileSync(resolve(currentDir, "ProfileToolbar.tsx"), "utf8");
+const sharedModalSource = readFileSync(resolve(currentDir, "../../design/components/Modal.tsx"), "utf8");
+const electronMainSource = readFileSync(resolve(currentDir, "../../../electron/main.cjs"), "utf8");
+const electronPreloadSource = readFileSync(resolve(currentDir, "../../../electron/preload.cjs"), "utf8");
 
 const REQUEST_ID = "9566321d-bc00-422f-ae5a-edf712b569e8";
 const RUN_ID = "08ef6e89-f9da-4dca-a8cc-d0a46ba7207b";
@@ -152,9 +156,25 @@ test("BotApp verification code submit uses canonical write-only relay contract",
   assert.match(credentialsSource, /submit_verification_code/);
   assert.match(credentialsSource, /\/api\/instagram-dashboard\/dashboard-actions\/submit-verification-code/);
   assert.match(credentialsSource, /code_is_never_logged: true/);
-  assert.match(credentialsSource, /The code is not logged or shown in the action payload preview/);
+  assert.match(credentialsSource, /profiles\?\.submitVerificationCode/);
+  assert.match(credentialsSource, /submit\(\{ accountId: action\.accountId, actionId: action\.id, verificationCode: trimmed \}\)/);
+  assert.match(credentialsSource, /verification code accepted\. Login resume is queued or already active/);
+  assert.match(electronPreloadSource, /botapp:profiles:submit-verification-code/);
+  assert.match(electronMainSource, /id: "profiles_submit_verification_code"/);
+  assert.match(electronMainSource, /verification_code: verificationCode/);
+  assert.doesNotMatch(electronMainSource, /console\.(?:log|info|warn|error)\([^\n]*verificationCode/);
   assert.equal(credentialsSource.includes("verificationCode"), true);
   assert.equal(credentialsSource.includes("verification_code:"), false);
+});
+
+test("Auto Login click always produces immediate visible feedback before any request", () => {
+  assert.match(toolbarSource, /item\.id !== "auto_login" && requirementBlocked/);
+  assert.match(toolbarSource, /onClick=\{\(\) => onAction\(item\.id\)\}/);
+  assert.match(profilesViewSource, /flushSync\(\(\) => setConfirmAction\(\{ kind: action, profile \}\)\)/);
+  assert.match(profilesViewSource, /Auto Login unavailable: \$\{action\.profile\.autoLoginRequirement\.detail\}/);
+  assert.match(profilesViewSource, /confirmDisabled=\{confirmAction\.kind === "auto_login"/);
+  assert.match(sharedModalSource, /disabled=\{confirmDisabled\}/);
+  assert.match(electronMainSource, /source: "botapp_auto_login"/);
 });
 
 test("resume after code submission keeps the same login_provisioning request active", () => {

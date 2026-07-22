@@ -217,6 +217,7 @@ interface Window {
       assignNow?: (input: { accountId: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       readinessNow?: (input: { accountId: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       autoLogin?: (input: { accountId: string; username: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      submitVerificationCode?: (input: { accountId: string; actionId: string; verificationCode: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       restoreLoginScreen?: (input: { accountId: string; username: string; assignment_id?: string | null; app_instance_id?: string | null }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       startRun?: (input: { accountId: string; username: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       stopRun?: (input: { accountId: string; reason?: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;

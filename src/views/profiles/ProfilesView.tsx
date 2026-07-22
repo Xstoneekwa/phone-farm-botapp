@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import type { BotAppDispatcherHealth, BotProfile, DeviceProfileGroup, ProfileAutoLoginState, ProfileToolbarAction } from "../../api/types";
 import { Badge, Button, Card, Modal, type BadgeTone } from "../../design/components";
 import type { DeviceViewState } from "../../desktop/device-views";
@@ -557,7 +558,11 @@ export function ProfilesView({
   function handleToolbar(profile: BotProfile, action: ProfileToolbarAction) {
     if (action === "play" || action === "auto_login" || action === "restore_login_screen" || action === "check_readiness" || action === "assign_now" || action === "archive" || action === "delete" || action === "restore" || action === "stop") {
       if (action === "stop") setStopReason("");
-      setConfirmAction({ kind: action, profile });
+      if (action === "auto_login") {
+        flushSync(() => setConfirmAction({ kind: action, profile }));
+      } else {
+        setConfirmAction({ kind: action, profile });
+      }
       return;
     }
     if (action === "targets") {
@@ -820,6 +825,11 @@ export function ProfilesView({
       return;
     }
     if (action.kind === "auto_login") {
+      if (!action.profile.autoLoginRequirement.enabled) {
+        onMockSubmit(`Auto Login unavailable: ${action.profile.autoLoginRequirement.detail}`, "error");
+        setConfirmAction(null);
+        return;
+      }
       if (dispatcherBlocksAutoLogin) {
         onMockSubmit(`Auto Login unavailable: dispatcher is ${dispatcherHealth?.status ?? "unknown"}. Open Runtime Health and resume it first.`, "error");
         setConfirmAction(null);
@@ -1075,6 +1085,7 @@ export function ProfilesView({
           title={confirmTitle(confirmAction.kind, confirmAction.profile)}
           danger={confirmAction.kind === "delete" || confirmAction.kind === "archive" || confirmAction.kind === "stop" || (confirmAction.kind === "play" && confirmAction.profile.eligibility !== "can_start")}
           confirmLabel={confirmAction.kind === "play" ? "Start" : confirmAction.kind === "stop" ? "Stop" : confirmAction.kind === "auto_login" ? "Confirm Auto Login" : confirmAction.kind === "restore_login_screen" ? "Restore login screen" : confirmAction.kind === "check_readiness" ? "Refresh" : confirmAction.kind === "assign_now" ? "Assign now" : confirmAction.kind === "archive" ? "Confirm archive" : confirmAction.kind === "delete" ? "Move to Bin" : confirmAction.kind === "restore" ? "Restore" : "Confirm"}
+          confirmDisabled={confirmAction.kind === "auto_login" && (!confirmAction.profile.autoLoginRequirement.enabled || dispatcherBlocksAutoLogin)}
           onClose={() => setConfirmAction(null)}
           onConfirm={() => executeConfirm(confirmAction)}
         >

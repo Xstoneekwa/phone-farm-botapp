@@ -140,6 +140,7 @@ export function Credentials({ overview, selectedAccountId, onOpenProfile }: Cred
   const [message, setMessage] = useState("");
   const [verificationAction, setVerificationAction] = useState<BotAppCredentialsAction | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
+  const [verificationSubmitting, setVerificationSubmitting] = useState(false);
   const selectedAction = selectedAccountId ? overview.actions.find((action) => action.accountId === selectedAccountId) ?? null : null;
 
   const visibleActions = useMemo(() => {
@@ -164,13 +165,29 @@ export function Credentials({ overview, selectedAccountId, onOpenProfile }: Cred
     setMessage(`${action.username}: ${command.replaceAll("_", " ")} prepared for secure relay for this account only.`);
   }
 
-  function submitVerificationCode(action: BotAppCredentialsAction) {
+  async function submitVerificationCode(action: BotAppCredentialsAction) {
     const trimmed = verificationCode.trim();
-    const payload = actionPayload(action, "submit_verification_code", trimmed.length);
-    void payload;
-    setVerificationAction(null);
-    setVerificationCode("");
-    setMessage(`${action.username}: verification code submit prepared for secure relay. The code is not logged or shown in the action payload preview.`);
+    const submit = window.botappDesktop?.profiles?.submitVerificationCode;
+    if (!submit) {
+      setMessage(`${action.username}: secure verification relay unavailable.`);
+      return;
+    }
+    setVerificationSubmitting(true);
+    try {
+      const result = await submit({ accountId: action.accountId, actionId: action.id, verificationCode: trimmed });
+      if (!result.ok) {
+        setMessage(`${action.username}: ${String(result.error || "verification_code_submit_failed")}`);
+        return;
+      }
+      setVerificationAction(null);
+      setVerificationCode("");
+      setMessage(`${action.username}: verification code accepted. Login resume is queued or already active.`);
+    } catch (error) {
+      const safeMessage = error instanceof Error ? error.message : "verification_code_submit_failed";
+      setMessage(`${action.username}: ${safeMessage}`);
+    } finally {
+      setVerificationSubmitting(false);
+    }
   }
 
   return (
@@ -279,7 +296,7 @@ export function Credentials({ overview, selectedAccountId, onOpenProfile }: Cred
             />
             <div className="credentials-modal-actions">
               <button type="button" onClick={() => setVerificationAction(null)}>Cancel</button>
-              <button type="button" className="primary" disabled={!verificationCode.trim()} onClick={() => submitVerificationCode(verificationAction)}>Submit code</button>
+              <button type="button" className="primary" disabled={!verificationCode.trim() || verificationSubmitting} onClick={() => void submitVerificationCode(verificationAction)}>{verificationSubmitting ? "Submitting…" : "Submit code"}</button>
             </div>
           </section>
         </div>

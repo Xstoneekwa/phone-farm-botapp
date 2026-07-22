@@ -78,7 +78,8 @@ export function ProfileToolbar({ profile, onAction }: { profile: BotProfile; onA
   return (
     <div className="profile-toolbar" role="toolbar" aria-label="Profile actions">
       {toolbarActions.filter((item) => actionVisible(profile, item.id)).map((item) => {
-        const disabled = Boolean(disabledReason(profile, item.id) || runControlDisabledReason(profile, item.id));
+        const requirementBlocked = Boolean(disabledReason(profile, item.id));
+        const disabled = Boolean(runControlDisabledReason(profile, item.id) || (item.id !== "auto_login" && requirementBlocked));
         return (
           <span
             key={item.id}
@@ -89,6 +90,7 @@ export function ProfileToolbar({ profile, onAction }: { profile: BotProfile; onA
               type="button"
               className={`profile-toolbar-btn${item.danger ? " danger" : ""}`}
               aria-label={item.label}
+              aria-disabled={item.id === "auto_login" && requirementBlocked ? "true" : undefined}
               disabled={disabled}
               onClick={() => onAction(item.id)}
             >

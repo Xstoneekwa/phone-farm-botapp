@@ -1663,6 +1663,7 @@ const runtimeIpcHandlers = [
   "botapp:profiles:assign-now",
   "botapp:profiles:readiness-now",
   "botapp:profiles:auto-login",
+  "botapp:profiles:submit-verification-code",
   "botapp:profiles:restore-login-screen",
   "botapp:profiles:run-start",
   "botapp:profiles:run-stop",
@@ -2006,6 +2007,17 @@ const botappEndpointRegistry = [
     path: "/api/instagram-dashboard/runs/start",
     usedBy: ["Profiles"],
     purpose: "Create a real login_provisioning account_run_request through the secure BotApp relay",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_submit_verification_code",
+    name: "Profile verification code submit",
+    method: "POST",
+    path: "/api/instagram-dashboard/dashboard-actions/submit-verification-code",
+    usedBy: ["Credentials"],
+    purpose: "Submit one verification code through the secure relay and queue login_email_code_resume",
     authRequired: true,
     status: "active",
     testStrategy: "none",
@@ -3855,12 +3867,30 @@ async function profileAutoLoginStart(input) {
       account_id: accountId,
       requested_run_type: "login_provisioning",
       trigger: "manual",
+      source: "botapp_auto_login",
       manual_start: true,
       idempotency_key: `botapp:${username}:login_provisioning:${Date.now()}`,
     });
     return { ok: true, data };
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Auto Login request failed.") };
+  }
+}
+
+async function profileSubmitVerificationCode(input) {
+  const accountId = String(input?.accountId || input?.account_id || "").trim();
+  const actionId = String(input?.actionId || input?.action_id || "").trim();
+  const verificationCode = String(input?.verificationCode || input?.verification_code || "").trim();
+  if (!accountId || !actionId || !verificationCode) return { ok: false, error: "Missing verification payload." };
+  try {
+    const data = await dashboardPost("profiles_submit_verification_code", {
+      account_id: accountId,
+      action_id: actionId,
+      verification_code: verificationCode,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: safeRuntimeError(error, "Verification code submission failed.") };
   }
 }
 
@@ -7747,6 +7777,7 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:profiles:assign-now", (_event, input) => assignProfileNow(input));
   ipcMain.handle("botapp:profiles:readiness-now", (_event, input) => profileReadinessNow(input));
   ipcMain.handle("botapp:profiles:auto-login", (_event, input) => profileAutoLoginStart(input));
+  ipcMain.handle("botapp:profiles:submit-verification-code", (_event, input) => profileSubmitVerificationCode(input));
   ipcMain.handle("botapp:profiles:restore-login-screen", (_event, input) => profileRestoreLoginScreenStart(input));
   ipcMain.handle("botapp:profiles:run-start", (_event, input) => profileRunStart(input));
   ipcMain.handle("botapp:profiles:run-stop", (_event, input) => profileRunStop(input));
