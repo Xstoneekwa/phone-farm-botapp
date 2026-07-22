@@ -8,10 +8,16 @@ type StatsHistoryDay = {
   session_time: string | null;
   followers_count: number | null;
   followings_count: number | null;
+  posts_count: number | null;
   followers_snapshot_at?: string | null;
   followers_snapshot_source?: string | null;
   followers_freshness_status?: "available" | "stale" | "no_data";
   followings_freshness_status?: "unavailable" | "available" | "stale" | "no_data";
+  followings_snapshot_at?: string | null;
+  followings_snapshot_source?: string | null;
+  posts_freshness_status?: "available" | "stale" | "no_data";
+  posts_snapshot_at?: string | null;
+  posts_snapshot_source?: string | null;
   follow_count: number;
   follow_cap: number;
   unfollow_count: number;
@@ -36,6 +42,7 @@ type StatsHistoryPayload = {
   source_status?: {
     followers?: { status?: string; latestAt?: string | null; latest_at?: string | null; source?: string | null };
     followings?: { status?: string; latestAt?: string | null; latest_at?: string | null; source?: string | null; reason?: string };
+    posts?: { status?: string; latestAt?: string | null; latest_at?: string | null; source?: string | null; reason?: string };
   };
 };
 
@@ -134,6 +141,7 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
                   <th>SESSION TIME</th>
                   <th>FOLLOWERS</th>
                   <th>FOLLOWINGS</th>
+                  <th>POSTS</th>
                   <th>FOLLOW</th>
                   <th>UNFOLLOW</th>
                   <th>LIKE</th>
@@ -148,7 +156,8 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
                   <tr key={day.date}>
                     <td className="session-time"><span className="clock-icon">◷</span>{day.session_time ?? day.date}</td>
                     <td className="stats-strong"><SnapshotCell value={day.followers_count} status={day.followers_freshness_status} capturedAt={day.followers_snapshot_at} source={day.followers_snapshot_source} /></td>
-                    <td className="stats-strong"><SnapshotCell value={day.followings_count} status={day.followings_freshness_status ?? data.source_status?.followings?.status} /></td>
+                    <td className="stats-strong"><SnapshotCell value={day.followings_count} status={day.followings_freshness_status ?? data.source_status?.followings?.status} capturedAt={day.followings_snapshot_at} source={day.followings_snapshot_source} /></td>
+                    <td className="stats-strong"><SnapshotCell value={day.posts_count} status={day.posts_freshness_status ?? data.source_status?.posts?.status} capturedAt={day.posts_snapshot_at} source={day.posts_snapshot_source} /></td>
                     <td><ActionPill kind="follow" current={day.follow_count} cap={day.follow_cap} /></td>
                     <td><ActionPill kind="unfollow" current={day.unfollow_count} cap={day.unfollow_cap} /></td>
                     <td><ActionPill kind="like" current={day.like_count} cap={day.like_cap} /></td>
@@ -159,7 +168,7 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={10} className="stats-empty-cell">No social stats yet for this account.</td>
+                    <td colSpan={11} className="stats-empty-cell">No social stats yet for this account.</td>
                   </tr>
                 )}
               </tbody>

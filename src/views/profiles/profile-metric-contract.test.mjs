@@ -24,11 +24,13 @@ test("unfollow tooltip separates verified count, cap, stock and coverage", () =>
   assert.match(metricSource, /detailed last-run coverage unavailable/);
 });
 
-test("snapshot status covers Available, Stale, Pending and Unavailable", () => {
+test("snapshot status covers available, stale and pending persisted metrics", () => {
   assert.match(snapshotSource, /Followers snapshots available/);
   assert.match(snapshotSource, /Followers snapshot stale/);
   assert.match(snapshotSource, /Followers snapshot pending/);
-  assert.match(snapshotSource, /Followings unavailable/);
+  assert.match(snapshotSource, /Followings snapshot pending/);
+  assert.match(snapshotSource, /Posts snapshot pending/);
+  assert.doesNotMatch(snapshotSource, /Followings unavailable/);
 });
 
 test("profile row keeps the compact numerator/denominator Unfollow display", () => {
