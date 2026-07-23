@@ -164,3 +164,4 @@ BotApp renderer
 | `src/desktop/README.md` | macOS packaging and phone-view notes |
 | `HANDOFF.md` | Current state for the next agent |
 | `SKILL.md` | Agent operating instructions |
+| `docs/checkpoints/2026-07-23-follow-warmup-active-sast-days-v1.md` | Configured/effective Follow limits and active-SAST-day warmup checkpoint |

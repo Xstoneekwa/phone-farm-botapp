@@ -250,3 +250,18 @@ Indiquer aussi :
 | Dispatcher arrêté | Démarrer le dispatcher (relay vert d’abord) |
 | Écran noir | Cmd+Q → relancer BotApp.app → support si échec |
 | Toujours bloqué | Copy diagnostics → support — **pas de terminal, pas de clé** |
+
+## Lire Settings > Follow
+
+- **Configured account limits** : valeurs durables du compte. Ce sont les
+  seules valeurs envoyées si Liam utilise un jour Save après une procédure
+  autorisée.
+- **Today effective limits** : limite temporaire calculée selon package,
+  warmup, hard caps et quota restant. Cette section est informative.
+- Le warmup avance uniquement après une journée SAST avec au moins un Follow
+  vérifié. Un jour sans Follow ne change pas le palier.
+- Refresh peut faire évoluer la section effective, mais ne doit jamais changer
+  silencieusement le champ configuré.
+
+Pour le smoke de ce checkpoint : ouvrir et lire uniquement. Ne pas cliquer
+Save, Start, Auto Login, Check Login ou un contrôle téléphone.

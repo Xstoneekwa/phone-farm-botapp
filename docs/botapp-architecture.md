@@ -406,3 +406,15 @@ Check Login / Readiness mirrors the admin dashboard's `readiness/now` contract a
 - `docs/security.md` — no-leak rules
 - `docs/roadmap.md` — checkpoint history and next steps
 - `src/desktop/README.md` — packaging notes
+
+## Follow limit projection
+
+`SettingsDrawer` receives configured account caps plus package and warmup
+projections through the authenticated backend relay. The renderer never derives
+package policy from a username and never receives privileged database
+credentials. `resolveFollowCapProjection` keeps persisted configured values
+separate from effective day/session limits; the latter are display-only.
+
+Polling may update package, warmup, consumption and effective values, but it
+must not replace the configured draft. Save serializes configured fields only;
+the backend and Worker remain final enforcement boundaries.

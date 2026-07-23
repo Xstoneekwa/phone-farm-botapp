@@ -143,3 +143,21 @@ Assign Now mirrors the admin dashboard's one-click assignment repair path: no sl
 Archive/Delete mirror the admin dashboard's account lifecycle route: `archive` writes an archived state and `scheduled_trash_at = now + 30 days`; `trash` writes a trashed state and `scheduled_delete_at = now + 30 days`; `restore` clears lifecycle timestamps. The current admin dashboard stores and displays the 30-day timestamps but does not expose a working permanent-delete action or cleanup job yet.
 
 Check Login / Readiness mirrors the admin dashboard's `readiness/now` route. The current desktop flow prepares an admin-audience payload for a future secure relay, keeps `requested_run_type = "login_provisioning"`, and displays only safe status, reason, next action, assignment availability, and expected preflight behavior. It does not call Supabase, create account run requests, launch workers, or read phone/device internals from the renderer.
+
+## Settings > Follow — Active SAST Days V1
+
+Configured account limits remain editable and persistent:
+
+- Follow cap/day;
+- Follow cap/session.
+
+Today effective limits are read-only:
+
+- active warmup day and cap;
+- package cap;
+- effective day/session cap;
+- limiting source and reason.
+
+Refresh/polling updates only the projection. Save cannot persist warmup day
+caps. The fallback badge label is exactly `operator review`; specific identity,
+quota, device, preflight and scheduler labels keep their existing priority.

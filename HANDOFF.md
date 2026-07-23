@@ -389,3 +389,15 @@ Check Login / Readiness is modeled from the admin readiness route: admin audienc
 - `src/security/redaction.ts`
 - `electron-builder.json`
 - `vite.config.ts`
+
+## Scoped handoff update — 2026-07-23
+
+Follow Settings now keeps configured account day/session caps separate from
+read-only effective limits. Warmup is derived from verified Follow activity on
+distinct SAST dates. Refresh does not overwrite editable values and Save does
+not send temporary warmup caps. The fallback status label is `operator review`;
+the legacy `social blocked:` prefix is not allowed in source, tests or package.
+
+Checkpoint: [Follow Warmup Active SAST Days V1](docs/checkpoints/2026-07-23-follow-warmup-active-sast-days-v1.md).
+This addendum is scoped and does not claim the final Frontend/Stripe handover is
+complete.

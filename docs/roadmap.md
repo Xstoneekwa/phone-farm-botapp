@@ -1,5 +1,19 @@
 # BotApp Checkpoint And Roadmap
 
+## Prepared checkpoint — 2026-07-23
+
+Branch `feature/follow-warmup-active-days-v1-20260723`, code
+`4606fc29b3717611219a62cc7132e2245647422a`.
+
+- configured and effective Follow limits are separated;
+- warmup presentation uses verified active SAST days;
+- the legacy `social blocked:` fallback is removed;
+- 25 targeted tests, TypeScript, Vite and macOS package gates pass;
+- production installation remains a controlled rollout step;
+- no device or account action was used to certify this checkpoint.
+
+Detailed checkpoint: [Follow Warmup Active SAST Days V1](./checkpoints/2026-07-23-follow-warmup-active-sast-days-v1.md).
+
 ## Production baseline - 2026-07-16
 
 The installed operator baseline before worker performance optimization is

@@ -707,3 +707,17 @@ Runtime controller checkpoint:
 - Heartbeat logs rotate outside immutable releases under
   `/Users/admin/phonefarm-runtime/logs/device-heartbeat-service`.
 
+## Follow Warmup Active SAST Days V1 package gate
+
+For this checkpoint, build with the repository's supported Node runtime, run
+TypeScript and Vite, then `npm run package:mac`. Verify the generated
+`release/mac-arm64/BotApp.app` signature and SHA-256 of
+`Contents/Resources/app.asar`. Extract the archive offline and confirm:
+
+- no secret-shaped values;
+- no `social blocked:` string;
+- configured/effective Follow labels are present.
+
+After copying to `/Applications/BotApp.app`, built and installed `app.asar`
+hashes must match. Open only the official application; do not use Electron dev
+for operator certification.

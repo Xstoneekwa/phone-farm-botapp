@@ -34,6 +34,9 @@ Related checkpoints use the same filename date across repositories:
 - Warmup labels are calendar based: `Warmup - Day N` with `in progress` for
   Days 1-3, and `Warmup completed - Day N` with `completed` for Day 4+.
 
+> Historical note: this calendar rule is superseded for current policy by
+> [Follow Warmup Active SAST Days V1](2026-07-23-follow-warmup-active-sast-days-v1.md).
+
 ## Incidents and actions
 
 - Every drawer resolves the exact linked action by incident, run, request and
