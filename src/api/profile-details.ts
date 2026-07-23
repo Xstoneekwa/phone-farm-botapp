@@ -1,5 +1,6 @@
 import type { ProfileLogEntry, ProfileTarget } from "./types";
 import { resolveTargetFbrFromApiRow } from "./target-fbr-display";
+import { resolveProfileTargetDates } from "./profile-target-dates";
 
 export type ProfileDetailsSourceStatus = "connected" | "backend_pending" | "not_available";
 
@@ -59,6 +60,7 @@ function targetPerformance(value: unknown): ProfileTarget["performance"] {
 
 export function mapApiTargetRow(profileId: string, row: Record<string, unknown>): ProfileTarget {
   const fbr = resolveTargetFbrFromApiRow(row);
+  const dates = resolveProfileTargetDates(row);
   const followersCount = typeof row.followers_count === "number" ? row.followers_count : null;
   const statusRaw = String(row.status || "unknown");
   const status: ProfileTarget["status"] = statusRaw === "pending_verification" || statusRaw === "valid" || statusRaw === "rejected" || statusRaw === "review" || statusRaw === "duplicate" || statusRaw === "active" || statusRaw === "archived" || statusRaw === "deleted"
@@ -91,9 +93,9 @@ export function mapApiTargetRow(profileId: string, row: Record<string, unknown>)
     followbacksMetricsReliableAt: fbr.followbacksMetricsReliableAt,
     followsSent: fbr.followsSent,
     followbacks: fbr.followbacks,
-    lastUsedAt: String(row.last_used_at || "") || null,
+    lastUsedAt: dates.lastUsedAt,
     lastSelectedAt: String(row.last_selected_at || "") || null,
-    addedAt: String(row.updated_at || row.created_at || "") || "",
+    addedAt: dates.addedAt,
     source: "backend",
     archivedAt: String(row.archived_at || "") || null,
     deletedAt: String(row.deleted_at || "") || null,

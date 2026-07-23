@@ -1004,7 +1004,7 @@ export type ProfileTarget = {
   exhaustionReason?: string | null;
   cooldownUntil?: string | null;
   metricsUpdatedAt?: string | null;
-  addedAt: string;
+  addedAt: string | null;
   source: ProfileTargetSource;
   batchId?: string | null;
   archivedAt?: string | null;

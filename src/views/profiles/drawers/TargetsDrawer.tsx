@@ -313,7 +313,7 @@ export function TargetsDrawer({ profile, onClose, onAction }: { profile: BotProf
           row.performance,
           row.followers_count ?? "",
           row.fbr ?? "",
-          row.added_at,
+          row.added_at ?? "",
         ].map(csvEscape).join(",")),
       ].join("\n");
     const blob = new Blob([redactText(content)], { type: format === "json" ? "application/json" : "text/csv" });
