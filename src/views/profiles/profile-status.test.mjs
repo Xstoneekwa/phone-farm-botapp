@@ -137,8 +137,24 @@ test("Settings drawer persists and reloads the canonical Follow session cap", ()
   assert.match(settingsDrawerSource, /\["manual_follow_session_cap", "follow_limit"\]/);
   assert.match(settingsDrawerSource, /manualFollowSessionCap:\s*followCapProjection\.configuredSessionCap/);
   assert.match(settingsDrawerSource, /title="Configured account limits"/);
-  assert.doesNotMatch(settingsDrawerSource, /patch:\s*\{[\s\S]{0,500}day_1_follow_cap/);
+  assert.match(settingsDrawerSource, /day_1_follow_cap:\s*follow\.day1FollowCap/);
+  assert.match(settingsDrawerSource, /day_2_follow_cap:\s*follow\.day2FollowCap/);
+  assert.match(settingsDrawerSource, /day_3_follow_cap:\s*follow\.day3FollowCap/);
+  assert.match(settingsDrawerSource, /day_4_plus_follow_cap:\s*follow\.day4PlusFollowCap/);
   assert.match(settingsDrawerSource, /await refreshSettingsFromBackend\("Supabase-backed API · Follow settings saved"\)/);
+});
+
+test("Settings drawer exposes four distinct persistent warmup cap fields", () => {
+  assert.match(settingsDrawerSource, /title="Configured warmup progression"/);
+  assert.match(settingsDrawerSource, /label="DAY 1 FOLLOW CAP"/);
+  assert.match(settingsDrawerSource, /label="DAY 2 FOLLOW CAP"/);
+  assert.match(settingsDrawerSource, /label="DAY 3 FOLLOW CAP"/);
+  assert.match(settingsDrawerSource, /label="DAY 4\+ FOLLOW CAP"/);
+  assert.match(settingsDrawerSource, /Ces plafonds s’appliquent selon le nombre de journées actives avec Follow vérifié/);
+  assert.match(settingsDrawerSource, /title="Today effective limits"/);
+  assert.match(settingsDrawerSource, /title="Configured account limits"/);
+  assert.match(settingsDrawerSource, /left\.day4PlusFollowCap === right\.day4PlusFollowCap/);
+  assert.match(settingsDrawerSource, /\}, \[applySettings, profile\.id\]\);/);
 });
 
 test("Settings drawer DM save becomes ready when backend DM settings are connected", () => {

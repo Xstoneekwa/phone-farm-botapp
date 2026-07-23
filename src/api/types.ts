@@ -1599,6 +1599,10 @@ export type ProfileFollowSavePayload = {
     account_id: string;
     manual_follow_day_cap: number;
     manual_follow_session_cap: number;
+    day_1_follow_cap: number;
+    day_2_follow_cap: number;
+    day_3_follow_cap: number;
+    day_4_plus_follow_cap: number;
   };
   metadata_safe: {
     account_username: string;
