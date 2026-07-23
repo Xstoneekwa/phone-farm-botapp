@@ -54,7 +54,7 @@ test("social badge explains real blocking reasons and preserves growth-ready sta
   assert.match(growthBadgeSource, /review_login_package_mismatch/);
   assert.match(growthBadgeSource, /social review: account mismatch/);
   assert.match(growthBadgeSource, /profile\.eligibility === "can_start"[\s\S]*growth ready/);
-  assert.match(growthBadgeSource, /social blocked: reason required/);
+  assert.match(growthBadgeSource, /return "operator review"/);
   assert.match(growthBadgeSource, /connected · device locked/);
   assert.match(growthBadgeSource, /connected · preflight blocked/);
   assert.match(growthBadgeSource, /connected · waiting for slot/);
@@ -126,14 +126,18 @@ test("Settings drawer loads runtime follow settings defaults", () => {
   assert.match(settingsDrawerSource, /label="Effective cap\/day"/);
   assert.match(settingsDrawerSource, /label="Effective cap\/session"/);
   assert.match(settingsDrawerSource, /label="Warmup cap today"/);
-  assert.match(settingsDrawerSource, /Maximum follows allowed per day for this account\./);
-  assert.match(settingsDrawerSource, /Maximum follows allowed during one session\./);
+  assert.match(settingsDrawerSource, /title="Today effective limits"/);
+  assert.match(settingsDrawerSource, /Persistent account value\. It may be lowered but cannot exceed the package maximum\./);
+  assert.match(settingsDrawerSource, /Persistent account value\. Warmup never replaces this field\./);
   assert.doesNotMatch(settingsDrawerSource, /Draft override cap/);
 });
 
 test("Settings drawer persists and reloads the canonical Follow session cap", () => {
   assert.match(settingsDrawerSource, /manual_follow_session_cap:\s*follow\.manualFollowSessionCap/);
   assert.match(settingsDrawerSource, /\["manual_follow_session_cap", "follow_limit"\]/);
+  assert.match(settingsDrawerSource, /manualFollowSessionCap:\s*followCapProjection\.configuredSessionCap/);
+  assert.match(settingsDrawerSource, /title="Configured account limits"/);
+  assert.doesNotMatch(settingsDrawerSource, /patch:\s*\{[\s\S]{0,500}day_1_follow_cap/);
   assert.match(settingsDrawerSource, /await refreshSettingsFromBackend\("Supabase-backed API · Follow settings saved"\)/);
 });
 

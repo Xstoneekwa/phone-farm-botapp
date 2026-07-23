@@ -13,6 +13,8 @@ test("Day 1 warmup limits both daily and session execution", () => {
   }), {
     effectiveDayCap: 10,
     effectiveSessionCap: 10,
+    configuredDayCap: 120,
+    configuredSessionCap: 120,
     capSource: "warmup",
     limitingReason: "limited_by_warmup",
   });
@@ -68,7 +70,7 @@ test("warmup presentation distinguishes progress, completion, disabled, and pend
       warmupDay: day,
       packageStartedAt: "2026-06-03T16:15:45Z",
     }), {
-      title: `Warmup completed — Day ${day}`,
+      title: "Warmup completed — Day 4+",
       badge: "completed",
       tone: "success",
     });
@@ -84,8 +86,47 @@ test("warmup presentation distinguishes progress, completion, disabled, and pend
   assert.equal(resolveWarmupPresentation({
     warmupEnabled: true,
     warmupApplied: false,
-    warmupStatus: "pending_package_start",
+    warmupStatus: "pending_activity_history",
     warmupDay: 0,
     packageStartedAt: "not_available",
   }).badge, "pending");
+});
+
+test("configured account session cap remains distinct from the effective warmup cap", () => {
+  const result = resolveFollowCapProjection({
+    packageDayCap: 80,
+    packageSessionCap: 80,
+    manualDayCap: 120,
+    manualSessionCap: 50,
+    warmupApplied: true,
+    warmupDayCap: 40,
+  });
+
+  assert.equal(result.configuredSessionCap, 50);
+  assert.equal(result.effectiveSessionCap, 40);
+  assert.equal(result.configuredDayCap, 120);
+  assert.equal(result.effectiveDayCap, 40);
+});
+
+test("multi-package maxima and lower configured values remain generic", () => {
+  for (const [packageCode, packageCap] of [
+    ["growth", 80],
+    ["pro", 120],
+    ["premium", 120],
+    ["internal_test", 20],
+  ]) {
+    const configured = Math.min(50, packageCap);
+    const result = resolveFollowCapProjection({
+      packageDayCap: packageCap,
+      packageSessionCap: packageCap,
+      manualDayCap: configured,
+      manualSessionCap: configured,
+      warmupApplied: true,
+      warmupDayCap: 10,
+    });
+    assert.equal(result.configuredDayCap, configured, packageCode);
+    assert.equal(result.configuredSessionCap, configured, packageCode);
+    assert.equal(result.effectiveDayCap, Math.min(configured, 10), packageCode);
+    assert.equal(result.effectiveSessionCap, Math.min(configured, 10), packageCode);
+  }
 });

@@ -33,7 +33,7 @@ export function socialBlockLabel(reason: string): string {
   if (normalized.includes("welcome_real_send_disabled")) return "growth blocked: Welcome DM disabled";
   if (normalized.includes("outreach_real_send_disabled")) return "growth blocked: Outreach DM disabled";
   if (normalized.includes("quota") || normalized.includes("cap")) return "growth blocked: quota";
-  return "social blocked: reason required";
+  return "operator review";
 }
 
 export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTone } {

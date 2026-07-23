@@ -252,31 +252,20 @@ function buildScheduleSection(
 function sameFollowDraft(left: ProfileSettings["follow"], right: ProfileSettings["follow"]) {
   return (
     left.manualFollowDayCap === right.manualFollowDayCap &&
-    left.manualFollowSessionCap === right.manualFollowSessionCap &&
-    left.warmupEnabled === right.warmupEnabled &&
-    left.day1FollowCap === right.day1FollowCap &&
-    left.day2FollowCap === right.day2FollowCap &&
-    left.day3FollowCap === right.day3FollowCap &&
-    left.day4PlusFollowCap === right.day4PlusFollowCap
+    left.manualFollowSessionCap === right.manualFollowSessionCap
   );
 }
 
 function followValidationError(follow: ProfileSettings["follow"]) {
   const whole = [
-    ["Manual follow cap/day", follow.manualFollowDayCap],
-    ["Manual follow cap/session", follow.manualFollowSessionCap],
-    ["Day 1 follow cap", follow.day1FollowCap],
-    ["Day 2 follow cap", follow.day2FollowCap],
-    ["Day 3 follow cap", follow.day3FollowCap],
-    ["Day 4+ follow cap", follow.day4PlusFollowCap],
+    ["Configured follow cap/day", follow.manualFollowDayCap],
+    ["Configured follow cap/session", follow.manualFollowSessionCap],
   ] as const;
   for (const [label, value] of whole) {
-    if (!Number.isInteger(value) || value < 0) return `${label} must be a whole number greater than or equal to 0.`;
+    if (!Number.isInteger(value) || value <= 0) return `${label} must be a positive integer.`;
   }
-  if (follow.day1FollowCap > 10) return "Day 1 follow cap must be between 0 and 10.";
-  if (follow.day2FollowCap > 20) return "Day 2 follow cap must be between 0 and 20.";
-  if (follow.day3FollowCap > 40) return "Day 3 follow cap must be between 0 and 40.";
-  if (follow.day4PlusFollowCap > follow.packageFollowDayCap) return `Day 4+ follow cap cannot exceed package cap (${follow.packageFollowDayCap}).`;
+  if (follow.manualFollowDayCap > follow.packageFollowDayCap) return `Follow cap/day cannot exceed package maximum (${follow.packageFollowDayCap}).`;
+  if (follow.manualFollowSessionCap > follow.packageFollowSessionCap) return `Follow cap/session cannot exceed package maximum (${follow.packageFollowSessionCap}).`;
   return "";
 }
 
@@ -294,11 +283,6 @@ function buildFollowSavePayload(
       account_id: profile.id,
       manual_follow_day_cap: follow.manualFollowDayCap,
       manual_follow_session_cap: follow.manualFollowSessionCap,
-      warmup_enabled: follow.warmupEnabled,
-      day_1_follow_cap: follow.day1FollowCap,
-      day_2_follow_cap: follow.day2FollowCap,
-      day_3_follow_cap: follow.day3FollowCap,
-      day_4_plus_follow_cap: follow.day4PlusFollowCap,
     },
     metadata_safe: {
       account_username: profile.username,
@@ -809,13 +793,6 @@ function dbStatusLabel(status?: string, fallback = "schema_only") {
   return fallback;
 }
 
-function packageFollowCap(packageLabel: string) {
-  const normalized = packageLabel.toLowerCase();
-  if (normalized.includes("premium")) return 180;
-  if (normalized.includes("pro")) return 120;
-  return 80;
-}
-
 function packageUnfollowCap(packageLabel: string) {
   const normalized = packageLabel.toLowerCase();
   if (normalized.includes("premium")) return 240;
@@ -843,6 +820,7 @@ function buildSettingsFromProfileDetails(
   const settings = record(data?.settings?.data);
   const packageSummary = record(data?.packageSummary?.data);
   const readinessSafe = record(data?.readinessSafe);
+  const packageDefaults = record(packageSummary.package_defaults);
   const packageCaps = record(packageSummary.package_caps);
   const effectiveCapsPreview = record(packageSummary.effective_caps_preview);
   const filters = record(data?.filters?.data);
@@ -853,8 +831,10 @@ function buildSettingsFromProfileDetails(
   const filtersStatus = dbStatusLabel(data?.filters?.status);
   const targetsStatus = dbStatusLabel(data?.targets?.status);
   const packageLabel = readString(account, ["packageLabel", "package_label", "commercialPackage", "commercial_package"], profile.package);
-  const packageDefaultFollowCap = readNestedNumber(packageCaps, "follow_day", readNestedNumber(effectiveCapsPreview, "follow_day", packageFollowCap(packageLabel)));
-  const packageDefaultFollowSessionCap = readNestedNumber(packageCaps, "follow_session", packageDefaultFollowCap);
+  const packageMaxFollowCap = readNestedNumber(packageCaps, "follow_day", 0);
+  const packageMaxFollowSessionCap = readNestedNumber(packageCaps, "follow_session", 0);
+  const packageDefaultFollowCap = readNestedNumber(packageDefaults, "follow_day", packageMaxFollowCap);
+  const packageDefaultFollowSessionCap = readNestedNumber(packageDefaults, "follow_session", packageMaxFollowSessionCap);
   const manualFollowDayOverride = readOptionalNumber(settings, ["manual_follow_day_cap", "max_actions_per_day"]);
   const manualFollowSessionOverride = readOptionalNumber(settings, ["manual_follow_session_cap", "follow_limit"]);
   const legacyFollowLimit = readOptionalNumber(settings, ["follow_limit"]);
@@ -862,8 +842,8 @@ function buildSettingsFromProfileDetails(
   const warmupApplied = readBoolean(effectiveCapsPreview, ["warmup_applied"], false);
   const warmupFollowDayCap = readOptionalNumber(effectiveCapsPreview, ["warmup_follow_day_cap"]);
   const followCapProjection = resolveFollowCapProjection({
-    packageDayCap: packageDefaultFollowCap,
-    packageSessionCap: packageDefaultFollowSessionCap,
+    packageDayCap: packageMaxFollowCap,
+    packageSessionCap: packageMaxFollowSessionCap,
     manualDayCap: manualFollowDayOverride,
     manualSessionCap: manualFollowSessionOverride,
     warmupApplied,
@@ -982,10 +962,10 @@ function buildSettingsFromProfileDetails(
       muteAfterFollow: readBoolean(settings, ["mute_after_follow"], false),
       doFollowsFirst: readBoolean(settings, ["do_follows_first"], true),
       maxFollowPerSession: followSessionCap,
-      packageFollowDayCap: packageDefaultFollowCap,
-      packageFollowSessionCap: packageDefaultFollowSessionCap,
-      manualFollowDayCap: manualFollowDayOverride ?? packageDefaultFollowCap,
-      manualFollowSessionCap: followSessionCap,
+      packageFollowDayCap: packageMaxFollowCap,
+      packageFollowSessionCap: packageMaxFollowSessionCap,
+      manualFollowDayCap: followCapProjection.configuredDayCap,
+      manualFollowSessionCap: followCapProjection.configuredSessionCap,
       adminOverrideActive: manualFollowDayOverride !== null || manualFollowSessionOverride !== null,
       adminOverrideLabel: manualFollowDayOverride !== null || manualFollowSessionOverride !== null
         ? `${manualFollowDayOverride ?? packageDefaultFollowCap}/day · ${manualFollowSessionOverride ?? packageDefaultFollowSessionCap}/session`
@@ -1002,8 +982,8 @@ function buildSettingsFromProfileDetails(
       day1FollowCap: readNumber(effectiveCapsPreview, ["day_1_follow_cap", "day1_follow_cap"], 10),
       day2FollowCap: readNumber(effectiveCapsPreview, ["day_2_follow_cap", "day2_follow_cap"], 20),
       day3FollowCap: readNumber(effectiveCapsPreview, ["day_3_follow_cap", "day3_follow_cap"], 40),
-      day4PlusFollowCap: readNumber(effectiveCapsPreview, ["day_4_plus_follow_cap", "day4_plus_follow_cap"], packageDefaultFollowCap),
-      effectiveWarmupCapToday: warmupApplied && warmupFollowDayCap !== null ? warmupFollowDayCap : packageDefaultFollowCap,
+      day4PlusFollowCap: readNumber(effectiveCapsPreview, ["day_4_plus_follow_cap", "day4_plus_follow_cap"], packageMaxFollowCap),
+      effectiveWarmupCapToday: warmupApplied && warmupFollowDayCap !== null ? warmupFollowDayCap : packageMaxFollowCap,
       followDayRemaining: readNumber(settings, ["follow_day_remaining"], Math.max(0, followCap - profile.counters.follow.current)),
       limitingReason: followLimitingReason,
       capSource: followCapSource,
@@ -1640,10 +1620,10 @@ function LegacySettingsDrawer({
       </div> : null}
 
       {activeTab === "Follow" ? <div className="settings-grid">
-        <Section title="Follow summary" badge={follow.capSource} tone={statusTone(follow.runtimeStatus)}><Field label="Follow enabled" value={follow.followEnabled ? "enabled" : "disabled"} /><Field label="Effective cap/day" value={follow.followPerDay} mono /><Field label="Effective cap/session" value={follow.maxFollowPerSession} mono /><Field label="Followed today" value={profile.counters.follow.current} /><Field label="Remaining today" value={follow.followDayRemaining} /><Field label="Limiting source" value={follow.capSource} /><Field label="Limiting reason" value={follow.limitingReason} /></Section>
-        <Section title="Package default" badge="source of truth" tone="info"><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Package follow cap/day" value={follow.packageFollowDayCap} /><Field label="Package follow cap/session" value={follow.packageFollowSessionCap} /><Field label="Source" value="account_package_summary.package_caps" /></Section>
-        <Section title="Follow Limits" badge={follow.adminOverrideActive ? "account limits active" : "package defaults"} tone={follow.adminOverrideActive ? "warning" : "success"}><Field label="Current account limits" value={follow.adminOverrideLabel} /><NumberField label="Follow cap/day" value={follow.manualFollowDayCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowDayCap: value, adminOverrideActive: true, adminOverrideLabel: `${value}/day · ${follow.manualFollowSessionCap}/session`, capSource: "manual" })} /><p className="muted">Maximum follows allowed per day for this account.</p><NumberField label="Follow cap/session" value={follow.manualFollowSessionCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowSessionCap: value, adminOverrideActive: true, adminOverrideLabel: `${follow.manualFollowDayCap}/day · ${value}/session`, capSource: "manual" })} /><p className="muted">Maximum follows allowed during one session.</p><Field label="Legacy compatibility (read-only)" value={follow.legacyFollowCapLabel} /></Section>
-        <Section title={warmupPresentation.title} badge={warmupPresentation.badge} tone={warmupPresentation.tone}><EditableToggleLine label="Warmup enabled" checked={follow.warmupEnabled} onChange={(checked) => setFollowDraft({ ...follow, warmupEnabled: checked })} /><Field label="Warmup applied" value={follow.warmupApplied ? "yes" : "no"} /><Field label="Package/service start date" value={follow.packageStartedAt || "Pending operator start date"} /><NumberField label="Day 1 follow cap" value={follow.day1FollowCap} max={10} onChange={(value) => setFollowDraft({ ...follow, day1FollowCap: value })} /><NumberField label="Day 2 follow cap" value={follow.day2FollowCap} max={20} onChange={(value) => setFollowDraft({ ...follow, day2FollowCap: value })} /><NumberField label="Day 3 follow cap" value={follow.day3FollowCap} max={40} onChange={(value) => setFollowDraft({ ...follow, day3FollowCap: value })} /><NumberField label="Day 4+ follow cap" value={follow.day4PlusFollowCap} max={follow.packageFollowDayCap} onChange={(value) => setFollowDraft({ ...follow, day4PlusFollowCap: value })} /><Field label="Warmup cap today" value={follow.effectiveWarmupCapToday} /><Field label="Limiting source" value={follow.capSource} /></Section>
+        <Section title="Today effective limits" badge={follow.capSource} tone={statusTone(follow.runtimeStatus)}><Field label="Follow enabled" value={follow.followEnabled ? "enabled" : "disabled"} /><Field label="Warmup active day" value={follow.warmupDay >= 4 ? "Day 4+" : `Day ${follow.warmupDay}`} /><Field label="Warmup cap today" value={follow.effectiveWarmupCapToday} mono /><Field label="Package cap/day" value={follow.packageFollowDayCap} mono /><Field label="Package cap/session" value={follow.packageFollowSessionCap} mono /><Field label="Effective cap/day" value={follow.followPerDay} mono /><Field label="Effective cap/session" value={follow.maxFollowPerSession} mono /><Field label="Followed today" value={profile.counters.follow.current} /><Field label="Remaining today" value={follow.followDayRemaining} /><Field label="Limiting source" value={follow.capSource} /><Field label="Limiting reason" value={follow.limitingReason} /></Section>
+        <Section title="Package policy" badge="source of truth" tone="info"><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Package maximum/day" value={follow.packageFollowDayCap} /><Field label="Package maximum/session" value={follow.packageFollowSessionCap} /><Field label="Source" value="account_package_summary.package_caps" /></Section>
+        <Section title="Configured account limits" badge={follow.adminOverrideActive ? "account limits active" : "package defaults"} tone={follow.adminOverrideActive ? "warning" : "success"}><Field label="Current account limits" value={`${follow.manualFollowDayCap}/day · ${follow.manualFollowSessionCap}/session`} /><NumberField label="Follow cap/day" value={follow.manualFollowDayCap} max={follow.packageFollowDayCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowDayCap: value, adminOverrideActive: true, adminOverrideLabel: `${value}/day · ${follow.manualFollowSessionCap}/session`, capSource: "manual" })} /><p className="muted">Persistent account value. It may be lowered but cannot exceed the package maximum.</p><NumberField label="Follow cap/session" value={follow.manualFollowSessionCap} max={follow.packageFollowSessionCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowSessionCap: value, adminOverrideActive: true, adminOverrideLabel: `${follow.manualFollowDayCap}/day · ${value}/session`, capSource: "manual" })} /><p className="muted">Persistent account value. Warmup never replaces this field.</p><Field label="Legacy compatibility (read-only)" value={follow.legacyFollowCapLabel} /></Section>
+        <Section title={warmupPresentation.title} badge={warmupPresentation.badge} tone={warmupPresentation.tone}><Field label="Warmup enabled" value={follow.warmupEnabled ? "yes" : "no"} /><Field label="Warmup applied" value={follow.warmupApplied ? "yes" : "no"} /><Field label="Warmup basis" value="Verified Follow activity · Africa/Johannesburg" /><Field label="Package/service start date (metadata only)" value={follow.packageStartedAt || "not_available"} /><Field label="Day 1 cap" value={follow.day1FollowCap} /><Field label="Day 2 cap" value={follow.day2FollowCap} /><Field label="Day 3 cap" value={follow.day3FollowCap} /><Field label="Day 4+ cap" value={follow.day4PlusFollowCap} /></Section>
         <Section title="Legacy behavior preview" badge="Not Follow save" tone="warning"><p className="muted">These toggles exist in legacy settings/runtime defaults, but they are not part of the visible admin Follow save grid audited for this tab.</p><ToggleLine label="Do follows first" checked={follow.doFollowsFirst} /><ToggleLine label="Mute after follow" checked={follow.muteAfterFollow} /><ToggleLine label="End if limit reached" checked={follow.endIfLimitReached} /><ToggleLine label="Turn off follow" checked={follow.turnOffFollow} /></Section>
         <Section title="Safety / validation" badge={followError ? "Blocked" : followDirty ? "Ready" : "No changes"} tone={followError ? "warning" : followDirty ? "success" : "neutral"} full><Field label="Validation" value={followError || "Follow draft is valid."} /><Field label="Save state" value={followDirty ? "Changed from loaded settings" : "No changes"} /><Field label="Admin endpoint" value="/api/instagram-dashboard/settings" mono /></Section>
         <FollowPayloadPreview payload={followPayload} />
