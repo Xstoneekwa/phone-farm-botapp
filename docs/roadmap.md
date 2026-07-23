@@ -14,6 +14,21 @@ Branch `feature/follow-warmup-active-days-v1-20260723`, code
 
 Detailed checkpoint: [Follow Warmup Active SAST Days V1](./checkpoints/2026-07-23-follow-warmup-active-sast-days-v1.md).
 
+## Prepared Targets metrics checkpoint — 2026-07-23
+
+Branch `feature/targets-ui-parity-v1-20260723`, code
+`5f5b6a8ba97ce6af73482fc05767a3c4efb81f50` on top of the
+canonical Warmup documentation head `261afcf`.
+
+- Added now uses only the backend `added_at || created_at` contract;
+- Refresh cannot replace Added with `updated_at`;
+- missing Added renders `—`, while Last used remains `last_used_at`;
+- existing Sent, Perf and FBR semantics are preserved;
+- 21 targeted tests and the TypeScript/Vite build pass;
+- package/install remains a consolidated rollout step, with zero device run.
+
+Detailed checkpoint: [Targets Metrics UI Parity V1](./checkpoints/2026-07-23-target-metrics-ui-parity-v1.md).
+
 ## Production baseline - 2026-07-16
 
 The installed operator baseline before worker performance optimization is
@@ -150,7 +165,8 @@ historical entries remain unchanged.
 ## Still preview-only (by design)
 
 - Add Profile submit
-- Stats / logs / targets persistence
+- Stats / logs persistence beyond the live projections already connected
+- Remaining Targets write-edge parity beyond the guarded relay actions already connected
 - Settings and Filters save
 - Start / Stop / Auto Login / Assign / Archive / Delete / Check Login execution
 - Device runtime mutations

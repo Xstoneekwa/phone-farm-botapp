@@ -320,7 +320,7 @@ Never commit: `dist/`, `release/`, `.env*`, logs, screenshots, temp inspection f
 | Profiles list | account APIs | local fixtures |
 | Stats | dashboard stats routes | local fixtures |
 | Logs | runtime / account run logs via relay | simulated live stream |
-| Targets | `ig_targets`, CT jobs | local list + admin-parity UI |
+| Targets | `ig_targets`, CT jobs | Profile Details relay read + admin-parity UI and guarded target IPC |
 | Settings | `/api/instagram-dashboard/settings` | tabbed drawer + payloads |
 | Filters | `/settings/follow-filters` PATCH | shared panel + payload |
 | Sources | follow-sources settings | package-aware defaults |
@@ -334,6 +334,21 @@ Never commit: `dist/`, `release/`, `.env*`, logs, screenshots, temp inspection f
 | Device control | future secure device-control relay | phone view IPC only; restart payload preview only |
 | Credentials actions | `account_dashboard_actions`, `account_credentials`, `client_instagram_accounts` | focused worklist + relay-ready action payloads only |
 | Activity investigation | `ig_interacted_users`, `ig_targets`, `ct_target_audit_events`, `ig_runs`, `account_run_requests` | local interaction evidence projection + safe exports only |
+
+### Targets metrics projection
+
+The packaged data path is:
+
+`TargetsDrawer` → preload `botapp:profiles:details` → Electron relay registry →
+`/api/instagram-dashboard/profiles/:account_id/details` → safe Profile Details
+projection → `ig_targets`.
+
+The renderer maps only safe fields. `addedAt` resolves `added_at || created_at`
+and never `updated_at`; `lastUsedAt` resolves `last_used_at`. Missing dates stay
+`null` and render `—`. Sent uses the existing numeric-or-dash renderer, so
+unknown never becomes zero. FBR remains hidden as `Not measured` until the
+backend coverage flag certifies it. Perf thresholds are backend-owned and are
+not recalculated in BotApp.
 | Compass AI Advisor | `/api/instagram-dashboard/compass/analyze` | safe snapshot + relay contract preview only; no provider call from renderer |
 | Server Check | `runtime_events`, `ig_action_logs`, heartbeats, incidents, delivery/process logs | future tab; not rendered in Activity Log |
 | Operational email | dashboard client onboarding + future provider/queue/template | pending relay contract only; no real send claim |

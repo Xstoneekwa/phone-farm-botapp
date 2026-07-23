@@ -47,7 +47,9 @@ Profiles, Devices, and Client Accounts foundation (branch `botapp-mac-foundation
 - **Add Profile** — six-step wizard with admin create contract payload
 - **Stats** — follow-back / like-back columns, Save Stats
 - **Logs / History** — live console simulation, pause/resume, filters, redacted TXT/JSON export
-- **Targets** — admin parity: stats, filters, add/bulk, archive, reset, restore, CSV/JSON, safe avatars
+- **Targets** — admin parity: relay-backed safe rows, canonical Added/Last used,
+  null-safe Sent/FBR, stats, filters, add/bulk, archive, reset, restore,
+  CSV/JSON and safe avatars
 - **Start / Stop** — eligibility, confirmation modals, payload preview
 - **Auto Login** — progress popup and verification-code popup prepared for `login_provisioning`
 - **Assign Now** — current assignment candidate and future relay payload

@@ -60,6 +60,9 @@ File: `src/views/profiles/drawers/TargetsDrawer.tsx`
 Current behavior:
 
 - Admin parity table for CT/target accounts.
+- Packaged runtime reads safe target rows through `botapp:profiles:details` and
+  `/api/instagram-dashboard/profiles/:account_id/details`; development keeps a
+  local fixture fallback only when the desktop relay is unavailable.
 - Stats cards for total, valid/eligible, archived, pending/review, and rejected.
 - Search and list filters.
 - Local add single target.
@@ -71,11 +74,21 @@ Current behavior:
 - Safe avatar display with fallback initials.
 - No horizontal table scroll.
 - Dark readable hover state.
+- Added is `added_at || created_at`, where the backend projection guarantees
+  `added_at = ig_targets.created_at`; `updated_at` is never used as Added.
+- Missing Added renders `—`; Refresh cannot move the date. Last used remains
+  `last_used_at`.
+- Sent renders a numeric zero as `0` and missing data as `—`.
+- FBR keeps `Not measured` distinct from a certified `0%`. Perf keeps Pending,
+  Insufficient, Bad, Average and Good as distinct states.
+
+Canonical metric details and the Admin/Client/BotApp parity matrix are mirrored
+from the backend `docs/target-metrics-contract.md` checkpoint.
 
 Future integration:
 
-- Read/write through a secure BotApp API relay.
-- Mirror admin targets endpoints and payloads.
+- Keep every read/write on the secure BotApp API relay.
+- Preserve the shared admin targets payload and null/zero semantics.
 - Add and bulk add should queue server-side validation.
 - Delete should archive, never hard-delete from the desktop.
 - Reset should use server-side reset and pending verification.

@@ -62,6 +62,27 @@ Seulement dans cet état, Liam peut utiliser les actions compte (Settings, Stats
 
 ---
 
+## Lire les métriques Targets
+
+Dans **Profiles → Targets** :
+
+- **Added** est la date réelle d'ajout du target. Elle ne doit pas changer après
+  Refresh. Une valeur absente apparaît comme `—`.
+- **Last used** est la dernière utilisation opérationnelle et peut donc être
+  différente de Added.
+- **Sent** affiche `—` quand le compteur est inconnu et `0` seulement quand un
+  vrai zéro est disponible.
+- **Perf = Insufficient** signifie que l'échantillon est inférieur à 100 follows;
+  ce n'est pas une mauvaise performance.
+- **FBR = Not measured** signifie que la couverture n'est pas encore certifiée;
+  ce n'est pas `0%`. Un vrai zéro certifié s'affiche `0%`.
+
+Ne pas Reset/Delete/Import pour « corriger » un affichage de métrique. Utiliser
+Refresh une fois, puis transmettre **Copy diagnostics** au support si Added se
+déplace ou si une valeur inconnue apparaît comme zéro.
+
+---
+
 ## Cas relay rouge — « Connexion BotApp indisponible »
 
 Le bandeau affiche **Connexion BotApp indisponible** (souvent avec Profiles à 0 et Devices à 0).

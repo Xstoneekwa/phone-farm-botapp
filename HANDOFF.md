@@ -103,6 +103,12 @@ All write/action operations are prepared for the future secure relay only.
 - No horizontal table scroll.
 - Dark readable hover state fixed for all target rows.
 - Avatars use safe relative mock assets only; future real avatars must come through a relay/proxy.
+- Packaged reads use `botapp:profiles:details` and the safe backend Profile
+  Details projection.
+- Added is `added_at || created_at` only; `updated_at` is excluded, missing
+  values render `—`, and Refresh does not change Added.
+- Last used remains `last_used_at`; Sent preserves missing versus true zero.
+- Unreliable FBR remains `Not measured`; reliable zero remains `0%`.
 
 ### Packaging
 
@@ -175,6 +181,10 @@ BotApp types intentionally mirror the dashboard admin target model:
 - `verification`
 - `eligibility` / quality
 - `performance`
+- `followsSent`
+- `fbrMetricsReliable` / `fbrPercent`
+- `lastUsedAt`
+- `addedAt`
 - `archivedAt`
 - `deletedAt`
 - reset to `pending_verification`
@@ -189,6 +199,14 @@ Future real CT validation must use the admin-backed flow:
 - admin route equivalent of `/api/instagram-dashboard/targets/reset`
 
 BotApp should call a secure BotApp API relay. The renderer must not validate CTs directly, scrape Instagram, or connect to Supabase.
+
+Metric invariants:
+
+- backend `ig_targets.created_at` is the only Added source;
+- `follows_sent_count = null` is unknown, not zero;
+- FBR requires `followbacks_metrics_reliable_at` before zero is measurable;
+- fewer than 100 follows is insufficient data, not bad performance;
+- badge bad uses `<= 8%`, while auto-archive remains strict `< 8%`.
 
 ### Avatar Contract
 
@@ -217,7 +235,8 @@ All exports or potentially sensitive display strings should go through `src/secu
 - Some confirmation actions still trigger the global preview modal/toast behavior, which can close a drawer. This is pre-existing.
 - Global `src/views/Targets.tsx` is still a simpler local route and is separate from the per-profile Targets drawer.
 - Richest target fixture data is currently on `prof_002`; other profiles use fallback target rows.
-- No unit tests have been added for target FBR/filter logic yet.
+- Target date/FBR/profile metric guards are covered by focused API and drawer
+  contract tests; filter behavior retains its existing coverage.
 
 ## Validation Checklist
 
