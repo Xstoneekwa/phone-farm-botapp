@@ -13,6 +13,49 @@ export const INCIDENTS_REFRESH_INTERVAL_MS = 30_000;
 /** Statuses requested from the backend: everything still relevant to ops. */
 export const INCIDENTS_LIST_STATUS = "open,acknowledged,resolved";
 
+export type IncidentListFilter = "open" | "action_required" | "resolved" | "all";
+export type IncidentLoadErrorKind = "permission" | "invalid_contract" | "backend_unavailable";
+
+export interface IncidentGlobalCounters {
+  open: number;
+  actionRequired: number;
+  resolved: number;
+  deliveryDegraded: number;
+  total: number;
+}
+
+export function incidentLoadErrorCopy(kind: IncidentLoadErrorKind | null | undefined) {
+  if (kind === "permission") {
+    return { title: "Incident access denied", message: "The relay credential is not authorized to read incidents." };
+  }
+  if (kind === "invalid_contract") {
+    return { title: "Incident data contract is invalid", message: "The backend response could not be safely interpreted." };
+  }
+  return { title: "Incident backend unavailable", message: "The incident service could not be reached. No incident count is shown." };
+}
+
+export function normalizeGlobalIncidentCounters(raw: unknown): IncidentGlobalCounters | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const keys = ["open", "actionRequired", "resolved", "deliveryDegraded", "total"] as const;
+  const values = keys.map((key) => Number(record[key]));
+  if (values.some((value) => !Number.isFinite(value) || value < 0)) return null;
+  return {
+    open: Math.floor(values[0]),
+    actionRequired: Math.floor(values[1]),
+    resolved: Math.floor(values[2]),
+    deliveryDegraded: Math.floor(values[3]),
+    total: Math.floor(values[4]),
+  };
+}
+
+export function emptyIncidentCopy(filter: IncidentListFilter) {
+  if (filter === "open") return { title: "No open incidents", message: "There are no open incidents requiring monitoring." };
+  if (filter === "action_required") return { title: "No action required", message: "There are no incidents awaiting operator action." };
+  if (filter === "resolved") return { title: "No resolved incidents", message: "No resolved incidents match this search." };
+  return { title: "No incidents", message: "No incidents match this search." };
+}
+
 export function shouldPollIncidents(activeRoute: string, visibilityState: string) {
   return activeRoute === "incidents" && visibilityState === "visible";
 }
@@ -93,6 +136,7 @@ export function normalizeIncidentList(rows: Array<Record<string, unknown>> | und
 export interface IncidentViewCounters {
   open: number;
   actionRequired: number;
+  resolved: number;
   deliveryDegraded: number;
   total: number;
 }
@@ -110,6 +154,7 @@ export function countIncidents(rows: IncidentRowView[]): IncidentViewCounters {
     actionRequired: operational.filter((row) =>
       row.displayState === "action_required"
       || row.displayState === "reintervention_required").length,
+    resolved: operational.filter((row) => row.displayState === "resolved" || row.displayState === "ignored").length,
     deliveryDegraded: operational.filter((row) => row.deliveryState === "delivery_degraded").length,
     total: operational.length,
   };

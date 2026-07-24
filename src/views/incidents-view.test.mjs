@@ -7,9 +7,12 @@ import {
   INCIDENTS_REFRESH_INTERVAL_MS,
   countIncidents,
   deliveryCopy,
+  emptyIncidentCopy,
+  incidentLoadErrorCopy,
   incidentStateCopy,
   isArmedOrPendingRecovery,
   normalizeIncidentList,
+  normalizeGlobalIncidentCounters,
   normalizeIncidentRow,
   recoveryReasonCopy,
   resolveButtonLabel,
@@ -114,8 +117,41 @@ test("countIncidents: open includes acknowledged, action_required separate, test
   const counters = countIncidents(rows);
   assert.equal(counters.actionRequired, 1);
   assert.equal(counters.open, 2);
+  assert.equal(counters.resolved, 1);
   assert.equal(counters.deliveryDegraded, 0);
   assert.equal(counters.total, 4);
+});
+
+test("empty, permission, contract and unavailable states are distinct", () => {
+  assert.equal(emptyIncidentCopy("open").title, "No open incidents");
+  assert.match(incidentLoadErrorCopy("permission").title, /access denied/i);
+  assert.match(incidentLoadErrorCopy("invalid_contract").title, /contract is invalid/i);
+  assert.match(incidentLoadErrorCopy("backend_unavailable").title, /backend unavailable/i);
+});
+
+test("global counters are validated independently from the loaded page", () => {
+  assert.deepEqual(normalizeGlobalIncidentCounters({
+    open: 22,
+    actionRequired: 3,
+    resolved: 9,
+    deliveryDegraded: 1,
+    total: 34,
+  }), { open: 22, actionRequired: 3, resolved: 9, deliveryDegraded: 1, total: 34 });
+  assert.equal(normalizeGlobalIncidentCounters({ open: -1 }), null);
+  assert.equal(normalizeGlobalIncidentCounters(null), null);
+});
+
+test("Incidents view uses default page size 50, four filters, search and cursor pagination", () => {
+  assert.match(viewSource, /limit: 50/);
+  assert.match(viewSource, /action_required/);
+  assert.match(viewSource, /Search account or reason/);
+  assert.match(viewSource, /nextCursor/);
+  assert.match(viewSource, /Next page/);
+});
+
+test("Incidents view never shows operational counters with a load error", () => {
+  assert.match(viewSource, /!loadError \? <Badge/);
+  assert.match(incidentsViewSource, /No incident count is shown/);
 });
 
 test("delivery degraded is surfaced with a readable label and error tone", () => {

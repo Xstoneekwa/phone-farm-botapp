@@ -7,11 +7,17 @@ import {
   INCIDENTS_REFRESH_INTERVAL_MS,
   countIncidents,
   deliveryCopy,
+  emptyIncidentCopy,
   formatIncidentTimestamp,
+  incidentLoadErrorCopy,
   incidentStateCopy,
+  normalizeGlobalIncidentCounters,
   normalizeIncidentList,
   severityTone,
   shouldPollIncidents,
+  type IncidentGlobalCounters,
+  type IncidentListFilter,
+  type IncidentLoadErrorKind,
   type IncidentRowView,
 } from "./incidents-view";
 
@@ -31,7 +37,15 @@ export function Incidents({
 }) {
   const [rows, setRows] = useState<IncidentRowView[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<IncidentLoadErrorKind | null>(null);
+  const [filter, setFilter] = useState<IncidentListFilter>("open");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [search, setSearch] = useState("");
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [globalCounters, setGlobalCounters] = useState<IncidentGlobalCounters | null>(null);
   const [drawerIncidentId, setDrawerIncidentId] = useState<string | null>(null);
   const [showTest, setShowTest] = useState(false);
   const mountedRef = useRef(true);
@@ -39,17 +53,28 @@ export function Incidents({
   const refresh = useCallback(async () => {
     const result = await window.botappDesktop?.incidents?.list?.({
       status: INCIDENTS_LIST_STATUS,
-      limit: 100,
+      filter,
+      search,
+      cursor,
+      limit: 50,
     });
     if (!mountedRef.current) return;
     if (result?.ok) {
-      setRows(normalizeIncidentList(result.incidents));
+      const normalizedRows = normalizeIncidentList(result.incidents);
+      setRows(normalizedRows);
+      setGlobalCounters(normalizeGlobalIncidentCounters(result.globalCounters) ?? countIncidents(normalizedRows));
+      setHasMore(result.page?.hasMore === true);
+      setNextCursor(typeof result.page?.nextCursor === "string" ? result.page.nextCursor : null);
       setLoadError(null);
     } else {
-      setLoadError(result?.message || "Incidents unavailable.");
+      setRows([]);
+      setGlobalCounters(null);
+      setHasMore(false);
+      setNextCursor(null);
+      setLoadError(result?.errorKind || "backend_unavailable");
     }
     setLoaded(true);
-  }, []);
+  }, [cursor, filter, search]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -72,8 +97,22 @@ export function Incidents({
   }, [refresh]);
 
   const visibleRows = showTest ? rows : rows.filter((row) => !row.isTest);
-  const counters = countIncidents(rows);
+  const counters = globalCounters ?? countIncidents(rows);
   const testCount = rows.length - rows.filter((row) => !row.isTest).length;
+  const errorCopy = incidentLoadErrorCopy(loadError);
+  const emptyCopy = emptyIncidentCopy(filter);
+
+  function chooseFilter(nextFilter: IncidentListFilter) {
+    setFilter(nextFilter);
+    setCursor(null);
+    setPageNumber(1);
+  }
+
+  function applySearch() {
+    setSearch(searchDraft.trim());
+    setCursor(null);
+    setPageNumber(1);
+  }
 
   return (
     <div className="incidents-view" data-testid="incidents-view">
@@ -82,13 +121,13 @@ export function Incidents({
         subtitle="Canonical runtime incidents — true failure reasons, Slack/Discord delivery state, human review."
         actions={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <Badge tone={counters.actionRequired > 0 ? "error" : "neutral"} dot>
+            {!loadError ? <Badge tone={counters.actionRequired > 0 ? "error" : "neutral"} dot>
               {`Action required: ${counters.actionRequired}`}
-            </Badge>
-            <Badge tone={counters.open > 0 ? "warning" : "success"} dot>
+            </Badge> : null}
+            {!loadError ? <Badge tone={counters.open > 0 ? "warning" : "success"} dot>
               {`Open: ${counters.open}`}
-            </Badge>
-            {counters.deliveryDegraded > 0 ? (
+            </Badge> : null}
+            {!loadError && counters.deliveryDegraded > 0 ? (
               <Badge tone="error" dot>{`Delivery degraded: ${counters.deliveryDegraded}`}</Badge>
             ) : null}
             {testCount > 0 ? (
@@ -100,17 +139,33 @@ export function Incidents({
           </div>
         }
       >
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }} data-testid="incidents-filters">
+          {(["open", "action_required", "resolved", "all"] as IncidentListFilter[]).map((value) => (
+            <Button key={value} variant={filter === value ? "primary" : "ghost"} onClick={() => chooseFilter(value)}>
+              {value === "action_required" ? "Action required" : value[0].toUpperCase() + value.slice(1)}
+            </Button>
+          ))}
+          <input
+            type="search"
+            value={searchDraft}
+            placeholder="Search account or reason"
+            aria-label="Search incidents"
+            onChange={(event) => setSearchDraft(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") applySearch(); }}
+          />
+          <Button variant="secondary" onClick={applySearch}>Search</Button>
+        </div>
         {loadError ? (
           <div className="empty-state" role="alert" data-testid="incidents-load-error">
-            <strong>Incidents unavailable.</strong>
-            <span>{loadError}</span>
+            <strong>{errorCopy.title}</strong>
+            <span>{errorCopy.message}</span>
             <Button variant="ghost" onClick={() => void refresh()}>Retry</Button>
           </div>
         ) : null}
         {!loadError && loaded && visibleRows.length === 0 ? (
           <EmptyState
-            title="No incidents"
-            message="No open, acknowledged or recently resolved runtime incidents."
+            title={emptyCopy.title}
+            message={emptyCopy.message}
           />
         ) : null}
         {visibleRows.length > 0 ? (
@@ -169,6 +224,22 @@ export function Incidents({
               })}
             </tbody>
           </Table>
+        ) : null}
+        {!loadError && loaded && (visibleRows.length > 0 || pageNumber > 1) ? (
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 12 }} data-testid="incidents-pagination">
+            <span>{`Page ${pageNumber}`}</span>
+            <Button
+              variant="secondary"
+              disabled={!hasMore || !nextCursor}
+              onClick={() => {
+                if (!nextCursor) return;
+                setCursor(nextCursor);
+                setPageNumber((value) => value + 1);
+              }}
+            >
+              Next page
+            </Button>
+          </div>
         ) : null}
       </Card>
       <IncidentDrawer

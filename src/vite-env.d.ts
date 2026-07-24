@@ -255,7 +255,17 @@ interface Window {
       saveDeliverySettings: (input: { supportEmail?: string; activeFromEmail?: string; configVersion?: number; confirmed?: boolean }) => Promise<{ ok: boolean; data?: { projection?: BotAppEmailDeliverySettingsProjection }; error?: string | null }>;
     };
     incidents?: {
-      list: (input?: { status?: string; limit?: number }) => Promise<{ ok: boolean; openCount?: number; incidents?: Array<Record<string, unknown>>; message?: string; authorizedHostMachine?: string | null; scopeMode?: string | null }>;
+      list: (input?: { status?: string; filter?: string; search?: string; cursor?: string | null; limit?: number }) => Promise<{
+        ok: boolean;
+        openCount?: number;
+        incidents?: Array<Record<string, unknown>>;
+        message?: string;
+        errorKind?: "permission" | "invalid_contract" | "backend_unavailable";
+        authorizedHostMachine?: string | null;
+        scopeMode?: string | null;
+        globalCounters?: Record<string, number>;
+        page?: { pageSize?: number; filteredTotal?: number; hasMore?: boolean; nextCursor?: string | null };
+      }>;
       detail: (incidentId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
       action: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
       markReviewed: (input: { action_id: string; account_id: string; note?: string | null }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;

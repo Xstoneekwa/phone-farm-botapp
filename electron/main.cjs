@@ -2960,17 +2960,52 @@ async function autoRestartOverview() {
 async function incidentsOverview(input = {}) {
   const hostHint = String(input?.host_machine || input?.client_host_hint || os.hostname() || "").trim();
   try {
-    const data = await dashboardGetWithQuery("incidents_overview", {
-      status: String(input?.status || "open,acknowledged"),
+    const cfg = compassConfig();
+    const endpoint = endpointById("incidents_overview");
+    const url = endpoint ? new URL(endpointUrl(endpoint)) : new URL(dashboardApiUrl("incidents_overview"));
+    const query = {
+      filter: String(input?.filter || "open"),
+      search: String(input?.search || "").trim(),
+      cursor: String(input?.cursor || "").trim(),
       client_host_hint: hostHint,
-      device_id: String(input?.device_id || "").trim() || undefined,
-      account_id: String(input?.account_id || "").trim() || undefined,
+      device_id: String(input?.device_id || "").trim(),
+      account_id: String(input?.account_id || "").trim(),
       limit: String(input?.limit || 50),
-      // P3.1: always fetch test incidents too; the renderer's "Show test
-      // incidents" toggle filters client-side and operational counters
-      // already exclude them. Without this the toggle never appears.
       include_test: "1",
-    });
+    };
+    for (const [key, value] of Object.entries(query)) {
+      if (value) url.searchParams.set(key, value);
+    }
+    const response = await fetch(url.toString(), { method: "GET", headers: relayHeaders(cfg) });
+    const body = await response.json().catch(() => null);
+    if (!response.ok || body?.ok === false) {
+      const errorKind = response.status === 401 || response.status === 403
+        ? "permission"
+        : "backend_unavailable";
+      return serializeIpcPayload({
+        ok: false,
+        errorKind,
+        status: response.status,
+        hostMachine: hostHint,
+        authorizedHostMachine: null,
+        incidents: [],
+        message: errorKind === "permission" ? "Incident access denied." : "Incident backend unavailable.",
+        generatedAt: new Date().toISOString(),
+      });
+    }
+    const data = readPayload(body);
+    if (!data || !Array.isArray(data.incidents)) {
+      return serializeIpcPayload({
+        ok: false,
+        errorKind: "invalid_contract",
+        status: response.status,
+        hostMachine: hostHint,
+        authorizedHostMachine: null,
+        incidents: [],
+        message: "Incident data contract is invalid.",
+        generatedAt: new Date().toISOString(),
+      });
+    }
     const incidents = Array.isArray(data?.incidents) ? data.incidents.map((item) => serializeIpcPayload(item)) : [];
     return serializeIpcPayload({
       ok: true,
@@ -2979,16 +3014,24 @@ async function incidentsOverview(input = {}) {
       scopeMode: data?.scope?.mode === "relay_global_admin" ? "global_admin" : "host_bound",
       openCount: Number(data?.summary?.openCount || incidents.filter((item) => item.status === "open" || item.status === "acknowledged").length),
       incidents,
+      globalCounters: data?.counters && typeof data.counters === "object" ? data.counters : null,
+      page: data?.page && typeof data.page === "object" ? data.page : {
+        pageSize: incidents.length,
+        filteredTotal: incidents.length,
+        hasMore: false,
+        nextCursor: null,
+      },
+      contractVersion: data?.contractVersion || "incidents_overview_legacy",
       generatedAt: data?.generatedAt || new Date().toISOString(),
     });
-  } catch (error) {
+  } catch {
     return serializeIpcPayload({
       ok: false,
+      errorKind: "backend_unavailable",
       hostMachine: hostHint,
       authorizedHostMachine: null,
-      openCount: 0,
       incidents: [],
-      message: safeRuntimeError(error, "Incidents overview unavailable."),
+      message: "Incident backend unavailable.",
       generatedAt: new Date().toISOString(),
     });
   }
