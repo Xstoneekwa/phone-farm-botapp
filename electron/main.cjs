@@ -1634,6 +1634,7 @@ const runtimeIpcHandlers = [
   "botapp:scheduler:approve-preflight-retry",
   "botapp:incidents:list",
   "botapp:incidents:detail",
+  "botapp:incidents:detail-cancel",
   "botapp:incidents:action",
   "botapp:incidents:mark-reviewed",
   "botapp:incidents:notification-settings",
@@ -3037,15 +3038,52 @@ async function incidentsOverview(input = {}) {
   }
 }
 
-async function incidentsDetail(incidentId) {
-  const id = String(incidentId || "").trim();
-  if (!id) return { ok: false, message: "incident_id_required" };
+const incidentDetailRequests = new Map();
+
+function incidentDetailError(status, fallback) {
+  if (status === 400) return { errorKind: "invalid_request", message: "Incident id is invalid." };
+  if (status === 401) return { errorKind: "authentication", message: "Relay authentication failed." };
+  if (status === 403) return { errorKind: "permission", message: "Incident detail access is forbidden." };
+  if (status === 404) return { errorKind: "not_found", message: "Incident not found." };
+  if (status === 409) return { errorKind: "conflict", message: "Incident changed; reload its detail." };
+  if (status >= 500) return { errorKind: "backend_unavailable", message: "Backend temporarily unavailable." };
+  return { errorKind: "network", message: fallback || "Incident detail request failed." };
+}
+
+async function incidentsDetail(input) {
+  const id = String(typeof input === "string" ? input : input?.incidentId || input?.incident_id || "").trim();
+  const requestId = String(typeof input === "object" ? input?.requestId || "" : "").trim();
+  if (!id) return { ok: false, status: 400, errorKind: "invalid_request", message: "Incident id is required." };
+  const controller = new AbortController();
+  if (requestId) incidentDetailRequests.set(requestId, controller);
+  const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
-    const data = await dashboardGetWithQuery("incidents_detail", {}, { incidentId: id });
-    return { ok: true, data };
+    const result = await dashboardRequestResult("GET", "incidents_detail", null, { incidentId: id }, { signal: controller.signal });
+    if (!result.ok) {
+      const mapped = incidentDetailError(result.status, result.error);
+      return { ok: false, status: result.status, ...mapped };
+    }
+    return { ok: true, status: result.status, data: result.data };
   } catch (error) {
-    return { ok: false, message: safeRuntimeError(error, "Incident detail unavailable.") };
+    const aborted = controller.signal.aborted;
+    return {
+      ok: false,
+      status: 0,
+      errorKind: aborted ? "cancelled" : "network",
+      message: aborted ? "Incident detail request cancelled." : safeRuntimeError(error, "Incident detail network request failed."),
+    };
+  } finally {
+    clearTimeout(timeout);
+    if (requestId && incidentDetailRequests.get(requestId) === controller) incidentDetailRequests.delete(requestId);
   }
+}
+
+function cancelIncidentDetail(requestId) {
+  const id = String(requestId || "").trim();
+  const controller = incidentDetailRequests.get(id);
+  if (controller) controller.abort();
+  incidentDetailRequests.delete(id);
+  return { ok: true, cancelled: Boolean(controller) };
 }
 
 async function performIncidentAction(input = {}) {
@@ -3055,18 +3093,22 @@ async function performIncidentAction(input = {}) {
     return { ok: false, error: "incident_action_payload_invalid" };
   }
   try {
-    const data = await dashboardPost("incidents_action", {
+    const result = await dashboardRequestResult("POST", "incidents_action", {
       incident_id: incidentId,
       action,
-      source: "botapp_relay",
-      resolution_note: String(input?.resolution_note || "").trim(),
-      resume_scheduling: Boolean(input?.resume_scheduling),
-      requested_run_type: String(input?.requested_run_type || "account_session"),
+      operator_id: botappOperatorId(),
+      expected_version: Number(input?.expected_version),
+      note: String(input?.note || input?.resolution_note || "").trim() || null,
+      resolution_reason: String(input?.resolution_reason || "").trim() || null,
+      channel: String(input?.channel || "").trim() || null,
+      notification_id: String(input?.notification_id || "").trim() || null,
       idempotency_key: String(input?.idempotency_key || "").trim() || undefined,
     });
-    return { ok: true, data };
+    if (!result.ok) return { ok: false, status: result.status, error: result.error || "Incident action failed." };
+    return { ok: true, status: result.status, data: result.data };
   } catch (error) {
-    return { ok: false, error: safeRuntimeError(error, "Incident action failed.") };
+    const message = safeRuntimeError(error, "Incident action failed.");
+    return { ok: false, status: /conflict/i.test(message) ? 409 : 0, error: message };
   }
 }
 
@@ -3294,7 +3336,7 @@ async function dashboardRequest(method, endpointId, body, routeParams = {}) {
   return result.data;
 }
 
-async function dashboardRequestResult(method, endpointId, body, routeParams = {}) {
+async function dashboardRequestResult(method, endpointId, body, routeParams = {}, options = {}) {
   const cfg = compassConfig();
   const endpoint = endpointById(endpointId);
   const url = endpoint ? endpointUrl(endpoint, routeParams) : dashboardApiUrl(endpointId);
@@ -3303,6 +3345,7 @@ async function dashboardRequestResult(method, endpointId, body, routeParams = {}
     method,
     headers: relayHeaders(cfg),
     body: method === "GET" ? undefined : JSON.stringify(body || {}),
+    signal: options.signal,
   });
   const data = await response.json().catch(() => null);
   const ok = response.ok && data?.ok !== false;
@@ -7736,7 +7779,8 @@ function registerRuntimeIpc() {
   ipcMain.handle("botapp:email:send-test-delivery", (_event, input) => emailSendTestDelivery(input));
   ipcMain.handle("botapp:auto-restart:overview", () => autoRestartOverview());
   ipcMain.handle("botapp:incidents:list", (_event, input) => incidentsOverview(input || {}));
-  ipcMain.handle("botapp:incidents:detail", (_event, incidentId) => incidentsDetail(incidentId));
+  ipcMain.handle("botapp:incidents:detail", (_event, input) => incidentsDetail(input));
+  ipcMain.handle("botapp:incidents:detail-cancel", (_event, requestId) => cancelIncidentDetail(requestId));
   ipcMain.handle("botapp:incidents:action", (_event, input) => performIncidentAction(input || {}));
   ipcMain.handle("botapp:incidents:mark-reviewed", (_event, input) => performOperatorReviewAction(input || {}));
   ipcMain.handle("botapp:incidents:notification-settings", () => incidentsNotificationSettings());

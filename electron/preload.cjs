@@ -51,7 +51,8 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   },
   incidents: {
     list: (input) => ipcRenderer.invoke("botapp:incidents:list", input),
-    detail: (incidentId) => ipcRenderer.invoke("botapp:incidents:detail", incidentId),
+    detail: (incidentId, requestId) => ipcRenderer.invoke("botapp:incidents:detail", { incidentId, requestId }),
+    cancelDetail: (requestId) => ipcRenderer.invoke("botapp:incidents:detail-cancel", requestId),
     action: (input) => ipcRenderer.invoke("botapp:incidents:action", input),
     markReviewed: (input) => ipcRenderer.invoke("botapp:incidents:mark-reviewed", input),
     notificationSettings: () => ipcRenderer.invoke("botapp:incidents:notification-settings"),

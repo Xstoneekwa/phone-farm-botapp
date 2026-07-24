@@ -266,8 +266,9 @@ interface Window {
         globalCounters?: Record<string, number>;
         page?: { pageSize?: number; filteredTotal?: number; hasMore?: boolean; nextCursor?: string | null };
       }>;
-      detail: (incidentId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
-      action: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
+      detail: (incidentId: string, requestId?: string) => Promise<{ ok: boolean; status?: number; data?: Record<string, unknown>; message?: string; errorKind?: string }>;
+      cancelDetail: (requestId: string) => Promise<{ ok: boolean; cancelled?: boolean }>;
+      action: (input: Record<string, unknown>) => Promise<{ ok: boolean; status?: number; data?: Record<string, unknown>; error?: string }>;
       markReviewed: (input: { action_id: string; account_id: string; note?: string | null }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
       notificationSettings: () => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
       patchNotificationSettings: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;

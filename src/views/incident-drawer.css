@@ -52,6 +52,43 @@
   color: var(--color-danger, #c0392b);
 }
 
+.incident-drawer-error p {
+  margin: 0 0 8px;
+}
+
+.incident-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.incident-channel-grid article {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.incident-drawer-resolve {
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.incident-drawer-note input {
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  .incident-channel-grid,
+  .incident-drawer-meta {
+    grid-template-columns: 1fr;
+  }
+}
+
 .incident-drawer-recovery {
   border: 1px solid rgba(45, 212, 191, 0.35);
   border-radius: 8px;
