@@ -9,6 +9,7 @@ import {
   buildAccountAutoRestartStatusRows,
   dailyEngineCopy,
   decisionNavigationAccountId,
+  decisionOperationalFacts,
   decisionReasonDetail,
   decisionReasonLabel,
   decisionRowLabel,
@@ -282,7 +283,11 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
             <p className="scheduler-empty">No active scheduled account in the current projection window.</p>
           ) : (
             <ul className="scheduler-decisions">
-              {accountAutoRestartRows.map((account) => (
+              {accountAutoRestartRows.map((account) => {
+                const operationalFacts = account.latest_decision
+                  ? decisionOperationalFacts(account.latest_decision)
+                  : [];
+                return (
                 <li key={account.account_id}>
                   <button
                     type="button"
@@ -303,8 +308,14 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
                     {account.decision_count > 1 ? ` · ${account.decision_count} recent decisions` : ""}
                   </span>
                   <span className="scheduler-decision-time">{formatTimestamp(account.timestamp)}</span>
+                  {operationalFacts.length ? (
+                    <span className="scheduler-decision-facts" title={operationalFacts.join(" · ")}>
+                      {operationalFacts.map((fact) => <code key={fact}>{fact}</code>)}
+                    </span>
+                  ) : null}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
 
@@ -323,6 +334,7 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
                 const configEvent = isSchedulerConfigDecision(decision);
                 const label = decisionRowLabel(decision);
                 const detail = decisionReasonDetail(decision);
+                const operationalFacts = decisionOperationalFacts(decision);
                 return (
                   <li key={`${decision.created_at}-${decision.account_id}-${index}`}>
                     {accountId ? (
@@ -352,6 +364,11 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
                       </span>
                     )}
                     <span className="scheduler-decision-time">{formatTimestamp(decision.created_at)}</span>
+                    {operationalFacts.length ? (
+                      <span className="scheduler-decision-facts" title={operationalFacts.join(" · ")}>
+                        {operationalFacts.map((fact) => <code key={fact}>{fact}</code>)}
+                      </span>
+                    ) : null}
                   </li>
                 );
               })}

@@ -100,6 +100,24 @@
   white-space: nowrap;
 }
 
+.scheduler-decision-facts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scheduler-decision-facts code {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 6px;
+  padding: 3px 6px;
+  color: rgba(203, 213, 225, 0.95);
+  background: rgba(15, 23, 42, 0.4);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .scheduler-note {
   margin: 0 0 12px;
   color: rgba(148, 163, 184, 0.95);

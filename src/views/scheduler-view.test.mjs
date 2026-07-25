@@ -7,6 +7,7 @@ import {
   backendModeCopy,
   dailyEngineCopy,
   decisionNavigationAccountId,
+  decisionOperationalFacts,
   decisionReasonLabel,
   decisionRowLabel,
   decisionTone,
@@ -104,6 +105,28 @@ test("manual_only decisions surface as a short exclusion label", () => {
   assert.equal(shortReasonLabel("some_new_backend_reason"), "some_new_backend_reason");
   assert.equal(decisionTone("blocked"), "warning");
   assert.equal(decisionTone("enqueued"), "success");
+});
+
+test("Auto Restart facts expose eligibility, need, strategy, quota, source run and enqueue", () => {
+  assert.deepEqual(decisionOperationalFacts({
+    account_eligible: true,
+    account_eligibility_reason: "eligible",
+    restart_needed: true,
+    restart_need_reason: "partial_run_resume_needed",
+    safe_restart_strategy: "next_target",
+    remaining_follow_quota: 23,
+    source_run_id: "a00e0582-ebf6-421b-aade-8508760c08d5",
+    enqueue_allowed: true,
+  }), [
+    "eligibility: eligible (eligible)",
+    "restart: needed (partial_run_resume_needed)",
+    "strategy: next_target",
+    "follow remaining: 23",
+    "source run: a00e0582-ebf6-421b-aade-8508760c08d5",
+    "enqueue: allowed",
+  ]);
+  assert.match(schedulerViewSource, /decisionOperationalFacts/);
+  assert.match(schedulerViewSource, /scheduler-decision-facts/);
 });
 
 test("CP1: stable reason codes drive the label; raw reason stays in the tooltip", () => {

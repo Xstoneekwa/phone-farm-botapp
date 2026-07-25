@@ -68,6 +68,14 @@ const REASON_SHORT_LABELS: Record<string, string> = {
   max_restarts_window: "window cap reached",
   restart_red_disabled: "risk policy (red)",
   restart_yellow_disabled: "risk policy (yellow)",
+  eligible_safe_boundary_restart: "safe restart ready",
+  no_partial_run_to_resume: "no partial run to resume",
+  partial_run_resume_needed: "partial run needs resume",
+  historical_partial_run_requires_safe_boundary: "safe boundary required",
+  no_safe_restart_strategy: "no safe restart strategy",
+  no_safe_target_plan_available: "no safe target plan",
+  run_in_progress: "run already active",
+  quota_exhausted: "quota exhausted",
   // Runtime / infrastructure
   botapp_runtime_unavailable: "BotApp runtime unavailable",
   dispatcher_unavailable: "dispatcher unavailable",
@@ -85,6 +93,10 @@ const REASON_SHORT_LABELS: Record<string, string> = {
   no_active_schedule_window: "outside window",
   assignment_missing: "no assignment",
   manual_only_requires_manual_trigger: "manual only",
+  manual_only: "manual only",
+  manual_stop_requested: "manual stop requested",
+  planned_future_window: "planned window not open",
+  current_window_closed: "current window closed",
   no_eligible_targets: "no targets",
   no_eligible_accounts: "no eligible accounts",
   assignment_pending: "assignment to verify",
@@ -247,11 +259,26 @@ export function decisionReasonDetail(decision: BotAppSchedulerRecentDecision): s
   return null;
 }
 
+export function decisionOperationalFacts(decision: BotAppSchedulerRecentDecision): string[] {
+  const facts: string[] = [];
+  if (typeof decision.account_eligible === "boolean") {
+    facts.push(`eligibility: ${decision.account_eligible ? "eligible" : "excluded"}${decision.account_eligibility_reason ? ` (${decision.account_eligibility_reason})` : ""}`);
+  }
+  if (typeof decision.restart_needed === "boolean") {
+    facts.push(`restart: ${decision.restart_needed ? "needed" : "not needed"}${decision.restart_need_reason ? ` (${decision.restart_need_reason})` : ""}`);
+  }
+  if (decision.safe_restart_strategy) facts.push(`strategy: ${decision.safe_restart_strategy}`);
+  if (typeof decision.remaining_follow_quota === "number") facts.push(`follow remaining: ${decision.remaining_follow_quota}`);
+  if (decision.source_run_id) facts.push(`source run: ${decision.source_run_id}`);
+  if (typeof decision.enqueue_allowed === "boolean") facts.push(`enqueue: ${decision.enqueue_allowed ? "allowed" : "not allowed"}`);
+  return facts;
+}
+
 export type AccountAutoRestartStatusRow = {
   account_id: string;
   username: string;
   last_session_state: string;
-  restart_state: "restart_needed" | "not_needed" | "blocked" | "scheduled";
+  restart_state: "restart_needed" | "not_needed" | "blocked" | "scheduled" | "not_observed";
   reason: string;
   timestamp: string | null;
   latest_decision: BotAppSchedulerRecentDecision | null;
@@ -278,7 +305,7 @@ function accountStatusSeedFromWindow(window: BotAppSchedulerUpcomingWindow) {
 }
 
 function restartStateFromDecision(decision: BotAppSchedulerRecentDecision | null): AccountAutoRestartStatusRow["restart_state"] {
-  if (!decision) return "not_needed";
+  if (!decision) return "not_observed";
   const normalized = `${decision.decision || ""} ${decision.action || ""} ${decision.reason_code || ""} ${decision.reason || ""}`.toLowerCase();
   if (normalized.includes("enqueued") || normalized.includes("scheduled")) return "scheduled";
   if (normalized.includes("blocked")) return "blocked";
@@ -290,6 +317,7 @@ export function restartStateLabel(state: AccountAutoRestartStatusRow["restart_st
   if (state === "restart_needed") return "restart needed";
   if (state === "scheduled") return "scheduled";
   if (state === "blocked") return "blocked";
+  if (state === "not_observed") return "not observed";
   return "not needed";
 }
 
@@ -325,7 +353,7 @@ export function buildAccountAutoRestartStatusRows(status: BotAppSchedulerStatus)
       latest_decision: latest,
       decision_count: decisions.length,
       restart_state: restartState,
-      reason: latest ? decisionReasonLabel(latest) : "No restart decision needed",
+      reason: latest ? decisionReasonLabel(latest) : "Auto Restart decision not observed",
       timestamp: latest?.created_at ?? null,
     };
   });

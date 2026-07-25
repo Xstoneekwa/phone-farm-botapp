@@ -70,8 +70,8 @@ test("account auto restart status shows every active scheduled account once", ()
   assert.equal(rows[0].username, "i_m_your_traker");
   assert.equal(rows[0].decision_count, 2);
   assert.equal(rows[1].username, "mythyl_fitness");
-  assert.equal(rows[1].restart_state, "not_needed");
-  assert.equal(rows[1].reason, "No restart decision needed");
+  assert.equal(rows[1].restart_state, "not_observed");
+  assert.equal(rows[1].reason, "Auto Restart decision not observed");
 });
 
 test("resume_plan_missing is labeled as Auto Restart noise", () => {

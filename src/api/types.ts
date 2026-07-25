@@ -2498,6 +2498,20 @@ export type BotAppSchedulerRecentDecision = {
   /** CP1 — global ON/OFF events are typed, never rendered as unknown accounts. */
   event?: "account_decision" | "scheduler_config";
   config_enabled?: boolean | null;
+  account_eligible?: boolean | null;
+  account_eligibility_reason?: string | null;
+  restart_needed?: boolean | null;
+  restart_need_reason?: string | null;
+  exact_viewport_resume_available?: boolean | null;
+  safe_restart_strategy?: string | null;
+  safe_restart_reason?: string | null;
+  historical_safe_boundary_fallback?: boolean | null;
+  remaining_follow_quota?: number | null;
+  source_run_id?: string | null;
+  prior_target_id?: string | null;
+  next_target_id?: string | null;
+  enqueue_allowed?: boolean | null;
+  evaluated_at?: string | null;
 };
 
 /** CP1 — daily engine (schedule-session cron) configuration projection. */
