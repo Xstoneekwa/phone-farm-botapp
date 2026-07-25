@@ -6,13 +6,38 @@ const metricSource = readFileSync(new URL("./profile-metric-contract.ts", import
 const snapshotSource = readFileSync(new URL("./stats-snapshot-contract.ts", import.meta.url), "utf8");
 const drawerSource = readFileSync(new URL("./drawers/StatsDrawer.tsx", import.meta.url), "utf8");
 const { formatSnapshotMetric, snapshotStatusSummary } = await import("./stats-snapshot-contract.ts");
+const {
+  followerDeltaDisplayLabel,
+  followerDeltaDisplayTone,
+  followerDeltaTooltip,
+} = await import("./profile-metric-contract.ts");
 
 test("+8 is a stale rolling 72h delta with exact dates, never live", () => {
-  assert.match(metricSource, /"Rolling 72 h"/);
-  assert.match(metricSource, /delta\?\.deltaFrom \?\? delta\?\.from/);
-  assert.match(metricSource, /delta\?\.deltaTo \?\? delta\?\.to/);
-  assert.match(metricSource, /Snapshot \$\{delta\?\.dataFreshness/);
+  const delta = {
+    value: 8,
+    baselineValue: 20,
+    currentValue: 28,
+    baselineCapturedAt: "2026-07-15T00:00:00.000Z",
+    currentCapturedAt: "2026-07-18T00:00:00.000Z",
+    ageSeconds: 4 * 24 * 3600,
+    windowCoverageHours: 72,
+    status: "stale",
+    source: "ig_account_social_profile_snapshots",
+  };
+  assert.equal(followerDeltaDisplayLabel(delta), "+8 · 3d · stale");
+  assert.equal(followerDeltaDisplayTone(delta), "stale");
+  assert.match(followerDeltaTooltip(delta), /Current 28/);
+  assert.match(followerDeltaTooltip(delta), /Baseline 20/);
+  assert.match(followerDeltaTooltip(delta), /Updated 4 days ago/);
+  assert.match(followerDeltaTooltip(delta), /Status stale/);
   assert.doesNotMatch(metricSource, /gain du jour|live delta/i);
+});
+
+test("fresh, aging, insufficient and real zero deltas remain explicit", () => {
+  assert.equal(followerDeltaDisplayLabel({ value: 6, status: "fresh", source: "canonical" }), "+6 · 3d");
+  assert.equal(followerDeltaDisplayLabel({ value: -2, status: "aging", source: "canonical" }), "-2 · 3d · aging");
+  assert.equal(followerDeltaDisplayLabel({ value: 0, status: "fresh", source: "canonical" }), "0 · 3d");
+  assert.equal(followerDeltaDisplayLabel({ value: null, status: "insufficient_data", source: "canonical" }), "— · 3d");
 });
 
 test("unfollow tooltip separates verified count, cap, stock and coverage", () => {

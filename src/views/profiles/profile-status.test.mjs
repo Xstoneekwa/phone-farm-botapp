@@ -8,6 +8,7 @@ import emojiRegex from "emoji-regex";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const profilesViewSource = readFileSync(resolve(currentDir, "ProfilesView.tsx"), "utf8");
+const profileMetricSource = readFileSync(resolve(currentDir, "profile-metric-contract.ts"), "utf8");
 const settingsDrawerSource = readFileSync(resolve(currentDir, "drawers/SettingsDrawer.tsx"), "utf8");
 const filterSettingsPanelSource = readFileSync(resolve(currentDir, "drawers/FilterSettingsPanel.tsx"), "utf8");
 const profilesCssSource = readFileSync(resolve(currentDir, "profiles.css"), "utf8");
@@ -36,7 +37,7 @@ test("unknown follower growth remains null instead of becoming a red zero", () =
 });
 
 test("real zero follower growth uses a neutral tone while losses remain red", () => {
-  assert.match(profilesViewSource, /if \(value === 0\) return "zero"/);
+  assert.match(profileMetricSource, /if \(value === 0\) return "zero"/);
   assert.match(profilesCssSource, /\.delta-pill\.zero\s*\{[^}]*#F3F4F6[^}]*#374151/s);
   assert.match(profilesCssSource, /\.delta-pill\.down\s*\{[^}]*#FEE2E2[^}]*#991B1B/s);
 });

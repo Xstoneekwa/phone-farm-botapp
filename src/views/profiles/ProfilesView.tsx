@@ -19,7 +19,12 @@ import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifec
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
 import { buildRestoreLoginScreenPayload } from "./restore-login-screen-flow";
 import { buildStartPayload, buildStopPayload, displayCounterMetrics, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
-import { followerDeltaTooltip, unfollowMetricTooltip } from "./profile-metric-contract";
+import {
+  followerDeltaDisplayLabel,
+  followerDeltaDisplayTone,
+  followerDeltaTooltip,
+  unfollowMetricTooltip,
+} from "./profile-metric-contract";
 import { mergeGroupedProfiles } from "./profiles-live-merge";
 import { socialBadge, socialBlockLabel } from "./profile-growth-badge";
 import "./profiles.css";
@@ -217,19 +222,6 @@ function CounterMetric({ current, max, label, tooltip }: { current: number; max:
   );
 }
 
-function followerDeltaLabel(value: number | null) {
-  if (value === null) return "—";
-  if (value > 0) return `+${value}`;
-  return String(value);
-}
-
-function followerDeltaTone(value: number | null) {
-  if (value === null) return "unknown";
-  if (value > 0) return "up";
-  if (value === 0) return "zero";
-  return "down";
-}
-
 function connectBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
   if (profile.loginStatus === "connected") return { label: "connected", tone: "success" };
   if (profile.credentialStatus === "saved_pending_verification") return { label: "ready to connect", tone: "info" };
@@ -252,7 +244,6 @@ function AccountRow({
   onSelect: (id: string) => void;
   onToolbar: (profile: BotProfile, action: ProfileToolbarAction) => void;
 }) {
-  const followerDelta3dValue = profile.followerDelta3d?.value ?? null;
   const displayCounters = displayRunCounters(profile);
   const counterMetrics = displayCounterMetrics(profile);
   const interactionsToday = displayCounters.total;
@@ -317,10 +308,10 @@ function AccountRow({
 
       <div className="profile-row-metrics">
         <span
-          className={`delta-pill ${followerDeltaTone(followerDelta3dValue)}`}
+          className={`delta-pill ${followerDeltaDisplayTone(profile.followerDelta3d)}`}
           title={followerDeltaTooltip(profile.followerDelta3d)}
         >
-          {followerDeltaLabel(followerDelta3dValue)}
+          {followerDeltaDisplayLabel(profile.followerDelta3d)}
         </span>
         <span
           className={`interactions-today ${interactionsToday > 0 ? "active" : "zero"}`}

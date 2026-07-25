@@ -1,5 +1,27 @@
 # BotApp Handoff
 
+## Intermediate checkpoint — fresh social growth snapshots V1 (2026-07-25)
+
+The current branch starts from BotApp Scheduler/Auto-Restart head
+`a7e4d4311c8346b66c827faba2e758fbd7a62eae` and adds only the safe Profiles
+growth contract/rendering. Scheduler, Incidents, Incident Detail, Auto Login,
+relay, dispatcher/runtime and phone controls are unchanged.
+
+Backend is authoritative for the approximately 72-hour delta and freshness.
+BotApp displays `+N · 3d` only with a bounded baseline, visibly distinguishes
+fresh/aging/stale, uses `— · 3d` for insufficient/unavailable data, and exposes
+counts/dates/coverage/age/status/source in the tooltip. Manual scheduler state
+does not invalidate or attribute organic growth.
+
+Release evidence consists of the final source commit, arm64 package path,
+ad-hoc signature verification, inspected `app.asar` hash, backup of the prior
+official app and installed bundle identity. This checkpoint is an intermediate
+handover fact update, not a refoundation of the Frontend/Stripe handover.
+
+Rollback: quit only the new BotApp process if needed, restore the exact backup
+bundle, and launch normally. Do not change Worker/backend state or phone data.
+No run, ADB, Instagram or device action belongs to packaging or smoke checks.
+
 This handoff captures the current implementation checkpoint for future developers and agents working on BotApp.
 
 ## Project State

@@ -65,6 +65,8 @@
 .delta-pill.up { background: #DCFCE7; color: #166534; }
 .delta-pill.zero { background: #F3F4F6; color: #374151; }
 .delta-pill.down { background: #FEE2E2; color: #991B1B; }
+.delta-pill.aging { background: #FEF3C7; color: #92400E; }
+.delta-pill.stale { background: #F3F4F6; color: #6B7280; opacity: .78; }
 .delta-pill.unknown { background: #F3F4F6; color: #6B7280; }
 .interactions-today { min-width: 16px; text-align: center; font-size: 10px; font-weight: 900; }
 .interactions-today.active { color: #111827; }

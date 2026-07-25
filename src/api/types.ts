@@ -537,19 +537,30 @@ export type ProfileCounters = {
 export type ProfileFollowerDelta3d = {
   window?: "rolling_72h" | string;
   periodHours?: number;
+  windowHours?: number;
+  windowCoverageHours?: number | null;
   value: number | null;
-  currentFollowers: number | null;
-  previousFollowers: number | null;
-  from: string | null;
-  to: string | null;
+  baselineValue?: number | null;
+  currentValue?: number | null;
+  currentFollowers?: number | null;
+  currentFollowings?: number | null;
+  previousFollowers?: number | null;
+  from?: string | null;
+  to?: string | null;
   source: string;
-  windowCoverage: "complete" | "partial" | "insufficient_data";
-  dataFreshness: "fresh" | "stale" | "unknown";
-  latestSnapshotAt: string | null;
-  baselineSnapshotAt: string | null;
-  deltaFrom: string | null;
-  deltaTo: string | null;
-  staleAfterHours: number;
+  sourceProvider?: string | null;
+  status?: "fresh" | "aging" | "stale" | "insufficient_data" | "unavailable";
+  ageSeconds?: number | null;
+  capturedAt?: string | null;
+  baselineCapturedAt?: string | null;
+  currentCapturedAt?: string | null;
+  windowCoverage?: "complete" | "partial" | "insufficient_data";
+  dataFreshness?: "fresh" | "stale" | "unknown";
+  latestSnapshotAt?: string | null;
+  baselineSnapshotAt?: string | null;
+  deltaFrom?: string | null;
+  deltaTo?: string | null;
+  staleAfterHours?: number;
 };
 
 export type ProfileUnfollowTruthfulness = {

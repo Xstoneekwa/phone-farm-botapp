@@ -81,6 +81,13 @@ Important profile contracts live in `src/api/types.ts`:
 - `ProfileSettings`
 - `ProfileFilters`
 
+Profiles consumes the backend `followerDelta3d` projection as a canonical
+public-profile metric. It never recomputes the delta from Worker counters.
+The compact row shows the value and `3d` period only when a bounded baseline
+exists, plus an explicit fresh/aging/stale tone. The tooltip carries current
+and baseline counts/timestamps, actual window coverage, age, status and source.
+Manual scheduler state remains independent from organic growth.
+
 ## Future API Boundary
 
 Production BotApp should not call admin routes directly from the renderer. Use a secure relay:

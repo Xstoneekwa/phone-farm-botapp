@@ -25,14 +25,24 @@ File: `src/views/profiles/drawers/StatsDrawer.tsx`
 
 Current behavior:
 
-- Displays local fixture session stats.
+- Reads safe canonical Followers/Followings/Posts snapshots from the Profiles
+  relay and keeps their capture timestamps/freshness explicit.
 - Shows follower/following, follow/unfollow/like/comment/DM/watch counts.
 - Shows follow-back and like-back state as clear enabled/off badges.
+- The Profiles growth badge renders `+N · 3d`, `0 · 3d` or a negative value
+  only with an acceptable 72-hour baseline. Aging and stale values are visibly
+  qualified; missing/too-distant baselines render `— · 3d`.
+- The metric tooltip exposes current/baseline counts, capture dates, age,
+  actual coverage, freshness status and canonical source.
+- A Manual account keeps the same organic public-profile metric; Manual does
+  not imply that the metric came from a Worker run.
 
-Future integration:
+Preserve:
 
-- Read paginated profile runtime stats through the relay.
-- Keep aggregate values safe for client/operator display.
+- Null is not zero; a real zero remains `0`.
+- Stale data is never presented as current without a warning.
+- The renderer receives no provider credential, avatar CDN URL, raw database
+  row or private runtime metadata.
 
 ## Logs / History
 
