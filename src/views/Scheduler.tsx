@@ -195,6 +195,37 @@ export function Scheduler({ onOpenProfile }: { onOpenProfile: (accountId: string
         </Card>
       ) : null}
 
+      {status && (status.latest_schedule_evaluations ?? []).length > 0 ? (
+        <Card
+          title="Latest scheduled launch evaluation"
+          subtitle="Persisted per-account Scheduler result — read-only."
+        >
+          <ul className="scheduler-decisions">
+            {(status.latest_schedule_evaluations ?? []).map((evaluation) => (
+              <li key={`${evaluation.account_id}-${evaluation.assignment_id}`}>
+                <button
+                  type="button"
+                  className="scheduler-decision-account"
+                  title="Open in Profiles"
+                  onClick={() => onOpenProfile(evaluation.account_id)}
+                >
+                  {evaluation.username || evaluation.account_id}
+                </button>
+                <Badge tone={evaluation.eligible ? "success" : "warning"}>
+                  {evaluation.eligible ? (evaluation.queued ? "queued" : "eligible") : "blocked"}
+                </Badge>
+                <span className="scheduler-decision-reason" title={evaluation.stable_reason || evaluation.stage}>
+                  {evaluation.stable_reason === "welcome_template_missing"
+                    ? "Blocked — Welcome template missing"
+                    : evaluation.stable_reason ? shortReasonLabel(evaluation.stable_reason) : evaluation.stage}
+                </span>
+                <span className="scheduler-decision-time">{formatTimestamp(evaluation.evaluated_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
       {status ? (
         <Card
           title={`Upcoming windows (${status.windows_horizon_hours ?? 48}h)`}

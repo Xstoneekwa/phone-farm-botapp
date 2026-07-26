@@ -84,6 +84,7 @@ const REASON_SHORT_LABELS: Record<string, string> = {
   device_lock_held: "phone busy (lock held)",
   phone_busy: "phone busy",
   phone_rest_active: "phone rest active",
+  welcome_template_missing: "Welcome template missing",
   // Account state
   active_run_exists: "run already active",
   active_request_exists: "run already requested",

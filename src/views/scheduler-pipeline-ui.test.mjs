@@ -8,6 +8,7 @@ import {
   isResumePlanMissingDecision,
   preflightBlockedOperatorLabel,
   preflightKeyguardContext,
+  shortReasonLabel,
 } from "./scheduler-status.ts";
 import { socialBadge } from "./profiles/profile-growth-badge.ts";
 
@@ -22,6 +23,14 @@ test("Daily Scheduler and Auto Restart sections are separated in the view", asyn
   assert.match(schedulerViewSource, /Recent Auto Restart decisions/);
   assert.match(schedulerViewSource, /Last daily cron/);
   assert.match(schedulerViewSource, /Last Auto Restart tick/);
+});
+
+test("welcome template rejection is shown as a persisted scheduled launch block", async () => {
+  const { readFileSync } = await import("node:fs");
+  const schedulerViewSource = readFileSync(new URL("./Scheduler.tsx", import.meta.url), "utf8");
+  assert.match(schedulerViewSource, /Latest scheduled launch evaluation/);
+  assert.match(schedulerViewSource, /Blocked — Welcome template missing/);
+  assert.equal(shortReasonLabel("welcome_template_missing"), "Welcome template missing");
 });
 
 test("account auto restart status shows every active scheduled account once", () => {

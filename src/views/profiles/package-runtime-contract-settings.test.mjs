@@ -23,6 +23,6 @@ test("Settings no longer invents package or target fallback values", () => {
 });
 
 test("legacy fields stay visibly read-only", () => {
-  assert.match(source, /Legacy compatibility \(read-only\)/);
-  assert.match(source, /Warmup never replaces this field/);
+  assert.match(source, /Legacy compatibility \(read-only, non-authoritative\)/);
+  assert.match(source, /Warmup is temporary and never replaces this field/);
 });

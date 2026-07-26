@@ -120,22 +120,24 @@ test("Settings drawer saves runtime settings through backend relay", () => {
 
 test("Settings drawer loads runtime follow settings defaults", () => {
   assert.match(settingsDrawerSource, /readBoolean\(filters, \["skip_private_profiles", "dont_follow_private_accounts"\], true\)/);
-  assert.match(settingsDrawerSource, /readOptionalNumber\(contractFollowDay, \["db"\]\)/);
-  assert.match(settingsDrawerSource, /readOptionalNumber\(contractFollowSession, \["db"\]\)/);
+  assert.match(settingsDrawerSource, /follow_account_override_status/);
+  assert.match(settingsDrawerSource, /explicitFollowOverride \? readOptionalNumber\(settings, \["manual_follow_day_cap"\]\) : null/);
+  assert.match(settingsDrawerSource, /explicitFollowOverride \? readOptionalNumber\(settings, \["manual_follow_session_cap"\]\) : null/);
   assert.match(settingsDrawerSource, /label="Follow cap\/day"/);
   assert.match(settingsDrawerSource, /label="Follow cap\/session"/);
   assert.match(settingsDrawerSource, /label="Effective cap\/day"/);
   assert.match(settingsDrawerSource, /label="Effective cap\/session"/);
   assert.match(settingsDrawerSource, /label="Warmup cap today"/);
   assert.match(settingsDrawerSource, /title="Effective runtime limits"/);
-  assert.match(settingsDrawerSource, /Persistent account value\. It may be lowered but cannot exceed the package maximum\./);
-  assert.match(settingsDrawerSource, /Persistent account value\. Warmup never replaces this field\./);
+  assert.match(settingsDrawerSource, /Persistent explicit account override\. It may be lowered but cannot exceed the package maximum\./);
+  assert.match(settingsDrawerSource, /Warmup is temporary and never replaces this field\./);
+  assert.match(settingsDrawerSource, /Legacy compatibility \(read-only, non-authoritative\)/);
   assert.doesNotMatch(settingsDrawerSource, /Draft override cap/);
 });
 
 test("Settings drawer persists and reloads the canonical Follow session cap", () => {
   assert.match(settingsDrawerSource, /manual_follow_session_cap:\s*follow\.manualFollowSessionCap/);
-  assert.match(settingsDrawerSource, /readOptionalNumber\(contractFollowSession, \["db"\]\)/);
+  assert.match(settingsDrawerSource, /readOptionalNumber\(settings, \["manual_follow_session_cap"\]\)/);
   assert.match(settingsDrawerSource, /manualFollowSessionCap:\s*followCapProjection\.configuredSessionCap/);
   assert.match(settingsDrawerSource, /title="Configured account limits"/);
   assert.doesNotMatch(settingsDrawerSource, /patch:\s*\{[\s\S]{0,500}day_1_follow_cap/);

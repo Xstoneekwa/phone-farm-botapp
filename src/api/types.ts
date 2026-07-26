@@ -2570,6 +2570,18 @@ export type BotAppSchedulerStatus = {
   windows_horizon_hours?: number;
   upcoming_windows?: BotAppSchedulerUpcomingWindow[];
   daily_scheduler_pipeline?: BotAppSchedulerDailyPipeline | null;
+  latest_schedule_evaluations?: BotAppSchedulerDailyAccountEvaluation[];
+};
+
+export type BotAppSchedulerDailyAccountEvaluation = {
+  account_id: string;
+  username: string | null;
+  assignment_id: string;
+  eligible: boolean;
+  queued: boolean;
+  stage: string;
+  stable_reason: string | null;
+  evaluated_at: string;
 };
 
 export type BotAppSchedulerDailyPipelineGlobal = {
