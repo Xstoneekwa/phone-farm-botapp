@@ -85,6 +85,10 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   },
   profiles: {
     details: (accountId) => ipcRenderer.invoke("botapp:profiles:details", accountId),
+    protectionLists: {
+      get: (input) => ipcRenderer.invoke("botapp:profiles:protection-list:get", input),
+      mutate: (input) => ipcRenderer.invoke("botapp:profiles:protection-list:mutate", input),
+    },
     statsHistory: (input) => ipcRenderer.invoke("botapp:profiles:stats-history", input),
     createDryRun: (input) => ipcRenderer.invoke("botapp:profiles:create-dry-run", input),
     create: (input) => ipcRenderer.invoke("botapp:profiles:create", input),

@@ -184,3 +184,6 @@ Today effective limits are read-only:
 Refresh/polling updates only the projection. Save cannot persist warmup day
 caps. The fallback badge label is exactly `operator review`; specific identity,
 quota, device, preflight and scheduler labels keep their existing priority.
+# Account protection lists
+
+In Settings → Sources, the canonical Unfollow whitelist and Interaction blacklist appear directly below Target accounts / Sources. They are account-scoped and relay-backed, with optimistic concurrency through ETag/If-Match. Do not introduce local persistence or a direct Supabase client in the renderer.

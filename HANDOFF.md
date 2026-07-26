@@ -1,5 +1,9 @@
 # BotApp Handoff
 
+## Account protection lists V1 (2026-07-26)
+
+Settings → Sources now consumes the canonical account-scoped Unfollow whitelist and Interaction blacklist through the secure Electron relay. The two cards sit below Target accounts / Sources and provide search, add/multi-add, remove, counts and version metadata. BotApp has no local source of truth and no Supabase secret. Active runs keep their starting snapshot; edits apply to the next session. See [the scoped checkpoint](./docs/checkpoints/2026-07-26-account-protection-lists-v1.md).
+
 ## Intermediate checkpoint — fresh social growth snapshots V1 (2026-07-25)
 
 The current branch starts from BotApp Scheduler/Auto-Restart head

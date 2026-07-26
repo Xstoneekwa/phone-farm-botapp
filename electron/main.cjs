@@ -1652,6 +1652,8 @@ const runtimeIpcHandlers = [
   "botapp:device-heartbeat:ensure",
   "botapp:device-heartbeat:action",
   "botapp:profiles:details",
+  "botapp:profiles:protection-list:get",
+  "botapp:profiles:protection-list:mutate",
   "botapp:profiles:create-dry-run",
   "botapp:profiles:create",
   "botapp:profiles:schedule-slots",
@@ -1832,6 +1834,17 @@ const botappEndpointRegistry = [
     path: "/api/instagram-dashboard/profiles/:account_id/stats-history",
     usedBy: ["Profiles", "Stats"],
     purpose: "Load 30-day social action stats for the Stats drawer",
+    authRequired: true,
+    status: "active",
+    testStrategy: "none",
+  },
+  {
+    id: "profiles_account_protection_list",
+    name: "Profile account protection list",
+    method: "GET/PATCH",
+    path: "/api/instagram-dashboard/botapp/accounts/:account_id/protection-lists/:list_kind",
+    usedBy: ["Profiles", "Settings", "Sources"],
+    purpose: "Load and mutate canonical account-scoped protection lists through the secure relay",
     authRequired: true,
     status: "active",
     testStrategy: "none",
@@ -3343,7 +3356,7 @@ async function dashboardRequestResult(method, endpointId, body, routeParams = {}
   if (!url) return { ok: false, status: 0, data: null, error: "Relay URL is not configured." };
   const response = await fetch(url, {
     method,
-    headers: relayHeaders(cfg),
+    headers: { ...relayHeaders(cfg), ...(options.headers || {}) },
     body: method === "GET" ? undefined : JSON.stringify(body || {}),
     signal: options.signal,
   });
@@ -3352,6 +3365,7 @@ async function dashboardRequestResult(method, endpointId, body, routeParams = {}
   return {
     ok,
     status: response.status,
+    etag: response.headers.get("etag"),
     data: ok ? readPayload(data) : data,
     error: ok ? null : readRelayError(data, `${endpointId} unavailable.`),
   };
@@ -3368,6 +3382,45 @@ async function profileDetailsData(accountId) {
   } catch (error) {
     return { ok: false, error: safeRuntimeError(error, "Profile details unavailable.") };
   }
+}
+
+async function profileProtectionListGet(input) {
+  const accountId = String(input?.accountId || "").trim();
+  const listKind = String(input?.listKind || "").trim();
+  if (!accountId || !["interaction_blacklist", "unfollow_whitelist"].includes(listKind)) {
+    return { ok: false, error: "Invalid account protection list request." };
+  }
+  const result = await dashboardRequestResult("GET", "profiles_account_protection_list", null, {
+    account_id: accountId,
+    list_kind: listKind,
+  });
+  return result.ok
+    ? { ok: true, data: result.data, etag: result.etag }
+    : { ok: false, status: result.status, error: safeRuntimeError(result.error, "Protection list unavailable.") };
+}
+
+async function profileProtectionListMutate(input) {
+  const accountId = String(input?.accountId || "").trim();
+  const listKind = String(input?.listKind || "").trim();
+  const etag = String(input?.etag || "").trim();
+  if (!accountId || !etag || !["interaction_blacklist", "unfollow_whitelist"].includes(listKind)) {
+    return { ok: false, error: "Invalid account protection list mutation." };
+  }
+  const result = await dashboardRequestResult("PATCH", "profiles_account_protection_list", {
+    add: Array.isArray(input?.add) ? input.add : [],
+    remove: Array.isArray(input?.remove) ? input.remove : [],
+  }, {
+    account_id: accountId,
+    list_kind: listKind,
+  }, {
+    headers: {
+      "If-Match": etag,
+      "Idempotency-Key": crypto.randomUUID(),
+    },
+  });
+  return result.ok
+    ? { ok: true, data: result.data, etag: result.etag }
+    : { ok: false, status: result.status, error: safeRuntimeError(result.error, "Protection list update failed.") };
 }
 
 async function profileStatsHistoryData(accountId, days = 30) {
@@ -7849,6 +7902,8 @@ function registerRuntimeIpc() {
     }
   });
   ipcMain.handle("botapp:profiles:details", (_event, accountId) => profileDetailsData(accountId));
+  ipcMain.handle("botapp:profiles:protection-list:get", (_event, input) => profileProtectionListGet(input));
+  ipcMain.handle("botapp:profiles:protection-list:mutate", (_event, input) => profileProtectionListMutate(input));
   ipcMain.handle("botapp:profiles:stats-history", (_event, input) => profileStatsHistoryData(input?.accountId || input?.account_id || input, input?.days));
   ipcMain.handle("botapp:profiles:create-dry-run", (_event, input) => profileCreateDryRun(input));
   ipcMain.handle("botapp:profiles:create", (_event, input) => profileCreate(input));

@@ -196,6 +196,10 @@ interface Window {
     };
     profiles?: {
       details: (accountId: string) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
+      protectionLists?: {
+        get: (input: { accountId: string; listKind: "interaction_blacklist" | "unfollow_whitelist" }) => Promise<{ ok: boolean; data?: Record<string, unknown>; etag?: string | null; status?: number; error?: string | null }>;
+        mutate: (input: { accountId: string; listKind: "interaction_blacklist" | "unfollow_whitelist"; add?: string[]; remove?: string[]; etag: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; etag?: string | null; status?: number; error?: string | null }>;
+      };
       statsHistory?: (input: { accountId: string; days?: number }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       createDryRun: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null }>;
       create: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string | null; partial?: Record<string, unknown> }>;

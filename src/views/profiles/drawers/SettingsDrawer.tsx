@@ -156,6 +156,137 @@ function Section({
   );
 }
 
+type ProtectionListKind = "unfollow_whitelist" | "interaction_blacklist";
+type ProtectionListSnapshot = {
+  items: string[];
+  version: number;
+  updatedAt: string | null;
+  status: "loaded_empty" | "loaded_with_items";
+};
+
+const EMPTY_PROTECTION_SNAPSHOT: ProtectionListSnapshot = {
+  items: [],
+  version: 0,
+  updatedAt: null,
+  status: "loaded_empty",
+};
+
+function AccountProtectionLists({ accountId }: { accountId: string }) {
+  const [snapshots, setSnapshots] = useState<Record<ProtectionListKind, ProtectionListSnapshot>>({
+    unfollow_whitelist: EMPTY_PROTECTION_SNAPSHOT,
+    interaction_blacklist: EMPTY_PROTECTION_SNAPSHOT,
+  });
+  const [etags, setEtags] = useState<Record<ProtectionListKind, string>>({
+    unfollow_whitelist: "",
+    interaction_blacklist: "",
+  });
+  const [drafts, setDrafts] = useState<Record<ProtectionListKind, string>>({
+    unfollow_whitelist: "",
+    interaction_blacklist: "",
+  });
+  const [searches, setSearches] = useState<Record<ProtectionListKind, string>>({
+    unfollow_whitelist: "",
+    interaction_blacklist: "",
+  });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<ProtectionListKind | null>(null);
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    const bridge = window.botappDesktop?.profiles?.protectionLists;
+    if (!bridge) {
+      setNotice("Protection list relay unavailable in this BotApp build.");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const kinds: ProtectionListKind[] = ["unfollow_whitelist", "interaction_blacklist"];
+      const results = await Promise.all(kinds.map(async (listKind) => ({ listKind, result: await bridge.get({ accountId, listKind }) })));
+      const failed = results.find(({ result }) => !result.ok || !result.data);
+      if (failed) throw new Error(failed.result.error || "Protection list load failed.");
+      setSnapshots(Object.fromEntries(results.map(({ listKind, result }) => [listKind, result.data])) as Record<ProtectionListKind, ProtectionListSnapshot>);
+      setEtags(Object.fromEntries(results.map(({ listKind, result }) => [listKind, result.etag || ""])) as Record<ProtectionListKind, string>);
+      setNotice("");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Protection list load failed.");
+    } finally {
+      setLoading(false);
+    }
+  }, [accountId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function mutate(listKind: ProtectionListKind, add: string[] = [], remove: string[] = []) {
+    const bridge = window.botappDesktop?.profiles?.protectionLists;
+    if (!bridge || busy || !etags[listKind]) return;
+    setBusy(listKind);
+    setNotice("");
+    try {
+      const result = await bridge.mutate({ accountId, listKind, add, remove, etag: etags[listKind] });
+      if (result.status === 409) {
+        await load();
+        throw new Error("This list changed elsewhere. Latest data reloaded; retry your change.");
+      }
+      if (!result.ok || !result.data) throw new Error(result.error || "Protection list update failed.");
+      setSnapshots((current) => ({ ...current, [listKind]: result.data as ProtectionListSnapshot }));
+      setEtags((current) => ({ ...current, [listKind]: result.etag || current[listKind] }));
+      setDrafts((current) => ({ ...current, [listKind]: "" }));
+      setNotice("Saved. Changes apply to the next session.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Protection list update failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const definitions: Array<{ kind: ProtectionListKind; title: string; description: string }> = [
+    {
+      kind: "unfollow_whitelist",
+      title: "Unfollow whitelist",
+      description: "These accounts are never automatically unfollowed. Other interactions remain allowed unless they are also blacklisted.",
+    },
+    {
+      kind: "interaction_blacklist",
+      title: "Interaction blacklist",
+      description: "Blocks automated Follow, Like, Comment, Welcome DM, Outreach DM, and Story Watch. It does not block Unfollow.",
+    },
+  ];
+
+  if (loading) return <Section title="Account protection lists" badge="Loading" tone="info" full><p className="muted">Loading canonical account-scoped lists...</p></Section>;
+
+  return <>
+    {definitions.map(({ kind, title, description }) => {
+      const search = searches[kind].trim().toLowerCase().replace(/^@/, "");
+      const visible = snapshots[kind].items.filter((item) => !search || item.includes(search));
+      return <Section key={kind} title={title} badge={String(snapshots[kind].items.length)} tone="info">
+        <p className="muted">{description}</p>
+        <label className="settings-edit-field">
+          <span>Add usernames</span>
+          <input className="input" value={drafts[kind]} placeholder="username1, @username2" onChange={(event) => setDrafts((current) => ({ ...current, [kind]: event.currentTarget.value }))} />
+        </label>
+        <Button variant="ghost" disabled={busy !== null || !drafts[kind].trim()} onClick={() => {
+          const items = drafts[kind].split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
+          if (items.length) void mutate(kind, items, []);
+        }}>{busy === kind ? "Saving..." : "Add"}</Button>
+        <label className="settings-edit-field">
+          <span>Search usernames</span>
+          <input className="input" value={searches[kind]} placeholder="Search" onChange={(event) => setSearches((current) => ({ ...current, [kind]: event.currentTarget.value }))} />
+        </label>
+        {visible.length ? visible.map((username) => <div className="settings-field" key={username}>
+          <strong className="mono">@{username}</strong>
+          <Button variant="ghost" disabled={busy !== null} onClick={() => void mutate(kind, [], [username])}>Remove</Button>
+        </div>) : <p className="muted">{search ? "No matching username." : "No usernames saved."}</p>}
+        <p className="muted">Source: account_protection_list_entries · version {snapshots[kind].version} · updated {snapshots[kind].updatedAt ? formatCompactDate(snapshots[kind].updatedAt) : "never"}</p>
+      </Section>;
+    })}
+    <Section title="Protection list sync" badge={notice ? "Status" : "Ready"} tone={notice && !notice.startsWith("Saved") ? "warning" : "success"} full>
+      <p className="muted">Active runs keep the snapshot loaded at start. Changes apply to the next session.</p>
+      {notice ? <p className="muted">{notice}</p> : null}
+    </Section>
+  </>;
+}
+
 function scheduleSlotKey(slot: Pick<ProfileAvailableAssignmentSlot, "startsAt" | "endsAt" | "scheduleMode" | "slotKind">) {
   if (slot.scheduleMode === "manual_only" || slot.slotKind === "manual_only") return "manual_only";
   return `${slot.startsAt}|${slot.endsAt}`;
@@ -1736,6 +1867,7 @@ function LegacySettingsDrawer({
           <Field label="CT quality summary" value={sources.ctQualitySummary} />
           <Button variant="ghost" onClick={onOpenTargets ?? onConfirm}>Open Targets drawer</Button>
         </Section>
+        <AccountProtectionLists accountId={profile.id} />
         <Section title="Followback ratio / Target performance" badge="Read-only metrics" tone="info">
           <Field label="Followback ratio by target" value={sources.followbackRatioByTarget} />
           <Field label="Follows sent by target" value={sources.followsSentByTarget} />
