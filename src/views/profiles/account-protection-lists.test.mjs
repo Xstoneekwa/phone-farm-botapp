@@ -11,11 +11,20 @@ test("Sources renders canonical account protection lists below target accounts",
   const protectionIndex = drawer.indexOf("<AccountProtectionLists accountId={profile.id} />");
   const performanceIndex = drawer.indexOf('title="Followback ratio / Target performance"');
   assert.ok(targetsIndex >= 0 && protectionIndex > targetsIndex && performanceIndex > protectionIndex);
-  assert.match(drawer, /title: "Unfollow whitelist"/);
-  assert.match(drawer, /never automatically unfollowed/);
-  assert.match(drawer, /title: "Interaction blacklist"/);
-  assert.match(drawer, /Follow, Like, Comment, Welcome DM, Outreach DM, and Story Watch/);
-  assert.match(drawer, /It does not block Unfollow/);
+  const interactionIndex = drawer.indexOf('title: "Interaction Blacklist"');
+  const unfollowIndex = drawer.indexOf('title: "Unfollow Whitelist"');
+  assert.ok(interactionIndex >= 0 && unfollowIndex > interactionIndex);
+  assert.match(drawer, /Accounts in this list are excluded from all automated interactions\./);
+  assert.match(drawer, /No blocked accounts\./);
+  assert.match(drawer, /blocked accounts/);
+  assert.match(drawer, /Accounts in this list are always protected from automated unfollow\./);
+  assert.match(drawer, /No protected accounts\./);
+  assert.match(drawer, /protected accounts/);
+  assert.match(drawer, /Add account/);
+  assert.match(drawer, /Add multiple/);
+  assert.match(drawer, /Remove/);
+  assert.match(drawer, /Search usernames/);
+  assert.match(drawer, /View all/);
 });
 
 test("BotApp uses a secure relay bridge and no local protection-list source of truth", () => {

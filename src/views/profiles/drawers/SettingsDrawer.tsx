@@ -240,26 +240,31 @@ function AccountProtectionLists({ accountId }: { accountId: string }) {
     }
   }
 
-  const definitions: Array<{ kind: ProtectionListKind; title: string; description: string }> = [
-    {
-      kind: "unfollow_whitelist",
-      title: "Unfollow whitelist",
-      description: "These accounts are never automatically unfollowed. Other interactions remain allowed unless they are also blacklisted.",
-    },
+  const definitions: Array<{ kind: ProtectionListKind; title: string; description: string; empty: string; countLabel: string }> = [
     {
       kind: "interaction_blacklist",
-      title: "Interaction blacklist",
-      description: "Blocks automated Follow, Like, Comment, Welcome DM, Outreach DM, and Story Watch. It does not block Unfollow.",
+      title: "Interaction Blacklist",
+      description: "Accounts in this list are excluded from all automated interactions.",
+      empty: "No blocked accounts.",
+      countLabel: "blocked accounts",
+    },
+    {
+      kind: "unfollow_whitelist",
+      title: "Unfollow Whitelist",
+      description: "Accounts in this list are always protected from automated unfollow.",
+      empty: "No protected accounts.",
+      countLabel: "protected accounts",
     },
   ];
 
   if (loading) return <Section title="Account protection lists" badge="Loading" tone="info" full><p className="muted">Loading canonical account-scoped lists...</p></Section>;
 
   return <>
-    {definitions.map(({ kind, title, description }) => {
+    {definitions.map(({ kind, title, description, empty, countLabel }) => {
       const search = searches[kind].trim().toLowerCase().replace(/^@/, "");
       const visible = snapshots[kind].items.filter((item) => !search || item.includes(search));
-      return <Section key={kind} title={title} badge={String(snapshots[kind].items.length)} tone="info">
+      const multiple = /[\n,;]/.test(drafts[kind]);
+      return <Section key={kind} title={title} badge={`${snapshots[kind].items.length} ${countLabel}`} tone="info">
         <p className="muted">{description}</p>
         <label className="settings-edit-field">
           <span>Add usernames</span>
@@ -268,15 +273,16 @@ function AccountProtectionLists({ accountId }: { accountId: string }) {
         <Button variant="ghost" disabled={busy !== null || !drafts[kind].trim()} onClick={() => {
           const items = drafts[kind].split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
           if (items.length) void mutate(kind, items, []);
-        }}>{busy === kind ? "Saving..." : "Add"}</Button>
+        }}>{busy === kind ? "Saving..." : multiple ? "Add multiple" : "Add account"}</Button>
         <label className="settings-edit-field">
           <span>Search usernames</span>
           <input className="input" value={searches[kind]} placeholder="Search" onChange={(event) => setSearches((current) => ({ ...current, [kind]: event.currentTarget.value }))} />
         </label>
+        <Button variant="ghost" disabled={!searches[kind]} onClick={() => setSearches((current) => ({ ...current, [kind]: "" }))}>View all</Button>
         {visible.length ? visible.map((username) => <div className="settings-field" key={username}>
           <strong className="mono">@{username}</strong>
           <Button variant="ghost" disabled={busy !== null} onClick={() => void mutate(kind, [], [username])}>Remove</Button>
-        </div>) : <p className="muted">{search ? "No matching username." : "No usernames saved."}</p>}
+        </div>) : <p className="muted">{search ? "No matching username." : empty}</p>}
         <p className="muted">Source: account_protection_list_entries · version {snapshots[kind].version} · updated {snapshots[kind].updatedAt ? formatCompactDate(snapshots[kind].updatedAt) : "never"}</p>
       </Section>;
     })}
