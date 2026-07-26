@@ -793,13 +793,6 @@ function dbStatusLabel(status?: string, fallback = "schema_only") {
   return fallback;
 }
 
-function packageUnfollowCap(packageLabel: string) {
-  const normalized = packageLabel.toLowerCase();
-  if (normalized.includes("premium")) return 240;
-  if (normalized.includes("pro")) return 120;
-  return 80;
-}
-
 function slotLabel(start: string, end: string, fallback: string) {
   if (start && end) return `${start} - ${end}`;
   return fallback || "not_available";
@@ -819,6 +812,15 @@ function buildSettingsFromProfileDetails(
   const account = record(data?.account);
   const settings = record(data?.settings?.data);
   const packageSummary = record(data?.packageSummary?.data);
+  const packageRuntimeContract = record(data?.packageRuntimeContract);
+  const contractSettings = record(packageRuntimeContract.settings);
+  const contractFollowDay = record(contractSettings.follow_day);
+  const contractFollowSession = record(contractSettings.follow_session);
+  const contractUnfollowDay = record(contractSettings.unfollow_day);
+  const contractUnfollowSession = record(contractSettings.unfollow_session);
+  const contractTargetFollows = record(contractSettings.max_follows_per_target_per_run);
+  const contractTargetCount = record(contractSettings.max_targets_per_run);
+  const contractReady = packageRuntimeContract.ok === true && packageRuntimeContract.reason === "ready";
   const readinessSafe = record(data?.readinessSafe);
   const packageDefaults = record(packageSummary.package_defaults);
   const packageCaps = record(packageSummary.package_caps);
@@ -831,12 +833,12 @@ function buildSettingsFromProfileDetails(
   const filtersStatus = dbStatusLabel(data?.filters?.status);
   const targetsStatus = dbStatusLabel(data?.targets?.status);
   const packageLabel = readString(account, ["packageLabel", "package_label", "commercialPackage", "commercial_package"], profile.package);
-  const packageMaxFollowCap = readNestedNumber(packageCaps, "follow_day", 0);
-  const packageMaxFollowSessionCap = readNestedNumber(packageCaps, "follow_session", 0);
+  const packageMaxFollowCap = readNestedNumber(contractFollowDay, "package", readNestedNumber(packageCaps, "follow_day", 0));
+  const packageMaxFollowSessionCap = readNestedNumber(contractFollowSession, "package", readNestedNumber(packageCaps, "follow_session", 0));
   const packageDefaultFollowCap = readNestedNumber(packageDefaults, "follow_day", packageMaxFollowCap);
   const packageDefaultFollowSessionCap = readNestedNumber(packageDefaults, "follow_session", packageMaxFollowSessionCap);
-  const manualFollowDayOverride = readOptionalNumber(settings, ["manual_follow_day_cap", "max_actions_per_day"]);
-  const manualFollowSessionOverride = readOptionalNumber(settings, ["manual_follow_session_cap", "follow_limit"]);
+  const manualFollowDayOverride = readOptionalNumber(contractFollowDay, ["db"]);
+  const manualFollowSessionOverride = readOptionalNumber(contractFollowSession, ["db"]);
   const legacyFollowLimit = readOptionalNumber(settings, ["follow_limit"]);
   const legacyMaxFollowPerRun = readOptionalNumber(settings, ["max_follow_per_run"]);
   const warmupApplied = readBoolean(effectiveCapsPreview, ["warmup_applied"], false);
@@ -849,8 +851,8 @@ function buildSettingsFromProfileDetails(
     warmupApplied,
     warmupDayCap: warmupFollowDayCap,
   });
-  const followCap = readNumber(settings, ["effective_follow_cap_today"], followCapProjection.effectiveDayCap);
-  const followSessionCap = readNumber(settings, ["effective_follow_session_cap"], followCapProjection.effectiveSessionCap);
+  const followCap = readNestedNumber(contractFollowDay, "effective", readNumber(settings, ["effective_follow_cap_today"], followCapProjection.effectiveDayCap));
+  const followSessionCap = readNestedNumber(contractFollowSession, "effective", readNumber(settings, ["effective_follow_session_cap"], followCapProjection.effectiveSessionCap));
   const backendCapSource = readString(settings, ["follow_cap_source"], "");
   const followCapSource: ProfileSettings["follow"]["capSource"] = backendCapSource === "admin_override"
     ? "manual"
@@ -858,8 +860,8 @@ function buildSettingsFromProfileDetails(
       ? "warmup"
       : followCapProjection.capSource;
   const followLimitingReason = readString(settings, ["follow_limiting_reason"], followCapProjection.limitingReason);
-  const unfollowCap = readNumber(settings, ["daily_unfollow_cap", "unfollow_per_day_limit", "unfollow_per_day"], profile.counters.unfollow.max);
-  const unfollowSessionCap = readNumber(settings, ["session_unfollow_cap", "unfollow_per_session_limit", "unfollow_per_session"], Math.min(unfollowCap, 50));
+  const unfollowCap = readNestedNumber(contractUnfollowDay, "effective", 0);
+  const unfollowSessionCap = readNestedNumber(contractUnfollowSession, "effective", 0);
   const timeslotStart = readString(settings, ["timeslot_start", "start_time", "window_start"], profile.activeWindow.split("-")[0] ?? "");
   const timeslotEnd = readString(settings, ["timeslot_end", "end_time", "window_end"], profile.activeWindow.split("-")[1] ?? "");
   const scheduleMode = profile.scheduleMode || (profile.slotKind === "manual_only" || profile.activeWindow === "Manual" ? "manual_only" : "scheduled");
@@ -879,8 +881,8 @@ function buildSettingsFromProfileDetails(
   const credentialStatus = String(credentials.credentialStatus || profile.credentialStatus);
   const credentialStatusSafe = credentialStatus === "missing" || credentialStatus === "needs_update" ? credentialStatus : "active";
   const sourceDefaults = {
-    maxFollowsPerTargetPerRun: readNumber(settings, ["max_follows_per_target_per_run"], packageLabel.toLowerCase().includes("pro") ? 30 : 27),
-    maxTargetsPerRun: readNumber(settings, ["max_targets_per_run"], 4),
+    maxFollowsPerTargetPerRun: readNestedNumber(contractTargetFollows, "effective", 0),
+    maxTargetsPerRun: readNestedNumber(contractTargetCount, "effective", 0),
   };
 
   return {
@@ -907,6 +909,8 @@ function buildSettingsFromProfileDetails(
       scheduleMode,
       currentSlot,
       safeMetadata: `relay details loaded; settings=${settingsStatus}; filters=${filtersStatus}; secrets excluded`,
+      packageRuntimeContractReady: contractReady,
+      packageRuntimeContractReason: readString(packageRuntimeContract, ["reason"], "package_settings_incomplete"),
     },
     schedule: buildScheduleSection(profile, scheduleProjection, {
       currentSlot,
@@ -979,9 +983,9 @@ function buildSettingsFromProfileDetails(
       warmupStatus: readString(packageSummary, ["warmup_status"], warmupApplied ? "active" : "not_available"),
       warmupDay: readNumber(packageSummary, ["warmup_day"], 0),
       packageStartedAt: readString(packageSummary, ["package_started_at"], readString(settings, ["package_started_at"], "not_available")),
-      day1FollowCap: readNumber(effectiveCapsPreview, ["day_1_follow_cap", "day1_follow_cap"], 10),
-      day2FollowCap: readNumber(effectiveCapsPreview, ["day_2_follow_cap", "day2_follow_cap"], 20),
-      day3FollowCap: readNumber(effectiveCapsPreview, ["day_3_follow_cap", "day3_follow_cap"], 40),
+      day1FollowCap: readNumber(effectiveCapsPreview, ["day_1_follow_cap", "day1_follow_cap"], 0),
+      day2FollowCap: readNumber(effectiveCapsPreview, ["day_2_follow_cap", "day2_follow_cap"], 0),
+      day3FollowCap: readNumber(effectiveCapsPreview, ["day_3_follow_cap", "day3_follow_cap"], 0),
       day4PlusFollowCap: readNumber(effectiveCapsPreview, ["day_4_plus_follow_cap", "day4_plus_follow_cap"], packageMaxFollowCap),
       effectiveWarmupCapToday: warmupApplied && warmupFollowDayCap !== null ? warmupFollowDayCap : packageMaxFollowCap,
       followDayRemaining: readNumber(settings, ["follow_day_remaining"], Math.max(0, followCap - profile.counters.follow.current)),
@@ -1011,8 +1015,8 @@ function buildSettingsFromProfileDetails(
       saveReady: readString(settings, ["dm_settings_status"], settingsStatus) !== "backend_pending",
       welcomeDisabledReason: welcomeEnabled ? null : "welcome setting disabled or missing",
       outreachDisabledReason: outreachEnabled ? null : "outreach setting disabled or missing",
-      welcomeSessionCap: Math.max(1, readNumber(settings, ["welcome_session_cap"], readNumber(settings, ["welcome_day_cap"], 1))),
-      welcomeDayCap: Math.max(1, readNumber(settings, ["welcome_day_cap"], 10)),
+      welcomeSessionCap: readNumber(settings, ["welcome_session_cap"], 0),
+      welcomeDayCap: readNumber(settings, ["welcome_day_cap"], 0),
       outreachSessionCap: readNumber(settings, ["outreach_session_cap"], 0),
       outreachDayCap: readNumber(settings, ["outreach_day_cap"], 0),
       outreachEntitlementStatus: outreachEnabled ? "active" : "not_available",
@@ -1027,7 +1031,7 @@ function buildSettingsFromProfileDetails(
       stopAfterUnfollowSkipped: readNumber(settings, ["stop_after_unfollow_skipped"], 3000),
       unfollowSort: readString(settings, ["unfollow_mode"], "unfollow") as ProfileSettings["followback"]["unfollowMode"],
       followbackRatioSummary: `${readNumber(statsSummary, ["follows_today"], profile.counters.follow.current)} follows · ${readNumber(statsSummary, ["unfollows_today"], profile.counters.unfollow.current)} unfollows`,
-      packageUnfollowDayCap: packageUnfollowCap(packageLabel),
+      packageUnfollowDayCap: readNestedNumber(contractUnfollowDay, "package", 0),
       runtimeCapMode: readString(settings, ["runtime_cap_mode"], "prod_normal") as ProfileSettings["followback"]["runtimeCapMode"],
       runtimeSafetyCap: readOptionalNumber(settings, ["runtime_safety_cap"]),
       runtimeHardCap: 0,
@@ -1060,10 +1064,10 @@ function buildSettingsFromProfileDetails(
         maxFollowsPerTargetPerRun: { min: 1, max: 50 },
         maxTargetsPerRun: { min: 1, max: 10 },
       },
-      sourceStatus: readString(settings, ["follow_source_settings_status"], targetsStatus) === "connected" ? "account_setting" : readString(settings, ["follow_source_settings_status"], targetsStatus === "connected" ? "account_setting" : "schema_pending") as ProfileSettings["sources"]["sourceStatus"],
-      runtimeStatus: readString(settings, ["follow_source_settings_status"], targetsStatus) === "backend_pending" ? "schema_pending" : "active",
-      saveReady: readString(settings, ["follow_source_settings_status"], targetsStatus) !== "backend_pending",
-      note: `Targets source: ${targetsStatus} · source settings=${readString(settings, ["follow_source_settings_status"], "default")}`,
+      sourceStatus: contractReady ? "account_setting" : "schema_pending",
+      runtimeStatus: contractReady ? "active" : "schema_pending",
+      saveReady: contractReady,
+      note: contractReady ? "Canonical Supabase package runtime contract" : "Configuration incomplete",
       ctQualitySummary: `${eligibleTargets.length} eligible · ${pendingTargets.length} review · ${rejectedTargets.length} rejected`,
       followbackRatioByTarget: "backend_pending",
       followsSentByTarget: targetRows.length ? "available in target rows when populated" : "not_available",
@@ -1296,7 +1300,7 @@ function LegacySettingsDrawer({
   const followDirty = !sameFollowDraft(follow, settings.follow);
   const followError = followValidationError(follow);
   const followPayload = buildFollowSavePayload(profile, follow);
-  const followSaveDisabled = !followDirty || Boolean(followError);
+  const followSaveDisabled = !settings.general.packageRuntimeContractReady || !followDirty || Boolean(followError);
   const dmBaselineState = dmBaseline ?? settings.dm;
   const dm = dmDraft ?? dmBaselineState;
   const dmDirty = !sameDmDraft(dm, dmBaselineState);
@@ -1597,7 +1601,7 @@ function LegacySettingsDrawer({
             </div>
           )}
         </Section>
-        <Section title="Package and runtime" badge="Runtime summary" tone="info"><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Add-ons / entitlements" value={settings.general.entitlements} /><Field label="Runtime profile" value={settings.general.runtimeProfile} mono /><Field label="Slot kind" value={settings.general.slotKind} mono /></Section>
+        <Section title="Package and runtime" badge={settings.general.packageRuntimeContractReady ? "Canonical contract ready" : "Configuration incomplete"} tone={settings.general.packageRuntimeContractReady ? "success" : "warning"}><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Add-ons / entitlements" value={settings.general.entitlements} /><Field label="Runtime profile" value={settings.general.runtimeProfile} mono /><Field label="Slot kind" value={settings.general.slotKind} mono /><Field label="Contract source" value="Supabase package runtime contract" /><Field label="Contract reason" value={settings.general.packageRuntimeContractReason} mono /></Section>
         <Section title="Status" badge="Read-only">
           <Field label="Readiness status" value={settings.general.readinessStatus} />
           <Field label="Readiness reason" value={settings.general.readinessReason} mono />
@@ -1620,8 +1624,9 @@ function LegacySettingsDrawer({
       </div> : null}
 
       {activeTab === "Follow" ? <div className="settings-grid">
-        <Section title="Today effective limits" badge={follow.capSource} tone={statusTone(follow.runtimeStatus)}><Field label="Follow enabled" value={follow.followEnabled ? "enabled" : "disabled"} /><Field label="Warmup active day" value={follow.warmupDay >= 4 ? "Day 4+" : `Day ${follow.warmupDay}`} /><Field label="Warmup cap today" value={follow.effectiveWarmupCapToday} mono /><Field label="Package cap/day" value={follow.packageFollowDayCap} mono /><Field label="Package cap/session" value={follow.packageFollowSessionCap} mono /><Field label="Effective cap/day" value={follow.followPerDay} mono /><Field label="Effective cap/session" value={follow.maxFollowPerSession} mono /><Field label="Followed today" value={profile.counters.follow.current} /><Field label="Remaining today" value={follow.followDayRemaining} /><Field label="Limiting source" value={follow.capSource} /><Field label="Limiting reason" value={follow.limitingReason} /></Section>
-        <Section title="Package policy" badge="source of truth" tone="info"><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Package maximum/day" value={follow.packageFollowDayCap} /><Field label="Package maximum/session" value={follow.packageFollowSessionCap} /><Field label="Source" value="account_package_summary.package_caps" /></Section>
+        {!settings.general.packageRuntimeContractReady ? <Section title="Configuration incomplete" badge="Blocked" tone="warning" full><p className="muted">Critical package settings are missing or inconsistent. BotApp will not invent fallback values or save Follow settings until the canonical Supabase contract is ready.</p><Field label="Reason" value={settings.general.packageRuntimeContractReason} mono /></Section> : null}
+        <Section title="Effective runtime limits" badge={follow.capSource} tone={statusTone(follow.runtimeStatus)}><Field label="Follow enabled" value={follow.followEnabled ? "enabled" : "disabled"} /><Field label="Warmup active day" value={follow.warmupDay >= 4 ? "Day 4+" : `Day ${follow.warmupDay}`} /><Field label="Warmup cap today" value={follow.effectiveWarmupCapToday} mono /><Field label="Configured package cap/day" value={follow.packageFollowDayCap} mono /><Field label="Configured package cap/session" value={follow.packageFollowSessionCap} mono /><Field label="Effective cap/day" value={follow.followPerDay} mono /><Field label="Effective cap/session" value={follow.maxFollowPerSession} mono /><Field label="Followed today" value={profile.counters.follow.current} /><Field label="Remaining today" value={follow.followDayRemaining} /><Field label="Limiting source" value={follow.capSource} /><Field label="Limiting reason" value={follow.limitingReason} /></Section>
+        <Section title="Configured package limits" badge="Supabase source of truth" tone="info"><Field label="Commercial package" value={settings.general.commercialPackage} /><Field label="Package maximum/day" value={follow.packageFollowDayCap} /><Field label="Package maximum/session" value={follow.packageFollowSessionCap} /><Field label="Source" value="account_package_runtime_contract_status" /></Section>
         <Section title="Configured account limits" badge={follow.adminOverrideActive ? "account limits active" : "package defaults"} tone={follow.adminOverrideActive ? "warning" : "success"}><Field label="Current account limits" value={`${follow.manualFollowDayCap}/day · ${follow.manualFollowSessionCap}/session`} /><NumberField label="Follow cap/day" value={follow.manualFollowDayCap} max={follow.packageFollowDayCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowDayCap: value, adminOverrideActive: true, adminOverrideLabel: `${value}/day · ${follow.manualFollowSessionCap}/session`, capSource: "manual" })} /><p className="muted">Persistent account value. It may be lowered but cannot exceed the package maximum.</p><NumberField label="Follow cap/session" value={follow.manualFollowSessionCap} max={follow.packageFollowSessionCap} onChange={(value) => setFollowDraft({ ...follow, manualFollowSessionCap: value, adminOverrideActive: true, adminOverrideLabel: `${follow.manualFollowDayCap}/day · ${value}/session`, capSource: "manual" })} /><p className="muted">Persistent account value. Warmup never replaces this field.</p><Field label="Legacy compatibility (read-only)" value={follow.legacyFollowCapLabel} /></Section>
         <Section title={warmupPresentation.title} badge={warmupPresentation.badge} tone={warmupPresentation.tone}><Field label="Warmup enabled" value={follow.warmupEnabled ? "yes" : "no"} /><Field label="Warmup applied" value={follow.warmupApplied ? "yes" : "no"} /><Field label="Warmup basis" value="Verified Follow activity · Africa/Johannesburg" /><Field label="Package/service start date (metadata only)" value={follow.packageStartedAt || "not_available"} /><Field label="Day 1 cap" value={follow.day1FollowCap} /><Field label="Day 2 cap" value={follow.day2FollowCap} /><Field label="Day 3 cap" value={follow.day3FollowCap} /><Field label="Day 4+ cap" value={follow.day4PlusFollowCap} /></Section>
         <Section title="Legacy behavior preview" badge="Not Follow save" tone="warning"><p className="muted">These toggles exist in legacy settings/runtime defaults, but they are not part of the visible admin Follow save grid audited for this tab.</p><ToggleLine label="Do follows first" checked={follow.doFollowsFirst} /><ToggleLine label="Mute after follow" checked={follow.muteAfterFollow} /><ToggleLine label="End if limit reached" checked={follow.endIfLimitReached} /><ToggleLine label="Turn off follow" checked={follow.turnOffFollow} /></Section>

@@ -1112,6 +1112,8 @@ export type ProfileSettingsGeneral = {
   scheduleMode?: string | null;
   currentSlot: string;
   safeMetadata: string;
+  packageRuntimeContractReady: boolean;
+  packageRuntimeContractReason: string;
 };
 
 export type ProfileSettingsSchedule = {
