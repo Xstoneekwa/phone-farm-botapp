@@ -603,6 +603,13 @@ export type ProfileRuntimeIndicator = {
   lastRunFinishedAt?: string | null;
 };
 
+export type ProfileCounterProjection = {
+  businessDate: string;
+  businessTimezone: string;
+  computedAt: string;
+  source: string;
+};
+
 export type BotProfile = {
   id: string;
   username: string;
@@ -632,7 +639,8 @@ export type BotProfile = {
   unfollowTruthfulness?: ProfileUnfollowTruthfulness;
   interactionsToday?: number;
   currentRunCounters?: ProfileRunCounters;
-  liveSupportedKinds?: Array<"follow" | "like" | "dm">;
+  counterProjection?: ProfileCounterProjection;
+  liveSupportedKinds?: Array<"follow" | "unfollow" | "like" | "dm">;
   followsToday: number;
   dmsToday: number;
   counters: ProfileCounters;

@@ -46,11 +46,27 @@ type StatsHistoryPayload = {
   };
 };
 
+function formatSastTimestamp(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-ZA", {
+    timeZone: "Africa/Johannesburg",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  }).format(date).replace(",", " ·");
+}
+
 function SnapshotCell({ value, status, capturedAt, source }: { value: number | null | undefined; status?: string; capturedAt?: string | null; source?: string | null }) {
   const formatted = formatSnapshotMetric(value);
   const hasValue = formatted !== "—";
   const title = hasValue
-    ? [status, capturedAt, source].filter(Boolean).join(" · ")
+    ? [status, capturedAt ? formatSastTimestamp(capturedAt) : null, source].filter(Boolean).join(" · ")
     : "No persisted value for this observation.";
   return <span title={title}>{formatted}{hasValue && status === "stale" ? <em> · stale</em> : null}</span>;
 }
@@ -126,7 +142,7 @@ export function StatsDrawer({ profile, onClose, onSave }: { profile: BotProfile;
     </>}>
       <div className="stats-history-panel">
         <div className="stats-source-line">
-          <span>Supabase-backed API · 30 days · social actions</span>
+          <span>Supabase-backed API · 30 days · social actions · {data.business_timezone ?? "Africa/Johannesburg"}{data.generated_at ? ` · updated ${formatSastTimestamp(data.generated_at)}` : ""}</span>
           <em>{snapshotStatusSummary(data)}</em>
         </div>
         {loading ? <div className="empty-state">Loading statistics from shared backend…</div> : null}

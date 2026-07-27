@@ -31,6 +31,93 @@ test("idle becomes active and all displayed canonical counters remain stable", (
   assert.equal(result.counters.comment.current, 2);
 });
 
+test("an older UTC-day payload cannot overwrite a newer SAST projection", () => {
+  const current = profile({
+    counters: {
+      follow: { current: 14, max: 20 }, unfollow: { current: 0, max: 120 }, like: { current: 6, max: 100 },
+      comment: { current: 0, max: 0 }, dm: { current: 0, max: 2 },
+    },
+    interactionsToday: 20,
+    counterProjection: {
+      businessDate: "2026-07-28",
+      businessTimezone: "Africa/Johannesburg",
+      computedAt: "2026-07-27T22:50:00.000Z",
+      source: "canonical_persisted_actions_sast_v1",
+    },
+  });
+  const result = mergeProfilesLiveProjection([current], [{
+    accountId: "account-1",
+    countersToday: { follows: 24, likes: 15 },
+    interactionsToday: 39,
+    counterProjection: {
+      businessDate: "2026-07-27",
+      businessTimezone: "Africa/Johannesburg",
+      computedAt: "2026-07-27T23:00:00.000Z",
+      source: "canonical_persisted_actions_sast_v1",
+    },
+  }])[0];
+  assert.equal(result.counters.follow.current, 14);
+  assert.equal(result.counters.like.current, 6);
+  assert.equal(result.interactionsToday, 20);
+  assert.equal(result.counterProjection.businessDate, "2026-07-28");
+});
+
+test("same SAST day accepts only an authoritative projection computed later", () => {
+  const current = profile({
+    counterProjection: {
+      businessDate: "2026-07-28",
+      businessTimezone: "Africa/Johannesburg",
+      computedAt: "2026-07-27T23:00:00.000Z",
+      source: "canonical_persisted_actions_sast_v1",
+    },
+  });
+  const stale = mergeProfilesLiveProjection([current], [{
+    accountId: "account-1",
+    countersToday: { follows: 99 },
+    counterProjection: {
+      businessDate: "2026-07-28",
+      businessTimezone: "Africa/Johannesburg",
+      computedAt: "2026-07-27T22:59:59.000Z",
+      source: "canonical_persisted_actions_sast_v1",
+    },
+  }])[0];
+  assert.equal(stale.counters.follow.current, 5);
+
+  const fresh = mergeProfilesLiveProjection([current], [{
+    accountId: "account-1",
+    countersToday: { follows: 6 },
+    counterProjection: {
+      businessDate: "2026-07-28",
+      businessTimezone: "Africa/Johannesburg",
+      computedAt: "2026-07-27T23:00:01.000Z",
+      source: "canonical_persisted_actions_sast_v1",
+    },
+  }])[0];
+  assert.equal(fresh.counters.follow.current, 6);
+});
+
+test("a source without the canonical freshness contract cannot replace counters", () => {
+  const current = profile({
+    counterProjection: {
+      businessDate: "2026-07-28",
+      businessTimezone: "Africa/Johannesburg",
+      computedAt: "2026-07-27T23:00:00.000Z",
+      source: "canonical_persisted_actions_sast_v1",
+    },
+  });
+  const result = mergeProfilesLiveProjection([current], [{
+    accountId: "account-1",
+    countersToday: { follows: 88 },
+    counterProjection: {
+      businessDate: "2026-07-28",
+      businessTimezone: "Africa/Johannesburg",
+      computedAt: "2026-07-27T23:00:02.000Z",
+      source: "legacy_utc_projection",
+    },
+  }])[0];
+  assert.equal(result.counters.follow.current, 5);
+});
+
 test("active becomes idle and an old resolved dashboard blocker is cleared", () => {
   const result = mergeProfilesLiveProjection([profile({
     status: "running",

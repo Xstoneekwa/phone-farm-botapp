@@ -4417,8 +4417,17 @@ function formatCompactDateTime(value, fallback = "No session yet") {
   if (/scheduled/i.test(raw)) return "Scheduled";
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return raw.includes("T") ? "—" : raw;
-  const iso = date.toISOString();
-  return `${iso.slice(11, 19)} ${iso.slice(0, 10)}`;
+  return new Intl.DateTimeFormat("en-ZA", {
+    timeZone: "Africa/Johannesburg",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+    timeZoneName: "short",
+  }).format(date).replace(",", " ·");
 }
 
 function formatTimePart(value) {
@@ -5027,6 +5036,20 @@ function readLastSessionAt(account) {
   return formatCompactDateTime(account?.lastSafeUpdate || account?.last_safe_update || account?.lastSessionAt || account?.last_session_at || null);
 }
 
+function readCounterProjection(account) {
+  const source = account?.counterProjection && typeof account.counterProjection === "object"
+    ? account.counterProjection
+    : account?.counter_projection && typeof account.counter_projection === "object"
+      ? account.counter_projection
+      : {};
+  return {
+    businessDate: String(source.businessDate || source.business_date || ""),
+    businessTimezone: String(source.businessTimezone || source.business_timezone || "Africa/Johannesburg"),
+    computedAt: String(source.computedAt || source.computed_at || ""),
+    source: String(source.source || ""),
+  };
+}
+
 function profileFromManageAccount(account, index, devices) {
   const loginVerificationPending = account?.reauthRequired === true || account?.reauth_required === true;
   const hardLoginBlock = /checkpoint|challenge|password_invalid|missing_credentials/i.test(String(account?.loginStatus || account?.login_status || ""));
@@ -5097,6 +5120,7 @@ function profileFromManageAccount(account, index, devices) {
     unfollowTruthfulness: readUnfollowTruthfulness(account) || undefined,
     interactionsToday: readInteractionsToday(account),
     currentRunCounters: readCurrentRunCounters(account),
+    counterProjection: readCounterProjection(account),
     followsToday: Number(account?.followsToday || account?.follows_today || 0),
     dmsToday: Number(account?.dmsToday || account?.dms_today || 0),
     counters: profileCounters(account),
