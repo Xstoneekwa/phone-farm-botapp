@@ -58,7 +58,6 @@ function formatSastTimestamp(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZoneName: "short",
   }).format(date).replace(",", " ·");
 }
 

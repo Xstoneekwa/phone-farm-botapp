@@ -24,6 +24,23 @@ const modes: Array<{ id: BotAppActivityInvestigationMode; label: string; hint: s
 
 const actionTypes: Array<BotAppInteractionActionType | "all"> = ["all", "follow", "unfollow", "like", "comment", "dm", "story_view", "profile_visit", "followback"];
 
+const BUSINESS_TIMEZONE = "Africa/Johannesburg";
+
+export function formatActivityTimestampSast(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: BUSINESS_TIMEZONE,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(parsed);
+}
+
 const ctHints: Record<string, { ctId: string; ctUsername: string; source: string; qualityStatus: BotAppInteractionRecord["ct"]["qualityStatus"] }> = {
   atelier_lumiere: { ctId: "ct_001", ctUsername: "architectes.paris", source: "curated", qualityStatus: "approved" },
   studio_nord: { ctId: "ct_002", ctUsername: "renovation_lille", source: "import", qualityStatus: "review" },
@@ -118,7 +135,7 @@ function ctRemovalPayload(record: BotAppInteractionRecord): BotAppCtRemovalPaylo
 }
 
 function evidenceSummary(record: BotAppInteractionRecord) {
-  return `Interaction found: @${record.clientAccountUsername} ${record.actionType.replaceAll("_", " ")} @${record.interactedUsername} on ${record.occurredAt} via CT @${record.ct.ctUsername}.`;
+  return `Interaction found: @${record.clientAccountUsername} ${record.actionType.replaceAll("_", " ")} @${record.interactedUsername} on ${formatActivityTimestampSast(record.occurredAt)} via CT @${record.ct.ctUsername}.`;
 }
 
 export function ActivityLog({ logs }: ActivityLogProps) {
@@ -285,7 +302,7 @@ export function ActivityLog({ logs }: ActivityLogProps) {
               <div className="activity-log-meta">
                 <Field label="Client account" value={`@${record.clientAccountUsername}`} />
                 <Field label="CT source" value={`@${record.ct.ctUsername}`} />
-                <Field label="Occurred" value={record.occurredAt} />
+                <Field label="Occurred" value={formatActivityTimestampSast(record.occurredAt)} />
                 <Field label="Run / session" value={record.runId ?? "unknown"} />
                 <Field label="Device" value={record.deviceIdSafe ?? "unknown"} />
                 <Field label="Evidence" value={record.evidence.evidenceSource} />
