@@ -5,6 +5,7 @@ import { Badge, Button, Card, Modal, type BadgeTone } from "../../design/compone
 import type { DeviceViewState } from "../../desktop/device-views";
 import { focusDeviceView, listOpenDeviceViews, openDeviceView, subscribeDeviceViewState } from "../../desktop/device-views";
 import { ProfileToolbar } from "./ProfileToolbar";
+import { profilesMutationsDisabled, profilesRelayErrorLabel, type ProfilesFreshness } from "./relay-freshness";
 import { StatsDrawer } from "./drawers/StatsDrawer";
 import { LogsDrawer } from "./drawers/LogsDrawer";
 import { TargetsDrawer } from "./drawers/TargetsDrawer";
@@ -239,10 +240,12 @@ function AccountRow({
   profile,
   onSelect,
   onToolbar,
+  mutationsDisabled,
 }: {
   profile: BotProfile;
   onSelect: (id: string) => void;
   onToolbar: (profile: BotProfile, action: ProfileToolbarAction) => void;
+  mutationsDisabled: boolean;
 }) {
   const displayCounters = displayRunCounters(profile);
   const counterMetrics = displayCounterMetrics(profile);
@@ -321,7 +324,7 @@ function AccountRow({
         </span>
       </div>
 
-      <ProfileToolbar profile={profile} onAction={(action) => onToolbar(profile, action)} />
+      <ProfileToolbar profile={profile} mutationsDisabled={mutationsDisabled} onAction={(action) => onToolbar(profile, action)} />
     </div>
   );
 }
@@ -332,6 +335,7 @@ export function ProfilesView({
   dispatcherHealth,
   syncError,
   profilesMeta,
+  profilesFreshness,
   loading,
   onRefresh,
   onSelect,
@@ -343,6 +347,7 @@ export function ProfilesView({
   dispatcherHealth: BotAppDispatcherHealth | null;
   syncError: string | null;
   profilesMeta: { source: string; accountsCount: number; counts: Record<string, number> } | null;
+  profilesFreshness: ProfilesFreshness;
   loading: boolean;
   onRefresh: () => Promise<void> | void;
   onSelect: (id: string) => void;
@@ -367,6 +372,7 @@ export function ProfilesView({
     expiresAt: number;
   }>>({});
   const dispatcherBlocksAutoLogin = Boolean(dispatcherHealth && dispatcherHealth.status !== "running");
+  const mutationsDisabled = profilesMutationsDisabled(profilesFreshness);
 
   useEffect(() => {
     let cancelled = false;
@@ -477,7 +483,7 @@ export function ProfilesView({
   const hasActiveLifecycleFilter = lifecycleFilter !== "active";
   const emptyStateType = loading
     ? "loading"
-    : syncError
+    : syncError && liveProfiles.length === 0
       ? "relay_error"
       : liveProfiles.length === 0
         ? "no_backend_accounts"
@@ -547,6 +553,10 @@ export function ProfilesView({
   }`;
 
   function handleToolbar(profile: BotProfile, action: ProfileToolbarAction) {
+    if (mutationsDisabled && action !== "stats" && action !== "logs") {
+      onMockSubmit("Action disabled while cached profile data is displayed. Retry the live backend first.", "error");
+      return;
+    }
     if (action === "play" || action === "auto_login" || action === "restore_login_screen" || action === "check_readiness" || action === "assign_now" || action === "archive" || action === "delete" || action === "restore" || action === "stop") {
       if (action === "stop") setStopReason("");
       if (action === "auto_login") {
@@ -910,7 +920,7 @@ export function ProfilesView({
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
           />
-          <Button className="new-profile-button" onClick={() => setAddProfileOpen(true)}>+ New profile</Button>
+          <Button className="new-profile-button" disabled={mutationsDisabled} onClick={() => setAddProfileOpen(true)}>+ New profile</Button>
         </div>
       </Card>
 
@@ -932,6 +942,22 @@ export function ProfilesView({
       ) : null}
 
       {phoneViewMessage ? <div className="phone-view-message">{phoneViewMessage}</div> : null}
+
+      {syncError && liveProfiles.length > 0 ? (
+        <div className="profiles-cache-banner" role="alert" data-testid="profiles-cached-stale-banner">
+          <div>
+            <strong>{profilesRelayErrorLabel(profilesFreshness.errorKind)}</strong>
+            <span>
+              Cached data displayed
+              {profilesFreshness.lastSuccessfulAt
+                ? ` · last update ${new Date(profilesFreshness.lastSuccessfulAt).toLocaleString("en-GB", { timeZone: "Africa/Johannesburg", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}`
+                : " · last update unknown"}
+              {` · ${syncError} · mutations disabled`}
+            </span>
+          </div>
+          <Button variant="ghost" onClick={onRefresh}>Retry</Button>
+        </div>
+      ) : null}
 
       {emptyStateType === "loading" ? (
         <div className="empty-state profiles-empty">
@@ -994,7 +1020,13 @@ export function ProfilesView({
           </header>
           <div className="phone-group-body">
             {group.profiles.map((profile) => (
-              <AccountRow key={profile.id} profile={profile} onSelect={onSelect} onToolbar={handleToolbar} />
+              <AccountRow
+                key={profile.id}
+                profile={profile}
+                onSelect={onSelect}
+                onToolbar={handleToolbar}
+                mutationsDisabled={mutationsDisabled}
+              />
             ))}
           </div>
         </section>

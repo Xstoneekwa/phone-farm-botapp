@@ -28,6 +28,13 @@ const {
 } = require("./relay-runtime-bootstrap.cjs");
 const botappSchedulerRuntime = require("./botapp-scheduler-runtime.cjs");
 const { findNonCloneablePath, serializeIpcPayload, toRedactedIpcError } = require("./ipc-structured-clone.cjs");
+const {
+  RELAY_READ_TIMEOUT_MS,
+  normalizeRelayReadError,
+  relayErrorKindForStatus,
+  relayReadError,
+  relayReadRetryable,
+} = require("./relay-read-contract.cjs");
 const { extractOperatorReviewActionId } = require("./operator-review-action.cjs");
 const {
   runtimeControllerPathFromEnv,
@@ -3319,9 +3326,22 @@ async function dashboardGet(pathnameSuffix, routeParams = {}) {
   const endpoint = endpointById(pathnameSuffix);
   const url = endpoint ? endpointUrl(endpoint, routeParams) : dashboardApiUrl(pathnameSuffix);
   if (!url) return null;
-  const response = await fetch(url, { method: "GET", headers: relayHeaders(cfg) });
+  const response = await fetch(url, {
+    method: "GET",
+    headers: relayHeaders(cfg),
+    signal: globalThis.AbortSignal.timeout(RELAY_READ_TIMEOUT_MS),
+  });
   const data = await response.json().catch(() => null);
-  if (!response.ok || data?.ok === false) throw new Error(readRelayError(data, `${pathnameSuffix} unavailable.`));
+  if (!response.ok || data?.ok === false) {
+    throw relayReadError(
+      relayErrorKindForStatus(response.status),
+      readRelayError(data, `${pathnameSuffix} unavailable.`),
+      response.status,
+    );
+  }
+  if (!data || typeof data !== "object") {
+    throw relayReadError("payload_malformed", `${pathnameSuffix} returned an invalid payload.`);
+  }
   return readPayload(data);
 }
 
@@ -3333,9 +3353,22 @@ async function dashboardGetWithQuery(endpointId, queryParams = {}, routeParams =
     const normalized = String(value ?? "").trim();
     if (normalized) url.searchParams.set(key, normalized);
   }
-  const response = await fetch(url.toString(), { method: "GET", headers: relayHeaders(cfg) });
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: relayHeaders(cfg),
+    signal: globalThis.AbortSignal.timeout(RELAY_READ_TIMEOUT_MS),
+  });
   const data = await response.json().catch(() => null);
-  if (!response.ok || data?.ok === false) throw new Error(readRelayError(data, `${endpointId} unavailable.`));
+  if (!response.ok || data?.ok === false) {
+    throw relayReadError(
+      relayErrorKindForStatus(response.status),
+      readRelayError(data, `${endpointId} unavailable.`),
+      response.status,
+    );
+  }
+  if (!data || typeof data !== "object") {
+    throw relayReadError("payload_malformed", `${endpointId} returned an invalid payload.`);
+  }
   return readPayload(data);
 }
 
@@ -5700,7 +5733,10 @@ function emptySettings() {
 
 async function botappOverviewData() {
   const [overview, devicesPayload, profilesPayload, clientAccountsPayload, credentialsPayload, activityPayload] = await Promise.all([
-    dashboardGet("botapp_overview").catch((error) => ({ error: safeRuntimeError(error, "Authentication required") })),
+    dashboardGet("botapp_overview").catch((error) => {
+      const failure = normalizeRelayReadError(error, "Live backend temporarily unavailable.");
+      return { error: failure.message, errorKind: failure.kind, errorStatus: failure.status };
+    }),
     dashboardGet("devices_overview").catch(() => null),
     dashboardGet("profiles_overview").catch(() => null),
     dashboardGet("client_accounts_overview").catch(() => null),
@@ -5751,14 +5787,14 @@ async function botappOverviewData() {
   const liveActivityLogs = logsFromActivity(activityLog);
   const logs = liveActivityLogs.length ? liveActivityLogs : logsFromRadar(radar);
   const relayConfigured = Boolean(compassConfig().relayUrl);
-  const syncError = accounts.length
-    ? null
-    : overviewError
+  const syncError = overviewError
       || (!relayConfigured ? "Configure the relay URL in API / Webhooks / Keys to load shared backend data." : null)
-      || "No accounts returned from the shared backend API. Check relay URL, relay credential, and deployed endpoints.";
+      || (accounts.length ? null : "No accounts returned from the shared backend API. Check relay URL, relay credential, and deployed endpoints.");
   return serializeIpcPayload({
     ok: !syncError,
     error: syncError,
+    errorKind: overview?.errorKind || null,
+    failedAt: syncError ? new Date().toISOString() : null,
     profilesMeta: {
       source: extracted.source,
       accountsCount: accounts.length,
@@ -5785,25 +5821,43 @@ async function botappProfilesLiveData(input) {
   const accountIds = Array.isArray(input?.accountIds)
     ? [...new Set(input.accountIds.map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 200)
     : [];
-  try {
-    const payload = await dashboardGetWithQuery("profiles_live", { account_ids: accountIds.join(",") });
-    return serializeIpcPayload({
-      ok: true,
-      data: {
-        profiles: Array.isArray(payload?.profiles) ? payload.profiles : [],
-        generatedAt: payload?.generated_at || new Date().toISOString(),
-        source: String(payload?.source || "profiles_live_batched_v1"),
-        queryCount: Number(payload?.query_count || 0),
-      },
-      error: null,
-    });
-  } catch (error) {
-    return serializeIpcPayload({
-      ok: false,
-      data: { profiles: [], generatedAt: new Date().toISOString(), source: "profiles_live_unavailable", queryCount: 0 },
-      error: safeRuntimeError(error, "Live Profiles projection unavailable."),
-    });
+  let lastFailure = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const payload = await dashboardGetWithQuery("profiles_live", { account_ids: accountIds.join(",") });
+      if (!Array.isArray(payload?.profiles)) {
+        throw relayReadError("payload_malformed", "Live Profiles projection returned an invalid payload.");
+      }
+      return serializeIpcPayload({
+        ok: true,
+        data: {
+          profiles: payload.profiles,
+          generatedAt: payload?.generated_at || new Date().toISOString(),
+          source: String(payload?.source || "profiles_live_batched_v1"),
+          queryCount: Number(payload?.query_count || 0),
+        },
+        error: null,
+        errorKind: null,
+        failedAt: null,
+        retryCount: attempt,
+      });
+    } catch (error) {
+      lastFailure = normalizeRelayReadError(error, "Live Profiles projection unavailable.");
+      if (attempt === 0 && relayReadRetryable(lastFailure.kind)) {
+        await sleepMs(250);
+        continue;
+      }
+      break;
+    }
   }
+  return serializeIpcPayload({
+    ok: false,
+    data: { profiles: [], generatedAt: new Date().toISOString(), source: "profiles_live_unavailable", queryCount: 0 },
+    error: lastFailure?.message || "Live Profiles projection unavailable.",
+    errorKind: lastFailure?.kind || "unknown",
+    failedAt: new Date().toISOString(),
+    retryCount: relayReadRetryable(lastFailure?.kind) ? 1 : 0,
+  });
 }
 
 function probeRelayUrlRedacted() {

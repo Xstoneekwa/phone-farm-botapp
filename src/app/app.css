@@ -35,6 +35,10 @@
 .relay-auth-banner strong { font-size: 13px; }
 .relay-auth-banner-blocked span { color: #991B1B; font-size: 12px; line-height: 1.4; }
 .relay-auth-banner-ok span { color: #166534; font-size: 12px; line-height: 1.4; }
+.profiles-cache-banner { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin: 12px 0; padding: 12px 14px; border: 1px solid rgba(245,158,11,.38); border-radius: var(--radius-lg); background: #FFFBEB; color: #78350F; }
+.profiles-cache-banner div { display: grid; gap: 4px; }
+.profiles-cache-banner strong { font-size: 13px; }
+.profiles-cache-banner span { color: #92400E; font-size: 12px; line-height: 1.4; }
 .relay-auth-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .relay-auth-actions button { border: 1px solid rgba(127,29,29,.24); border-radius: var(--radius-md); background: white; color: #7F1D1D; padding: 6px 10px; font-size: 12px; font-weight: 800; }
 .mock-pill { border: 1px solid var(--border-default); background: #fff; border-radius: var(--radius-full); padding: 5px 10px; font-size: 12px; color: var(--fg-secondary); }

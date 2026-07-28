@@ -145,11 +145,14 @@ interface Window {
       execute?: (input: { action: AutoRestartControlAction; requestId?: string; target?: Record<string, unknown>; confirmed?: boolean }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string; overview?: AutoRestartOverview }>;
     };
     data?: {
-      overview: () => Promise<{ ok: boolean; data: BotAppOverviewData; error?: string | null; profilesMeta?: { source: string; accountsCount: number; counts: Record<string, number> } | null }>;
+      overview: () => Promise<{ ok: boolean; data: BotAppOverviewData; error?: string | null; errorKind?: import("./views/profiles/relay-freshness").ProfilesRelayErrorKind | null; failedAt?: string | null; profilesMeta?: { source: string; accountsCount: number; counts: Record<string, number> } | null }>;
       profilesLive: (input: { accountIds: string[] }) => Promise<{
         ok: boolean;
         data: { profiles: import("./views/profiles/profiles-live-merge").ProfilesLivePatch[]; generatedAt: string; source: string; queryCount: number };
         error?: string | null;
+        errorKind?: import("./views/profiles/relay-freshness").ProfilesRelayErrorKind | null;
+        failedAt?: string | null;
+        retryCount?: number;
       }>;
     };
     relay?: {

@@ -1,5 +1,6 @@
 import type { BotAppDispatcherHealth, BotProfile, DeviceProfileGroup } from "../api/types";
 import { ProfilesView } from "./profiles/ProfilesView";
+import type { ProfilesFreshness } from "./profiles/relay-freshness";
 
 export type ProfilesMeta = {
   source: string;
@@ -13,6 +14,7 @@ export function Profiles({
   dispatcherHealth,
   syncError,
   profilesMeta,
+  profilesFreshness,
   loading,
   onRefresh,
   onSelect,
@@ -24,6 +26,7 @@ export function Profiles({
   dispatcherHealth: BotAppDispatcherHealth | null;
   syncError: string | null;
   profilesMeta: ProfilesMeta | null;
+  profilesFreshness: ProfilesFreshness;
   loading: boolean;
   onRefresh: () => Promise<void> | void;
   onSelect: (id: string) => void;
@@ -37,6 +40,7 @@ export function Profiles({
       dispatcherHealth={dispatcherHealth}
       syncError={syncError}
       profilesMeta={profilesMeta}
+      profilesFreshness={profilesFreshness}
       loading={loading}
       onRefresh={onRefresh}
       onSelect={onSelect}

@@ -24,6 +24,7 @@ import { shouldPollProfilesLiveCounters } from "../views/profiles/run-control";
 import { createProfilesAutoRefreshController, shouldPollProfiles } from "../views/profiles/profiles-auto-refresh";
 import type { ProfilesRefreshContext } from "../views/profiles/profiles-auto-refresh";
 import { mergeProfilesLiveProjection } from "../views/profiles/profiles-live-merge";
+import { initialProfilesFreshness, markProfilesFresh, markProfilesStale, type ProfilesFreshness } from "../views/profiles/relay-freshness";
 import { createDevicesAutoRefreshController, shouldPollDevices } from "../views/devices-auto-refresh";
 import "./app.css";
 
@@ -54,6 +55,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [profilesMeta, setProfilesMeta] = useState<{ source: string; accountsCount: number; counts: Record<string, number> } | null>(null);
+  const [profilesFreshness, setProfilesFreshness] = useState<ProfilesFreshness>(initialProfilesFreshness);
   const [commandOpen, setCommandOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ action: string; target: string; danger: boolean } | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -114,6 +116,9 @@ export function App() {
       }
       if (!isLatest()) return;
       setSyncError(result.error ?? null);
+      setProfilesFreshness((current) => result.ok
+        ? markProfilesFresh(current, new Date().toISOString())
+        : markProfilesStale(current, result.failedAt || new Date().toISOString(), result.errorKind));
       setProfilesMeta(result.profilesMeta ?? null);
       void loadDispatcherHealth();
       void loadRelayHealth();
@@ -139,6 +144,7 @@ export function App() {
       settings: settings.ok ? settings.data : null,
     });
     setSyncError(null);
+    setProfilesFreshness((current) => markProfilesFresh(current, new Date().toISOString()));
     setProfilesMeta(null);
     void loadDispatcherHealth();
     void loadRelayHealth();
@@ -159,6 +165,11 @@ export function App() {
     }
     if (!result.ok) {
       setSyncError(result.error || "Live Profiles projection unavailable.");
+      setProfilesFreshness((current) => markProfilesStale(
+        current,
+        result.failedAt || new Date().toISOString(),
+        result.errorKind,
+      ));
       return;
     }
     const nextData = {
@@ -167,6 +178,7 @@ export function App() {
     };
     applyOverviewData(nextData);
     setSyncError(null);
+    setProfilesFreshness((current) => markProfilesFresh(current, result.data.generatedAt || new Date().toISOString()));
   }
 
   async function loadDispatcherHealth() {
@@ -501,7 +513,7 @@ export function App() {
   let view: React.ReactNode;
   if (loading) view = <div className="empty-state"><strong>Loading backend data</strong><span>BotApp is syncing through the shared backend relay.</span></div>;
   else if (active === "overview") view = <Overview profiles={data.profiles} devices={data.devices} notifications={data.notifications} logs={data.logs} onAction={requestAction} />;
-  else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} dispatcherHealth={dispatcherHealth} syncError={syncError} profilesMeta={profilesMeta} loading={loading} onRefresh={refreshProfiles} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message, tone) => pushToast(message, tone ?? "success")} />;
+  else if (active === "profiles") view = <Profiles profiles={data.profiles} groups={data.profileGroups} dispatcherHealth={dispatcherHealth} syncError={syncError} profilesMeta={profilesMeta} profilesFreshness={profilesFreshness} loading={loading} onRefresh={refreshProfiles} onSelect={(id) => { setSelectedProfileId(id); setActive("account"); }} onAction={requestAction} onMockSubmit={(message, tone) => pushToast(message, tone ?? "success")} />;
   else if (active === "account") view = data.clientAccounts ? <ClientAccounts overview={data.clientAccounts} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} onOpenCredentials={(account) => { setSelectedCredentialsAccountId(account.accountId); setActive("credentials"); }} onRefresh={() => loadOverviewData()} /> : null;
   else if (active === "credentials") view = data.credentials ? <Credentials overview={data.credentials} selectedAccountId={selectedCredentialsAccountId} onOpenProfile={(id) => { setSelectedProfileId(id); setActive("profiles"); }} /> : null;
   else if (active === "devices") view = <Devices devices={data.devices} onAction={requestAction} onRefresh={() => loadOverviewData()} />;

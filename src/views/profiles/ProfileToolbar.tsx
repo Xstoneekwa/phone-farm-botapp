@@ -46,6 +46,10 @@ function actionVisible(profile: BotProfile, action: ProfileToolbarAction) {
   return true;
 }
 
+export function isProfileMutationAction(action: ProfileToolbarAction) {
+  return action !== "stats" && action !== "logs";
+}
+
 function disabledReason(profile: BotProfile, action: ProfileToolbarAction): ProfileRequirementState | null {
   if (action === "auto_login" && !profile.autoLoginRequirement.enabled) return profile.autoLoginRequirement;
   if (action === "restore_login_screen" && !profile.restoreLoginScreenRequirement.enabled) return profile.restoreLoginScreenRequirement;
@@ -74,17 +78,18 @@ function tooltipText(profile: BotProfile, action: ProfileToolbarAction, label: s
   return label;
 }
 
-export function ProfileToolbar({ profile, onAction }: { profile: BotProfile; onAction: (action: ProfileToolbarAction) => void }) {
+export function ProfileToolbar({ profile, onAction, mutationsDisabled = false }: { profile: BotProfile; onAction: (action: ProfileToolbarAction) => void; mutationsDisabled?: boolean }) {
   return (
     <div className="profile-toolbar" role="toolbar" aria-label="Profile actions">
       {toolbarActions.filter((item) => actionVisible(profile, item.id)).map((item) => {
         const requirementBlocked = Boolean(disabledReason(profile, item.id));
-        const disabled = Boolean(runControlDisabledReason(profile, item.id) || (item.id !== "auto_login" && requirementBlocked));
+        const staleProjectionBlocked = mutationsDisabled && isProfileMutationAction(item.id);
+        const disabled = Boolean(staleProjectionBlocked || runControlDisabledReason(profile, item.id) || (item.id !== "auto_login" && requirementBlocked));
         return (
           <span
             key={item.id}
             className="tooltip-wrap"
-            data-tooltip={tooltipText(profile, item.id, item.label)}
+            data-tooltip={staleProjectionBlocked ? `${item.label} · disabled while cached profile data is displayed` : tooltipText(profile, item.id, item.label)}
           >
             <button
               type="button"
