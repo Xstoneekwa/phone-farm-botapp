@@ -273,7 +273,7 @@ interface Window {
       detail: (incidentId: string, requestId?: string) => Promise<{ ok: boolean; status?: number; data?: Record<string, unknown>; message?: string; errorKind?: string }>;
       cancelDetail: (requestId: string) => Promise<{ ok: boolean; cancelled?: boolean }>;
       action: (input: Record<string, unknown>) => Promise<{ ok: boolean; status?: number; data?: Record<string, unknown>; error?: string }>;
-      markReviewed: (input: { action_id: string; account_id: string; note?: string | null }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
+      markReviewed: (input: { action_id: string; account_id: string; note?: string | null }) => Promise<{ ok: boolean; status?: number; data?: Record<string, unknown>; error?: string; errorKind?: string; reason?: string; message?: string }>;
       notificationSettings: () => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
       patchNotificationSettings: (input: Record<string, unknown>) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;
       testNotification: (input: { channel: string }) => Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }>;

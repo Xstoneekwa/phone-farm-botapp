@@ -209,7 +209,7 @@ export function IncidentDrawer({
         note: reviewNote.trim() || null,
       });
       if (!result?.ok) {
-        const message = "Could not mark reviewed. Please try again.";
+        const message = String(result?.message || result?.error || "Review could not be recorded. Reload the incident and retry.");
         setError(message);
         setActionProof({ action: "mark_reviewed", ok: false, message });
         return;
@@ -220,7 +220,7 @@ export function IncidentDrawer({
       onChanged?.();
       onProfilesChanged?.();
     } catch {
-      setError("Could not mark reviewed. Please try again.");
+      setError("Review backend is temporarily unavailable.");
     } finally {
       setActing(null);
     }

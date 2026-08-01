@@ -330,7 +330,14 @@ test("operator review backend errors remain visible without a false resolution",
   assert.match(handler, /setActionProof\(\{ action: "mark_reviewed", ok: false, message \}\)/);
   assert.match(handler, /return;/);
   assert.match(handler, /message: "Operator review recorded\."/);
-  assert.match(handler, /Could not mark reviewed\. Please try again\./);
+  assert.match(electronMainSource, /dashboardRequestResult\("POST", "dashboard_action_review"/);
+  assert.match(electronMainSource, /errorKind: "already_terminal"/);
+  assert.match(electronMainSource, /errorKind: "not_reviewable"/);
+  assert.match(electronMainSource, /errorKind: "incident_still_blocking"/);
+  assert.match(electronMainSource, /errorKind: "unauthorized"/);
+  assert.match(electronMainSource, /errorKind: "backend_unavailable"/);
+  assert.match(electronMainSource, /errorKind: "unknown_error"/);
+  assert.match(drawerSource, /result\?\.message \|\| result\?\.error/);
   assert.doesNotMatch(handler, /exc instanceof Error \? exc\.message/);
   assert.match(operatorReviewActionSource, /value\.id/);
   assert.doesNotMatch(operatorReviewActionSource, /JSON\.stringify/);

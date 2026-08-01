@@ -3132,7 +3132,7 @@ async function performOperatorReviewAction(input = {}) {
     return { ok: false, error: "Invalid review action." };
   }
   try {
-    const data = await dashboardPost("dashboard_action_review", {
+    const result = await dashboardRequestResult("POST", "dashboard_action_review", {
       action_id: actionId,
       account_id: accountId,
       operator_id: botappOperatorId(),
@@ -3144,9 +3144,40 @@ async function performOperatorReviewAction(input = {}) {
         operator_review_completed: true,
       },
     });
-    return { ok: true, data };
-  } catch {
-    return { ok: false, error: "Could not mark reviewed. Please try again." };
+    if (result.ok) {
+      return {
+        ok: true,
+        status: result.status,
+        reason: String(result.data?.reason || "review_recorded"),
+        message: "Review recorded. The linked incident is handled separately.",
+        data: result.data,
+      };
+    }
+    const backendReason = String(
+      result.data?.reason || result.data?.error_code || result.data?.code || ""
+    ).trim().toLowerCase();
+    const combinedReason = `${backendReason} ${String(result.error || "")}`.toLowerCase();
+    if (result.status === 409 && /already|terminal|resolved|reviewed/.test(combinedReason)) {
+      return { ok: false, status: 409, errorKind: "already_terminal", reason: backendReason || "already_terminal", message: "This action can no longer be marked reviewed because it is already terminal." };
+    }
+    if (result.status === 409 && /not[_ -]?reviewable|invalid[_ -]?status/.test(combinedReason)) {
+      return { ok: false, status: 409, errorKind: "not_reviewable", reason: backendReason || "not_reviewable", message: "This action is not in a reviewable state." };
+    }
+    if (result.status === 409 && /incident.*block|block.*incident/.test(combinedReason)) {
+      return { ok: false, status: 409, errorKind: "incident_still_blocking", reason: backendReason || "incident_still_blocking", message: `Incident remains blocking: ${backendReason || "review_required"}.` };
+    }
+    if (result.status === 409) {
+      return { ok: false, status: 409, errorKind: "conflict", reason: backendReason || "conflict", message: "The review state changed. Reload the incident and try again." };
+    }
+    if (result.status === 401 || result.status === 403) {
+      return { ok: false, status: result.status, errorKind: "unauthorized", reason: backendReason || "unauthorized", message: "Review could not be recorded because relay authorization failed." };
+    }
+    if (result.status === 0 || result.status >= 500) {
+      return { ok: false, status: result.status, errorKind: "backend_unavailable", reason: backendReason || "backend_unavailable", message: "Review backend is temporarily unavailable." };
+    }
+    return { ok: false, status: result.status, errorKind: "unknown_error", reason: backendReason || "unknown_error", message: "Review could not be recorded. Reload the incident and retry." };
+  } catch (error) {
+    return { ok: false, status: 0, errorKind: "backend_unavailable", reason: "backend_unavailable", message: safeRuntimeError(error, "Review backend is temporarily unavailable.") };
   }
 }
 
