@@ -17,6 +17,22 @@ export type ProfilesLivePatch = {
   runControlLabel?: string | null;
 };
 
+export type LiveCounterMergeDecision =
+  | "applied"
+  | "ignored_stale"
+  | "ignored_equal"
+  | "ignored_wrong_run"
+  | "ignored_missing_fields";
+
+export type LiveCounterMergeObservation = {
+  accountId: string;
+  decision: LiveCounterMergeDecision;
+  previous: ProfileRunCounters | undefined;
+  incoming: ProfileRunCounters | undefined;
+  next: ProfileRunCounters | undefined;
+  expectedRunId: string | null;
+};
+
 const activeStatuses = new Set(["pending", "queued", "claimed", "starting", "running", "stopping", "canceling"]);
 
 function isActive(patch: ProfilesLivePatch) {
@@ -42,26 +58,41 @@ export function mergeRevisionedRunCounters(
   current: ProfileRunCounters | undefined,
   incoming: ProfileRunCounters | undefined,
   patch: ProfilesLivePatch,
-) {
-  if (!incoming) return current;
+): { counters: ProfileRunCounters | undefined; decision: LiveCounterMergeDecision } {
+  if (!incoming) return { counters: current, decision: "ignored_missing_fields" };
   const incomingRunId = String(incoming.runId || "").trim() || null;
   const currentRunId = String(current?.runId || "").trim() || null;
   const expectedRunId = exactPatchRunId(patch);
-  if (expectedRunId && incomingRunId !== expectedRunId) return current;
+  if (expectedRunId && incomingRunId !== expectedRunId) {
+    return { counters: current, decision: "ignored_wrong_run" };
+  }
 
   const incomingRevision = counterRevision(incoming);
   const currentRevision = counterRevision(current);
   if (currentRunId && incomingRunId && currentRunId !== incomingRunId) {
-    return incomingRevision === null ? current : incoming;
+    return incomingRevision === null
+      ? { counters: current, decision: "ignored_missing_fields" }
+      : { counters: incoming, decision: "applied" };
   }
   if (incomingRevision === null) {
-    return currentRevision === null ? incoming : current;
+    return currentRevision === null
+      ? { counters: incoming, decision: "applied" }
+      : { counters: current, decision: "ignored_missing_fields" };
   }
-  if (currentRevision !== null && incomingRevision <= currentRevision) return current;
-  return incoming;
+  if (currentRevision !== null && incomingRevision < currentRevision) {
+    return { counters: current, decision: "ignored_stale" };
+  }
+  if (currentRevision !== null && incomingRevision === currentRevision) {
+    return { counters: current, decision: "ignored_equal" };
+  }
+  return { counters: incoming, decision: "applied" };
 }
 
-export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: ProfilesLivePatch[]): BotProfile[] {
+export function mergeProfilesLiveProjection(
+  profiles: BotProfile[],
+  patches: ProfilesLivePatch[],
+  observe?: (observation: LiveCounterMergeObservation) => void,
+): BotProfile[] {
   const byId = new Map(patches.map((patch) => [patch.accountId, patch]));
   return profiles.map((profile) => {
     const patch = byId.get(profile.id);
@@ -85,6 +116,15 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
       : profile.status === "running"
         ? (eligibility === "can_start" ? "ready" : "blocked")
         : profile.status;
+    const counterMerge = mergeRevisionedRunCounters(profile.currentRunCounters, patch.currentRunCounters, patch);
+    observe?.({
+      accountId: profile.id,
+      decision: counterMerge.decision,
+      previous: profile.currentRunCounters,
+      incoming: patch.currentRunCounters,
+      next: counterMerge.counters,
+      expectedRunId: exactPatchRunId(patch),
+    });
 
     return {
       ...profile,
@@ -96,7 +136,7 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
       runControlPhase: patch.runControlPhase ?? null,
       runControlLabel: patch.runControlLabel ?? null,
       runtimeIndicator: patch.runtimeIndicator ?? profile.runtimeIndicator,
-      currentRunCounters: mergeRevisionedRunCounters(profile.currentRunCounters, patch.currentRunCounters, patch),
+      currentRunCounters: counterMerge.counters,
       followerDelta3d: patch.followerDelta3d ?? profile.followerDelta3d,
       interactionsToday: Number.isFinite(patch.interactionsToday) ? Number(patch.interactionsToday) : profile.interactionsToday,
       counters: {

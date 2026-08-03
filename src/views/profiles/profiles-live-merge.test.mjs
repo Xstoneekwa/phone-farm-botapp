@@ -156,3 +156,27 @@ test("an unversioned payload cannot replace versioned state but legacy merges re
   const legacy = mergeProfilesLiveProjection([profile({ currentRunCounters: undefined })], [{ accountId: "account-1", currentRunCounters: unversioned }])[0];
   assert.deepEqual(legacy.currentRunCounters, unversioned);
 });
+
+test("renderer observability reports every revision merge decision without changing counters", () => {
+  const current = { follows: 12, likes: 8, unfollows: 0, comments: 0, dms: 0, stories: 0, interactionsTotal: 20, runId: "run-1", revision: 17 };
+  const cases = [
+    [{ ...current, follows: 13, revision: 18 }, "run-1", "applied", 13],
+    [{ ...current, follows: 99, revision: 16 }, "run-1", "ignored_stale", 12],
+    [{ ...current, follows: 99 }, "run-1", "ignored_equal", 12],
+    [{ ...current, follows: 99, runId: "run-old", revision: 99 }, "run-1", "ignored_wrong_run", 12],
+    [undefined, "run-1", "ignored_missing_fields", 12],
+  ];
+
+  for (const [incoming, activeRunId, expectedDecision, expectedFollows] of cases) {
+    const observations = [];
+    const result = mergeProfilesLiveProjection(
+      [profile({ currentRunCounters: current })],
+      [{ accountId: "account-1", activeRunId, currentRunCounters: incoming }],
+      (observation) => observations.push(observation),
+    )[0];
+    assert.equal(result.currentRunCounters.follows, expectedFollows);
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0].decision, expectedDecision);
+    assert.equal(observations[0].accountId, "account-1");
+  }
+});

@@ -148,7 +148,7 @@ interface Window {
       overview: () => Promise<{ ok: boolean; data: BotAppOverviewData; error?: string | null; profilesMeta?: { source: string; accountsCount: number; counts: Record<string, number> } | null }>;
       profilesLive: (input: { accountIds: string[] }) => Promise<{
         ok: boolean;
-        data: { profiles: import("./views/profiles/profiles-live-merge").ProfilesLivePatch[]; generatedAt: string; source: string; queryCount: number };
+        data: { profiles: import("./views/profiles/profiles-live-merge").ProfilesLivePatch[]; generatedAt: string; source: string; queryCount: number; httpStatus: number | null };
         error?: string | null;
       }>;
     };

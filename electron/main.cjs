@@ -3356,7 +3356,7 @@ async function dashboardGet(pathnameSuffix, routeParams = {}) {
   return readPayload(data);
 }
 
-async function dashboardGetWithQuery(endpointId, queryParams = {}, routeParams = {}) {
+async function dashboardGetWithQuery(endpointId, queryParams = {}, routeParams = {}, onResponse = null) {
   const cfg = compassConfig();
   const endpoint = endpointById(endpointId);
   const url = endpoint ? new URL(endpointUrl(endpoint, routeParams)) : new URL(dashboardApiUrl(endpointId));
@@ -3365,6 +3365,7 @@ async function dashboardGetWithQuery(endpointId, queryParams = {}, routeParams =
     if (normalized) url.searchParams.set(key, normalized);
   }
   const response = await fetch(url.toString(), { method: "GET", headers: relayHeaders(cfg) });
+  if (typeof onResponse === "function") onResponse(response.status);
   const data = await response.json().catch(() => null);
   if (!response.ok || data?.ok === false) throw new Error(readRelayError(data, `${endpointId} unavailable.`));
   return readPayload(data);
@@ -5795,8 +5796,13 @@ async function botappProfilesLiveData(input) {
   const accountIds = Array.isArray(input?.accountIds)
     ? [...new Set(input.accountIds.map((value) => String(value || "").trim()).filter(Boolean))].slice(0, 200)
     : [];
+  let httpStatus = null;
   try {
-    const payload = await dashboardGetWithQuery("profiles_live", { account_ids: accountIds.join(",") });
+    const payload = await dashboardGetWithQuery("profiles_live",
+      { account_ids: accountIds.join(",") },
+      {},
+      (status) => { httpStatus = Number(status) || null; },
+    );
     return serializeIpcPayload({
       ok: true,
       data: {
@@ -5804,13 +5810,14 @@ async function botappProfilesLiveData(input) {
         generatedAt: payload?.generated_at || new Date().toISOString(),
         source: String(payload?.source || "profiles_live_batched_v1"),
         queryCount: Number(payload?.query_count || 0),
+        httpStatus,
       },
       error: null,
     });
   } catch (error) {
     return serializeIpcPayload({
       ok: false,
-      data: { profiles: [], generatedAt: new Date().toISOString(), source: "profiles_live_unavailable", queryCount: 0 },
+      data: { profiles: [], generatedAt: new Date().toISOString(), source: "profiles_live_unavailable", queryCount: 0, httpStatus },
       error: safeRuntimeError(error, "Live Profiles projection unavailable."),
     });
   }

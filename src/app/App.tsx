@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { mockClient } from "../api/mock-client";
-import type { ActivityLogEntry, ApiKeySummary, AppSettings, AutoRestartControl, AutoRestartOverview, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotAppDispatcherHealth, BotAppRelayHealth, BotProfile, CompassActionTarget, CompassAnalyzeResult, CompassAiRuntimeStatus, CompassOverview, Device, DeviceProfileGroup, NotificationItem, WebhookSummary } from "../api/types";
+import type { ActivityLogEntry, ApiKeySummary, AppSettings, AutoRestartControl, AutoRestartOverview, BotAppClientAccountsOverview, BotAppCredentialsOverview, BotAppDispatcherHealth, BotAppRelayHealth, BotProfile, CompassActionTarget, CompassAnalyzeResult, CompassAiRuntimeStatus, CompassOverview, Device, DeviceProfileGroup, NotificationItem, ProfileRunCounters, WebhookSummary } from "../api/types";
 import { Modal, Toasts, type ToastItem } from "../design/components";
 import { Sidebar } from "../layout/Sidebar";
 import { TopBar } from "../layout/TopBar";
@@ -23,7 +23,7 @@ import { routes, type RouteId } from "./routes";
 import { shouldPollProfilesLiveCounters } from "../views/profiles/run-control";
 import { createProfilesAutoRefreshController, shouldPollProfiles } from "../views/profiles/profiles-auto-refresh";
 import type { ProfilesRefreshContext } from "../views/profiles/profiles-auto-refresh";
-import { mergeProfilesLiveProjection } from "../views/profiles/profiles-live-merge";
+import { mergeProfilesLiveProjection, type LiveCounterMergeDecision } from "../views/profiles/profiles-live-merge";
 import { createDevicesAutoRefreshController, shouldPollDevices } from "../views/devices-auto-refresh";
 import "./app.css";
 
@@ -46,6 +46,47 @@ export type BotAppOverviewData = AppData;
 
 const emptyData: AppData = { profiles: [], profileGroups: [], clientAccounts: null, credentials: null, compass: null, autoRestart: null, devices: [], notifications: [], logs: [], apiKeys: [], webhooks: [], settings: null };
 
+type LiveCounterTimelineDecision = LiveCounterMergeDecision | "ignored_wrong_account" | "polling_inactive";
+
+function liveCounterState(counters: ProfileRunCounters | undefined) {
+  return {
+    runId: String(counters?.runId || "").trim() || null,
+    revision: Number.isInteger(Number(counters?.revision)) ? Number(counters?.revision) : null,
+    follows: Number(counters?.follows || 0),
+    likes: Number(counters?.likes || 0),
+  };
+}
+
+function logLiveCounterTimeline(input: {
+  requestedAccountId: string | null;
+  payloadAccountId?: string | null;
+  expectedRunId?: string | null;
+  decision: LiveCounterTimelineDecision;
+  httpStatus?: number | null;
+  previous?: ProfileRunCounters;
+  incoming?: ProfileRunCounters;
+  next?: ProfileRunCounters;
+  source: string;
+}) {
+  console.info("[botapp] profiles_live_counter_timeline", {
+    timestamp: new Date().toISOString(),
+    requestedAccountId: input.requestedAccountId,
+    localRunId: liveCounterState(input.previous).runId,
+    localRevision: liveCounterState(input.previous).revision,
+    httpStatus: input.httpStatus ?? null,
+    payloadAccountId: input.payloadAccountId ?? null,
+    payloadRunId: liveCounterState(input.incoming).runId,
+    payloadRevision: liveCounterState(input.incoming).revision,
+    payloadFollows: liveCounterState(input.incoming).follows,
+    payloadLikes: liveCounterState(input.incoming).likes,
+    expectedRunId: input.expectedRunId ?? null,
+    decision: input.decision,
+    stateBefore: liveCounterState(input.previous),
+    stateAfter: liveCounterState(input.next),
+    source: input.source,
+  });
+}
+
 export function App() {
   const [active, setActive] = useState<RouteId>("overview");
   const [, setSelectedProfileId] = useState("prof_001");
@@ -66,12 +107,23 @@ export function App() {
   const profilesAutoRefreshRef = useRef<ReturnType<typeof createProfilesAutoRefreshController> | null>(null);
   const relayWasOperationalRef = useRef(false);
 
-  function applyOverviewData(nextData: AppData) {
+  function applyOverviewData(nextData: AppData, source = "overview") {
     const previousById = new Map(dataRef.current.profiles.map((profile) => [profile.id, profile]));
     for (const profile of nextData.profiles) {
       const previous = previousById.get(profile.id);
       const wasActive = previous ? shouldPollProfilesLiveCounters(previous) : false;
       const isActive = shouldPollProfilesLiveCounters(profile);
+      const previousState = liveCounterState(previous?.currentRunCounters);
+      const nextState = liveCounterState(profile.currentRunCounters);
+      if (previous && source !== "profiles_live" && JSON.stringify(previousState) !== JSON.stringify(nextState)) {
+        console.info("[botapp] profiles_live_counter_overwrite", {
+          timestamp: new Date().toISOString(),
+          accountId: profile.id,
+          source,
+          stateBefore: previousState,
+          stateAfter: nextState,
+        });
+      }
       if (previous && wasActive !== isActive) {
         console.info(`[botapp] profiles_runtime_${wasActive ? "active_to_idle" : "idle_to_active"}`, { profileId: profile.id });
       }
@@ -110,7 +162,7 @@ export function App() {
         || dataRef.current.devices.length
       );
       if (isLatest() && (result.ok || !hasUsableProjection)) {
-        applyOverviewData(nextData);
+        applyOverviewData(nextData, reason);
       }
       if (!isLatest()) return;
       setSyncError(result.error ?? null);
@@ -137,7 +189,7 @@ export function App() {
       apiKeys: apiKeys.ok ? apiKeys.data : [],
       webhooks: webhooks.ok ? webhooks.data : [],
       settings: settings.ok ? settings.data : null,
-    });
+    }, reason);
     setSyncError(null);
     setProfilesMeta(null);
     void loadDispatcherHealth();
@@ -150,22 +202,90 @@ export function App() {
       return;
     }
     const accountIds = dataRef.current.profiles.map((profile) => profile.id);
-    if (!window.botappDesktop?.data?.profilesLive || !accountIds.length) return;
+    if (!window.botappDesktop?.data?.profilesLive || !accountIds.length) {
+      logLiveCounterTimeline({
+        requestedAccountId: null,
+        decision: "polling_inactive",
+        source: !window.botappDesktop?.data?.profilesLive ? "bridge_unavailable" : "no_accounts",
+      });
+      return;
+    }
     console.info("[botapp] profiles_live_refresh", { reason, generation: context.generation, accounts: accountIds.length });
     const result = await window.botappDesktop.data.profilesLive({ accountIds });
+    const httpStatus = result.data.httpStatus ?? null;
     if (!context.isLatest()) {
       console.info("[botapp] profiles_stale_response_ignored", { reason, generation: context.generation });
+      for (const profile of dataRef.current.profiles) {
+        const incoming = result.data.profiles.find((patch) => patch.accountId === profile.id)?.currentRunCounters;
+        logLiveCounterTimeline({
+          requestedAccountId: profile.id,
+          payloadAccountId: incoming ? profile.id : null,
+          decision: "ignored_stale",
+          httpStatus,
+          previous: profile.currentRunCounters,
+          incoming,
+          next: profile.currentRunCounters,
+          source: "request_generation",
+        });
+      }
       return;
     }
     if (!result.ok) {
+      for (const profile of dataRef.current.profiles) {
+        logLiveCounterTimeline({
+          requestedAccountId: profile.id,
+          decision: "ignored_missing_fields",
+          httpStatus,
+          previous: profile.currentRunCounters,
+          next: profile.currentRunCounters,
+          source: "profiles_live_error",
+        });
+      }
       setSyncError(result.error || "Live Profiles projection unavailable.");
       return;
     }
+    const requestedAccountIds = new Set(accountIds);
+    for (const patch of result.data.profiles) {
+      if (requestedAccountIds.has(patch.accountId)) continue;
+      logLiveCounterTimeline({
+        requestedAccountId: null,
+        payloadAccountId: patch.accountId,
+        expectedRunId: patch.activeRunId || patch.runtimeIndicator?.lastRunId || null,
+        decision: "ignored_wrong_account",
+        httpStatus,
+        incoming: patch.currentRunCounters,
+        source: result.data.source,
+      });
+    }
+    const payloadAccountIds = new Set(result.data.profiles.map((patch) => patch.accountId));
+    for (const profile of dataRef.current.profiles) {
+      if (payloadAccountIds.has(profile.id)) continue;
+      logLiveCounterTimeline({
+        requestedAccountId: profile.id,
+        decision: "ignored_missing_fields",
+        httpStatus,
+        previous: profile.currentRunCounters,
+        next: profile.currentRunCounters,
+        source: result.data.source,
+      });
+    }
     const nextData = {
       ...dataRef.current,
-      profiles: mergeProfilesLiveProjection(dataRef.current.profiles, result.data.profiles),
+      profiles: mergeProfilesLiveProjection(dataRef.current.profiles, result.data.profiles, (observation) => {
+        logLiveCounterTimeline({
+          requestedAccountId: observation.accountId,
+          payloadAccountId: observation.accountId,
+          expectedRunId: observation.expectedRunId,
+          decision: observation.decision,
+          httpStatus,
+          previous: observation.previous,
+          incoming: observation.incoming,
+          next: observation.next,
+          source: result.data.source,
+        });
+      }),
     };
-    applyOverviewData(nextData);
+    applyOverviewData(nextData, "profiles_live");
     setSyncError(null);
   }
 
