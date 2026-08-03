@@ -587,6 +587,8 @@ export type ProfileRunCounters = {
   interactionsTotal: number;
   source?: string;
   runId?: string | null;
+  revision?: number;
+  updatedAt?: string | null;
   projectionSource?: string;
   lastProgressAt?: string | null;
   canonicalDailyCount?: Partial<ProfileRunCounters>;

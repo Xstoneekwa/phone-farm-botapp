@@ -5031,6 +5031,8 @@ function readCurrentRunCounters(account) {
     interactionsTotal: readCount("interactionsTotal", "interactions_total"),
     source: String(source?.source || ""),
     runId: source?.runId || source?.run_id || null,
+    revision: readNullableNumber(source?.revision),
+    updatedAt: source?.updatedAt || source?.updated_at || null,
     projectionSource: String(source?.projectionSource || source?.projection_source || source?.source || ""),
     lastProgressAt: source?.lastProgressAt || source?.last_progress_at || null,
     canonicalDailyCount: source?.canonicalDailyCount || source?.canonical_daily_count || null,

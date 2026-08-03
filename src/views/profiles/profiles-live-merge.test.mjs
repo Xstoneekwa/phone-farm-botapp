@@ -105,3 +105,54 @@ test("stopping remains active in grouped profiles until the terminal patch arriv
   assert.equal(projected.status, "running");
   assert.equal(projected.runControlPhase, "stopping");
 });
+
+test("accepts only a strictly newer revision for the exact active run", () => {
+  const currentRunCounters = { follows: 11, likes: 8, unfollows: 0, comments: 0, dms: 0, stories: 0, interactionsTotal: 19, runId: "run-1", revision: 16 };
+  const newer = { ...currentRunCounters, follows: 12, interactionsTotal: 20, revision: 17 };
+  const accepted = mergeProfilesLiveProjection([profile({ currentRunCounters })], [{ accountId: "account-1", activeRunId: "run-1", currentRunCounters: newer }])[0];
+  assert.deepEqual(accepted.currentRunCounters, newer);
+
+  for (const revision of [16, 15]) {
+    const stale = { ...newer, follows: 99, revision };
+    const ignored = mergeProfilesLiveProjection([profile({ currentRunCounters: newer })], [{ accountId: "account-1", activeRunId: "run-1", currentRunCounters: stale }])[0];
+    assert.deepEqual(ignored.currentRunCounters, newer);
+  }
+});
+
+test("rejects counters for a run other than the exact active run", () => {
+  const currentRunCounters = { follows: 4, likes: 3, unfollows: 0, comments: 0, dms: 0, stories: 0, interactionsTotal: 7, runId: "run-current", revision: 4 };
+  const wrongRun = { ...currentRunCounters, follows: 50, runId: "run-old", revision: 99 };
+  const result = mergeProfilesLiveProjection([profile({ currentRunCounters })], [{ accountId: "account-1", activeRunId: "run-current", currentRunCounters: wrongRun }])[0];
+  assert.deepEqual(result.currentRunCounters, currentRunCounters);
+});
+
+test("a new exact run resets revision and terminal final revision remains monotone", () => {
+  const oldRun = { follows: 10, likes: 9, unfollows: 0, comments: 0, dms: 0, stories: 0, interactionsTotal: 19, runId: "run-old", revision: 21 };
+  const newRun = { follows: 0, likes: 0, unfollows: 0, comments: 0, dms: 0, stories: 0, interactionsTotal: 0, runId: "run-new", revision: 0 };
+  const reset = mergeProfilesLiveProjection([profile({ currentRunCounters: oldRun })], [{ accountId: "account-1", activeRunId: "run-new", currentRunCounters: newRun }])[0];
+  assert.deepEqual(reset.currentRunCounters, newRun);
+
+  const terminal = { ...newRun, follows: 10, likes: 9, interactionsTotal: 19, revision: 19 };
+  const finalized = mergeProfilesLiveProjection([reset], [{ accountId: "account-1", runtimeIndicator: { state: "idle", reason: "completed", lastRunId: "run-new" }, currentRunCounters: terminal }])[0];
+  assert.deepEqual(finalized.currentRunCounters, terminal);
+});
+
+test("reload accepts an initial versioned snapshot and never invents an optimistic increment", () => {
+  const snapshot = { follows: 12, likes: 8, unfollows: 0, comments: 0, dms: 0, stories: 0, interactionsTotal: 20, runId: "run-1", revision: 17 };
+  const loaded = mergeProfilesLiveProjection([profile({ currentRunCounters: undefined })], [{ accountId: "account-1", activeRunId: "run-1", currentRunCounters: snapshot }])[0];
+  assert.deepEqual(loaded.currentRunCounters, snapshot);
+
+  const unchanged = mergeProfilesLiveProjection([loaded], [{ accountId: "account-1", activeRunId: "run-1" }])[0];
+  assert.deepEqual(unchanged.currentRunCounters, snapshot);
+});
+
+test("an unversioned payload cannot replace versioned state but legacy merges remain compatible", () => {
+  const versioned = { follows: 12, likes: 8, unfollows: 0, comments: 0, dms: 0, stories: 0, interactionsTotal: 20, runId: "run-1", revision: 17 };
+  const unversioned = { ...versioned, follows: 99 };
+  delete unversioned.revision;
+  const protectedResult = mergeProfilesLiveProjection([profile({ currentRunCounters: versioned })], [{ accountId: "account-1", activeRunId: "run-1", currentRunCounters: unversioned }])[0];
+  assert.deepEqual(protectedResult.currentRunCounters, versioned);
+
+  const legacy = mergeProfilesLiveProjection([profile({ currentRunCounters: undefined })], [{ accountId: "account-1", currentRunCounters: unversioned }])[0];
+  assert.deepEqual(legacy.currentRunCounters, unversioned);
+});

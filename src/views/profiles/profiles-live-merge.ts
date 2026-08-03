@@ -29,6 +29,38 @@ function isDashboardBlockReason(reason: string) {
   return /operator_review_required|blocking_dashboard_action|scheduler_launch_blocked/.test(reason.toLowerCase());
 }
 
+function counterRevision(counters: ProfileRunCounters | undefined) {
+  const revision = Number(counters?.revision);
+  return Number.isInteger(revision) && revision >= 0 ? revision : null;
+}
+
+function exactPatchRunId(patch: ProfilesLivePatch) {
+  return String(patch.activeRunId || patch.runtimeIndicator?.lastRunId || "").trim() || null;
+}
+
+export function mergeRevisionedRunCounters(
+  current: ProfileRunCounters | undefined,
+  incoming: ProfileRunCounters | undefined,
+  patch: ProfilesLivePatch,
+) {
+  if (!incoming) return current;
+  const incomingRunId = String(incoming.runId || "").trim() || null;
+  const currentRunId = String(current?.runId || "").trim() || null;
+  const expectedRunId = exactPatchRunId(patch);
+  if (expectedRunId && incomingRunId !== expectedRunId) return current;
+
+  const incomingRevision = counterRevision(incoming);
+  const currentRevision = counterRevision(current);
+  if (currentRunId && incomingRunId && currentRunId !== incomingRunId) {
+    return incomingRevision === null ? current : incoming;
+  }
+  if (incomingRevision === null) {
+    return currentRevision === null ? incoming : current;
+  }
+  if (currentRevision !== null && incomingRevision <= currentRevision) return current;
+  return incoming;
+}
+
 export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: ProfilesLivePatch[]): BotProfile[] {
   const byId = new Map(patches.map((patch) => [patch.accountId, patch]));
   return profiles.map((profile) => {
@@ -64,7 +96,7 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
       runControlPhase: patch.runControlPhase ?? null,
       runControlLabel: patch.runControlLabel ?? null,
       runtimeIndicator: patch.runtimeIndicator ?? profile.runtimeIndicator,
-      currentRunCounters: patch.currentRunCounters ?? profile.currentRunCounters,
+      currentRunCounters: mergeRevisionedRunCounters(profile.currentRunCounters, patch.currentRunCounters, patch),
       followerDelta3d: patch.followerDelta3d ?? profile.followerDelta3d,
       interactionsToday: Number.isFinite(patch.interactionsToday) ? Number(patch.interactionsToday) : profile.interactionsToday,
       counters: {
