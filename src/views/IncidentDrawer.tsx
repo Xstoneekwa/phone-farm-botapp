@@ -72,6 +72,24 @@ function actionErrorMessage(result: { status?: number; error?: string } | undefi
   return result?.error || "Incident action failed.";
 }
 
+function incidentResolutionMessage(data: Record<string, unknown> | undefined): { ok: boolean; message: string } {
+  if (data?.incident_resolved !== true || data?.dashboard_action_resolved !== true) {
+    return { ok: false, message: "Incident resolution did not synchronize the canonical incident and dashboard action." };
+  }
+  if (data?.resume_authorization_created !== true) {
+    const reason = stringField(data, "blocked_reason") || "resume_authorization_not_created";
+    return { ok: false, message: `Incident resolved, but automatic recovery is not authorized: ${reason}.` };
+  }
+  if (data?.next_tick_eligible !== true) {
+    const reason = stringField(data, "blocked_reason") || "next_tick_not_eligible";
+    return { ok: false, message: `Incident resolved and recovery authorized, but the next scheduler tick is blocked: ${reason}.` };
+  }
+  return {
+    ok: true,
+    message: "Incident resolved. The account is eligible for automatic recovery on the next scheduler tick.",
+  };
+}
+
 export function IncidentDrawer({
   open,
   incidentId,
@@ -181,7 +199,10 @@ export function IncidentDrawer({
         setActionProof({ action, ok: false, message });
         return;
       }
-      setActionProof({ action, ok: true, message: `Action ${action} recorded.`, status: typeof result.data?.status === "string" ? result.data.status : null });
+      const resolution = action === "resolve"
+        ? incidentResolutionMessage(result.data)
+        : { ok: true, message: `Action ${action} recorded.` };
+      setActionProof({ action, ok: resolution.ok, message: resolution.message, status: typeof result.data?.status === "string" ? result.data.status : null });
       if (result.data?.detail) {
         const parsed = parseIncidentDetail(result.data.detail);
         if (parsed.ok) setDetail(parsed.data);

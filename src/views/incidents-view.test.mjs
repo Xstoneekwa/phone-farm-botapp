@@ -295,6 +295,18 @@ test("drawer keeps a simple resolve action and drops the dead resume flag", () =
   assert.doesNotMatch(drawerSource, /resume_scheduling/);
 });
 
+test("BotApp resolution binds corrected runtime identity and reports exact recovery truth", () => {
+  assert.match(electronMainSource, /expected_worker_sha: expectedWorkerSha/);
+  assert.match(electronMainSource, /cause_fixed_version: causeFixedVersion/);
+  assert.match(electronMainSource, /corrected_worker_runtime_not_certified/);
+  assert.match(drawerSource, /incident_resolved/);
+  assert.match(drawerSource, /dashboard_action_resolved/);
+  assert.match(drawerSource, /resume_authorization_created/);
+  assert.match(drawerSource, /next_tick_eligible/);
+  assert.match(drawerSource, /blocked_reason/);
+  assert.match(drawerSource, /Incident resolved\. The account is eligible for automatic recovery on the next scheduler tick\./);
+});
+
 test("drawer exposes linked operator review as a separate confirmed workflow", () => {
   assert.match(drawerSource, /operatorReviewAction/);
   assert.match(drawerSource, /Mark reviewed/);

@@ -3106,6 +3106,24 @@ async function performIncidentAction(input = {}) {
     return { ok: false, error: "incident_action_payload_invalid" };
   }
   try {
+    let expectedWorkerSha = null;
+    let causeFixedVersion = null;
+    if (action === "resolve") {
+      const runtime = await dispatcherStatus();
+      expectedWorkerSha = String(runtime?.runtimeCommit || "").trim().toLowerCase();
+      const runtimeHealthy = runtime?.processRunning === true
+        && !runtime?.duplicateProcess
+        && !["runtime_root_invalid", "runtime_root_mismatch", "stopped", "unhealthy"].includes(String(runtime?.status || ""));
+      if (!runtimeHealthy || !/^[0-9a-f]{40}$/.test(expectedWorkerSha)) {
+        return {
+          ok: false,
+          status: 409,
+          error: "Incident resolution is blocked because the corrected Worker runtime identity is not certified.",
+          reason: "corrected_worker_runtime_not_certified",
+        };
+      }
+      causeFixedVersion = `worker:${expectedWorkerSha}`;
+    }
     const result = await dashboardRequestResult("POST", "incidents_action", {
       incident_id: incidentId,
       action,
@@ -3116,6 +3134,8 @@ async function performIncidentAction(input = {}) {
       channel: String(input?.channel || "").trim() || null,
       notification_id: String(input?.notification_id || "").trim() || null,
       idempotency_key: String(input?.idempotency_key || "").trim() || undefined,
+      expected_worker_sha: expectedWorkerSha,
+      cause_fixed_version: causeFixedVersion,
     });
     if (!result.ok) return { ok: false, status: result.status, error: result.error || "Incident action failed." };
     return { ok: true, status: result.status, data: result.data };
