@@ -6,7 +6,6 @@ import { resolveAddProfileCredentialsState } from "../add-profile-credentials";
 type AddProfileStep = 0 | 1 | 2 | 3 | 4 | 5;
 type LoginMethod = "manual" | "credentials";
 type RuntimeMode = "safe_setup" | "follow_only_test" | "full_cycle" | "outreach_only";
-type CommercialPackage = "growth" | "pro" | "premium" | "custom" | "internal_test";
 type UsernameVerification = {
   status: string;
   normalized_username: string | null;
@@ -96,15 +95,8 @@ type AddProfileSubmitResult = {
   partial?: boolean;
 };
 
-const steps = ["Device", "Account", "App Instance", "Package & Add-ons", "Schedule", "Review"];
-
-const packageOptions: Array<{ value: CommercialPackage; label: string; detail: string; commercialCode: string; selectable: boolean }> = [
-  { value: "growth", label: "Growth", detail: "Production Growth package. Full-cycle ready; Outreach remains optional.", commercialCode: "growth", selectable: true },
-  { value: "pro", label: "Pro", detail: "Production Pro package with Welcome enabled by default. Outreach remains optional.", commercialCode: "pro", selectable: true },
-  { value: "premium", label: "Premium", detail: "Production Premium package with advanced targeting defaults. Outreach remains optional.", commercialCode: "premium", selectable: true },
-  { value: "custom", label: "Custom", detail: "Operator-defined package; uses Pro defaults until Custom wiring ships.", commercialCode: "pro", selectable: true },
-  { value: "internal_test", label: "Internal Test", detail: "Admin/test accounts. No auto-run.", commercialCode: "internal_test", selectable: true },
-];
+const steps = ["Owner & Device", "Account", "App Instance", "Entitlement", "Schedule", "Review"];
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const runtimeOptions: Array<{ value: RuntimeMode; label: string; detail: string }> = [
   { value: "safe_setup", label: "Safe Setup", detail: "Assignment + settings only. No run/login." },
@@ -113,18 +105,11 @@ const runtimeOptions: Array<{ value: RuntimeMode; label: string; detail: string 
   { value: "outreach_only", label: "Outreach Only", detail: "Outreach schedule profile. No auto-run from Add Profile." },
 ];
 
-const addonOptions = [
-  { value: "extra_ct_research", label: "Extra CT research", wired: false },
-  { value: "extra_outreach_volume", label: "Extra outreach volume", wired: true },
-  { value: "priority_warmup", label: "Priority warmup", wired: false },
-  { value: "advanced_reporting", label: "Advanced reporting", wired: false },
-  { value: "manual_ops_support", label: "Manual ops support", wired: false },
-  { value: "custom_package_addon", label: "Custom package add-on", wired: false },
-];
-
 function defaultForm(groups: DeviceProfileGroup[]) {
   const firstGroup = groups[0];
   return {
+    client_id: "",
+    idempotency_key: crypto.randomUUID(),
     device_id: firstGroup?.deviceId ?? "",
     app_instance_id: "",
     username: "",
@@ -133,18 +118,12 @@ function defaultForm(groups: DeviceProfileGroup[]) {
     display_name: "",
     internal_label: "",
     notes: "",
-    login_method: "manual" as LoginMethod,
-    commercial_package: "growth" as CommercialPackage,
-    addons: [] as string[],
+    login_method: "credentials" as LoginMethod,
     runtime_mode: "safe_setup" as RuntimeMode,
     schedule_mode: "scheduled" as "scheduled" | "manual_only",
     starts_at: "",
     ends_at: "",
   };
-}
-
-function packageLabel(value: CommercialPackage) {
-  return packageOptions.find((item) => item.value === value)?.label ?? value;
 }
 
 function readString(row: Record<string, unknown>, key: string, fallback = "") {
@@ -455,14 +434,12 @@ export function AddProfileDrawer({
   const selectedDevice = useMemo(() => setupDevices.find((device) => device.id === form.device_id) ?? setupDevices[0], [form.device_id, setupDevices]);
   const appInstances = selectedDevice?.app_instances ?? [];
   const selectedApp = appInstances.find((app) => app.app_instance_id === form.app_instance_id) ?? appInstances.find((app) => app.selectable);
-  const selectedPackage = packageOptions.find((item) => item.value === form.commercial_package) ?? packageOptions[0];
   const selectedRuntime = runtimeOptions.find((item) => item.value === form.runtime_mode) ?? runtimeOptions[0];
   const selectedSlot = scheduleSlots?.slots.find((slot) => (
     form.schedule_mode === "manual_only"
       ? slot.schedule_mode === "manual_only"
       : slot.schedule_mode !== "manual_only" && slot.starts_at === form.starts_at && slot.ends_at === form.ends_at
   )) ?? null;
-  const selectedAddons = addonOptions.filter((addon) => form.addons.includes(addon.value));
   const scheduleTimezone = scheduleSlots?.timezone || "Europe/Paris";
   const credentialsRequested = form.login_method === "credentials" && Boolean(form.password.trim());
 
@@ -579,10 +556,10 @@ export function AddProfileDrawer({
   }
 
   function canMoveNext() {
-    if (step === 0) return Boolean(selectedDevice);
-    if (step === 1) return verification?.status === "found";
+    if (step === 0) return UUID_PATTERN.test(form.client_id.trim()) && Boolean(selectedDevice);
+    if (step === 1) return verification?.status === "found" && Boolean(form.password.trim());
     if (step === 2) return Boolean(selectedApp?.selectable);
-    if (step === 3) return Boolean(selectedPackage.selectable && form.runtime_mode);
+    if (step === 3) return Boolean(form.runtime_mode);
     if (step === 4) return Boolean(selectedSlot?.available);
     return Boolean(selectedDevice && selectedApp && selectedSlot);
   }
@@ -595,7 +572,6 @@ export function AddProfileDrawer({
     if (!selectedDevice) return "missing_device";
     if (!selectedApp) return "missing_app_instance";
     if (!selectedApp.selectable) return "app_instance_unavailable";
-    if (!selectedPackage.selectable) return "package_unavailable";
     if (!form.runtime_mode) return "missing_runtime_mode";
     if (!selectedSlot?.available) return "missing_schedule";
     return null;
@@ -611,7 +587,6 @@ export function AddProfileDrawer({
       missing_device: "Cannot create yet: device is missing.",
       missing_app_instance: "Cannot create yet: app instance is missing.",
       app_instance_unavailable: "Cannot create yet: selected app instance is unavailable.",
-      package_unavailable: "Cannot create yet: selected package is unavailable.",
       missing_runtime_mode: "Cannot create yet: runtime mode is missing.",
       missing_schedule: "Cannot create yet: schedule selection is missing.",
     }[reason] ?? `Cannot create yet: ${reason}.`;
@@ -669,6 +644,9 @@ export function AddProfileDrawer({
     }
     const payload = {
       endpoint_contract: "/api/instagram-dashboard/accounts/create",
+      client_id: form.client_id.trim(),
+      idempotency_key: form.idempotency_key,
+      dry_run: mode === "dry_run",
       mode: mode === "create" ? "backend_real_write" : "backend_dry_run",
       username: verification?.normalized_username || form.username.trim().toLowerCase(),
       login_method: credentialsRequested ? "credentials" : "manual",
@@ -687,9 +665,6 @@ export function AddProfileDrawer({
       clone_mode: selectedApp ? selectedApp.instance_type === "primary_app" ? "primary_app" : `clone_${selectedApp.instance_index}` : "",
       template_mode: "default",
       template_id: "",
-      commercial_package: form.commercial_package,
-      commercial_package_code: selectedPackage.commercialCode,
-      addons: form.addons,
       runtime_mode: form.runtime_mode,
       schedule_mode: form.schedule_mode,
       starts_at: form.schedule_mode === "scheduled" ? form.starts_at : null,
@@ -755,16 +730,19 @@ export function AddProfileDrawer({
       status: credentialsState.globalStatus,
       steps: current.steps.map((item) => {
         if (item.id === "save_credentials") return { ...item, status: credentialsState.saveStepStatus };
-        return { ...item, status: "done" };
+        if (item.id === "create_account") return { ...item, status: "done" };
+        return { ...item, status: "pending" };
       }),
       logs: [
         ...current.logs,
         { timestamp: progressTime(), phase: "PERSIST", message: `Created account ${accountId}.` },
         { timestamp: progressTime(), phase: "CREDENTIALS", message: credentialsState.credentialsLogMessage },
-        { timestamp: progressTime(), phase: "SYNC", message: "Backend returned account setup confirmation." },
-        { timestamp: progressTime(), phase: "DONE", message: credentialsState.globalStatus === "partial" ? `Add Profile partial for @${resolvedUsername}.` : `Add Profile complete for @${resolvedUsername}.` },
+        { timestamp: progressTime(), phase: "GATE", message: "Assignment, Auto Login, readiness and scheduler remain blocked until protection, targeting and 15 eligible CTs are complete." },
+        { timestamp: progressTime(), phase: "DONE", message: credentialsState.globalStatus === "partial" ? `Onboarding partial for @${resolvedUsername}.` : `Canonical onboarding started for @${resolvedUsername}.` },
       ],
-      message: credentialsState.footerMessage,
+      message: credentialsState.globalStatus === "partial"
+        ? credentialsState.footerMessage
+        : "Canonical onboarding started. Complete protection, targeting and the 15-CT gate before assignment/readiness.",
     } : current);
     setShowConfirm(false);
   }
@@ -788,6 +766,11 @@ export function AddProfileDrawer({
 
         {step === 0 ? (
           <div className="add-profile-options">
+            <label className="settings-row-block">
+              <span>Client owner ID · required</span>
+              <Input value={form.client_id} onChange={(value) => updateField("client_id", value)} placeholder="client UUID" />
+              <small>The backend verifies the client, BotApp operator identity and an existing reserved entitlement. No fallback owner is allowed.</small>
+            </label>
             {setupLoading ? <div className="empty-state">Loading device inventory from shared backend...</div> : null}
             {setupError ? <div className="ig-profile-message">{setupError}</div> : null}
             {setupDevices.map((device) => (
@@ -812,10 +795,9 @@ export function AddProfileDrawer({
             <label className="settings-row-block">
               <span>Login method</span>
               <select className="input" value={form.login_method} onChange={(event) => updateField("login_method", event.target.value as LoginMethod)}>
-                <option value="manual">manual</option>
                 <option value="credentials">credentials</option>
               </select>
-              <small>{form.login_method === "credentials" ? "Credentials will be securely saved during account creation. No login, provisioning, or run will start." : "No password collected; login remains a later manual step."}</small>
+              <small>Credentials are stored write-only by the canonical onboarding transaction. No login, provisioning, or run will start.</small>
             </label>
             {form.login_method === "credentials" ? (
               <label className="settings-row-block">
@@ -863,22 +845,16 @@ export function AddProfileDrawer({
 
         {step === 3 ? (
           <div className="add-profile-package-step">
-            <section className="drawer-section"><h4>Package</h4><div className="add-profile-options">{packageOptions.map((item) => (
-              <button key={item.value} type="button" className={form.commercial_package === item.value ? "add-profile-option active" : "add-profile-option"} disabled={!item.selectable} onClick={() => updateField("commercial_package", item.value)}>
-                <strong>{item.label}</strong><span>{item.detail}</span>
-              </button>
-            ))}</div></section>
+            <section className="drawer-section">
+              <h4>Canonical entitlement</h4>
+              <p className="ig-profile-message">Growth, Pro or Premium is derived server-side from the latest reserved entitlement for the selected client. BotApp cannot override package truth.</p>
+            </section>
             <section className="drawer-section"><h4>Runtime mode</h4><div className="add-profile-options">{runtimeOptions.map((item) => (
               <button key={item.value} type="button" className={form.runtime_mode === item.value ? "add-profile-option active" : "add-profile-option"} onClick={() => updateField("runtime_mode", item.value)}>
                 <strong>{item.label}</strong><span>{item.detail}</span>
               </button>
             ))}</div></section>
-            <section className="drawer-section"><h4>Add-ons</h4><div className="add-profile-options">{addonOptions.map((item) => (
-              <button key={item.value} type="button" className={form.addons.includes(item.value) ? "add-profile-option active" : "add-profile-option"} disabled={!item.wired} onClick={() => setForm((current) => ({ ...current, addons: current.addons.includes(item.value) ? current.addons.filter((addon) => addon !== item.value) : [...current.addons, item.value] }))}>
-                <strong>{item.label}</strong><span>{item.wired ? "Included when selected" : "Planned · not wired yet"}</span>
-              </button>
-            ))}</div></section>
-            <p className="ig-profile-message">No package or add-on launches login, provisioning, runner, DM, follow, or unfollow.</p>
+            <p className="ig-profile-message">Package and add-ons are read from the reserved entitlement. BotApp cannot create or override them, and it launches no login, provisioning, runner, DM, follow, or unfollow.</p>
           </div>
         ) : null}
 
@@ -912,14 +888,15 @@ export function AddProfileDrawer({
 
         {step === 5 ? (
           <dl className="add-profile-review">
+            <div><dt>Client owner</dt><dd>{form.client_id}</dd></div>
             <div><dt>Username</dt><dd>{verification?.normalized_username || form.username || "-"} · {verification?.status || "pending_verification"}</dd></div>
             <div><dt>Email provided</dt><dd>{form.email.trim() ? "yes" : "no"}</dd></div>
             <div><dt>Device</dt><dd>{selectedDevice?.device_name || "-"} · {selectedDevice?.adb_serial_display || "serial masked"}</dd></div>
             <div><dt>App instance</dt><dd>{selectedApp?.label || "-"} · index {selectedApp?.instance_index ?? "-"}</dd></div>
             <div><dt>Credentials</dt><dd>{credentialsRequested ? "will be saved securely during creation" : "not submitted"}</dd></div>
-            <div><dt>Package</dt><dd>{packageLabel(form.commercial_package)} · {selectedPackage.commercialCode}</dd></div>
+            <div><dt>Package</dt><dd>Resolved from client_account_entitlements by the canonical backend engine</dd></div>
             <div><dt>Runtime mode</dt><dd>{selectedRuntime.label}</dd></div>
-            <div><dt>Add-ons</dt><dd>{selectedAddons.length ? selectedAddons.map((addon) => addon.label).join(", ") : "none"}</dd></div>
+            <div><dt>Add-ons</dt><dd>Resolved from the same reserved entitlement; no local override</dd></div>
             <div><dt>Schedule</dt><dd>{form.schedule_mode === "manual_only" ? "Manual-only · no scheduled window" : `${selectedSlot?.label || selectedSlot?.local_label || "-"} · ${scheduleTimezone}`} · {selectedSlot?.reason || "not_selected"}</dd></div>
             <div><dt>Safety</dt><dd>No login / no provisioning / no run. Credentials save is Vault-backed and write-only.</dd></div>
             <div><dt>Submit contract</dt><dd>POST `/api/instagram-dashboard/accounts/create` through shared backend.</dd></div>
@@ -932,7 +909,7 @@ export function AddProfileDrawer({
       <div className="add-profile-confirm-backdrop" role="presentation" onMouseDown={() => setShowConfirm(false)}>
         <section className="add-profile-confirm" role="dialog" aria-modal="true" aria-labelledby="add-profile-confirm-title" onMouseDown={(event) => event.stopPropagation()}>
           <h3 id="add-profile-confirm-title">Create this profile?</h3>
-          <p>Create account, settings, assignment, and optional credentials in one backend call. No login, provisioning, or run will start.</p>
+          <p>Start canonical onboarding and save write-only credentials. Device/schedule intent stays deferred until protection lists, targeting and 15 eligible CTs are complete. No login, provisioning, or run will start.</p>
           {credentialsRequested ? <p className="ig-profile-message">Credentials will be securely saved during account creation. Password remains write-only and is not returned.</p> : null}
           {submitState.message ? <p className="ig-profile-message">{submitState.message}</p> : null}
           <div className="add-profile-confirm-actions">

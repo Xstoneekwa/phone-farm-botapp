@@ -1063,7 +1063,9 @@ export function ProfilesView({
               ? resolveAddProfileCredentialsState(result.data as Record<string, unknown> | undefined, credentialsRequested, resolvedUsername)
               : null;
             const message = mode === "create"
-              ? credentialsState?.footerMessage || `Profile created: @${resolvedUsername}`
+              ? credentialsState?.globalStatus === "partial"
+                ? credentialsState.footerMessage
+                : `Canonical onboarding started: @${resolvedUsername} · complete protection, targeting and 15 eligible CTs before assignment/readiness.`
               : `Add Profile dry-run OK: @${resolvedUsername} · ${String(account.status || "validated")} · no mutation executed.`;
             onMockSubmit(message, mode === "create" ? (credentialsState?.globalStatus === "partial" ? "error" : "success") : "info");
             return { ok: true, message, data: result.data as Record<string, unknown> | undefined };

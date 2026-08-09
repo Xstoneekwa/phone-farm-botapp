@@ -4207,6 +4207,9 @@ function normalizeTargetIds(input) {
 
 function sanitizeAddProfilePayload(input) {
   const allowed = [
+    "client_id",
+    "idempotency_key",
+    "dry_run",
     "username",
     "password",
     "email",
