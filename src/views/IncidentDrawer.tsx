@@ -3,7 +3,9 @@ import { Badge, Drawer } from "../design/components";
 import { parseIncidentDetail, type IncidentDetail, type IncidentNotification } from "./incident-detail-contract";
 import {
   authorizationStatusCopy,
+  canMarkOperatorReviewed,
   incidentStateCopy,
+  isOperatorReviewRecorded,
   isArmedOrPendingRecovery,
   recoveryReasonCopy,
   resolveButtonLabel,
@@ -236,7 +238,11 @@ export function IncidentDrawer({
         return;
       }
       setConfirmingReview(false);
-      setActionProof({ action: "mark_reviewed", ok: true, message: "Operator review recorded.", status: "resolved" });
+      const backendStatus = stringField(result.data, "status") || "acknowledged";
+      const backendMessage = stringField(result.data, "message")
+        || result.message
+        || "Human review recorded. Resolve after verification remains a separate action.";
+      setActionProof({ action: "mark_reviewed", ok: true, message: backendMessage, status: backendStatus });
       await reload();
       onChanged?.();
       onProfilesChanged?.();
@@ -263,6 +269,10 @@ export function IncidentDrawer({
   const recoveryReason = recoveryReasonCopy(recovery?.reason ?? null);
   const recoveryStateText = recoveryStateLabel(recovery);
   const operatorReviewAction = detail?.operatorReviewAction;
+  const operatorReviewActionStatus = operatorReviewAction?.status ?? null;
+  const operatorReviewRecorded = isOperatorReviewRecorded(operatorReviewActionStatus)
+    || incident?.operatorReviewStatus === "reviewed";
+  const operatorReviewMarkable = Boolean(operatorReviewAction && canMarkOperatorReviewed(operatorReviewActionStatus));
   const incidentState = incidentStateCopy(incident?.displayState || incident?.status || "open");
 
   if (!open) return null;
@@ -286,7 +296,7 @@ export function IncidentDrawer({
           </div>
           <p>{stringField(incident, "summary") || "No additional summary was recorded."}</p>
           <dl className="incident-drawer-meta" data-testid="incident-drawer-detail-ready">
-            <div><dt>{incident.operatorReviewStatus === "pending" ? "Action required" : "Review status"}</dt><dd>{incident.operatorReviewStatus === "reviewed" ? "Reviewed" : stringField(incident, "actionRequired") || "No operator action pending"}</dd></div>
+            <div><dt>{operatorReviewRecorded ? "Review status" : "Action required"}</dt><dd>{operatorReviewRecorded ? "Reviewed — incident resolution still required" : stringField(incident, "actionRequired") || "No operator action pending"}</dd></div>
             <div><dt>Account</dt><dd>{incident.accountUsername || "—"}</dd></div>
             <div><dt>Device</dt><dd>{stringField(device, "label") || "—"}</dd></div>
             <div><dt>Host</dt><dd>{stringField(device, "hostMachine") || "—"}</dd></div>
@@ -331,7 +341,11 @@ export function IncidentDrawer({
           </section>
           {operatorReviewAction ? (
             <section className="incident-drawer-operator-review" data-testid="incident-drawer-operator-review">
-              {confirmingReview ? <div role="group" aria-label="Confirm operator review"><p>Confirm this action has been reviewed by a human operator.</p><label className="incident-drawer-note">Review note (optional)<textarea data-testid="botapp-operator-review-note" value={reviewNote} maxLength={500} rows={2} disabled={Boolean(acting)} onChange={(event) => setReviewNote(event.target.value)} /></label><div className="incident-drawer-actions"><button type="button" className="btn btn-primary" data-testid="botapp-operator-review-confirm" disabled={Boolean(acting)} onClick={() => void markOperatorReviewed()}>{acting === "mark_reviewed" ? "Marking…" : "Confirm review"}</button><button type="button" className="btn btn-secondary" disabled={Boolean(acting)} onClick={() => setConfirmingReview(false)}>Cancel</button></div></div> : <button type="button" className="btn btn-primary" data-testid="botapp-operator-review-mark" disabled={Boolean(acting)} onClick={() => setConfirmingReview(true)}>Mark reviewed</button>}
+              {operatorReviewRecorded ? (
+                <p data-testid="botapp-operator-review-recorded">Human review recorded. The incident remains active until Resolve after verification is confirmed.</p>
+              ) : operatorReviewMarkable ? (
+                confirmingReview ? <div role="group" aria-label="Confirm operator review"><p>Confirm this action has been reviewed by a human operator. This does not resolve the incident.</p><label className="incident-drawer-note">Review note (optional)<textarea data-testid="botapp-operator-review-note" value={reviewNote} maxLength={500} rows={2} disabled={Boolean(acting)} onChange={(event) => setReviewNote(event.target.value)} /></label><div className="incident-drawer-actions"><button type="button" className="btn btn-primary" data-testid="botapp-operator-review-confirm" disabled={Boolean(acting)} onClick={() => void markOperatorReviewed()}>{acting === "mark_reviewed" ? "Marking…" : "Confirm review"}</button><button type="button" className="btn btn-secondary" disabled={Boolean(acting)} onClick={() => setConfirmingReview(false)}>Cancel</button></div></div> : <button type="button" className="btn btn-primary" data-testid="botapp-operator-review-mark" disabled={Boolean(acting)} onClick={() => setConfirmingReview(true)}>Mark reviewed</button>
+              ) : null}
             </section>
           ) : null}
           {detail.lifecycle.addNoteSupported ? <label className="incident-drawer-note">Operator note<textarea data-testid="botapp-incident-operator-note" value={resolutionNote} maxLength={1000} onChange={(event) => setResolutionNote(event.target.value)} rows={3} /></label> : null}

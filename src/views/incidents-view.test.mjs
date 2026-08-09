@@ -5,11 +5,13 @@ import { URL } from "node:url";
 import {
   INCIDENTS_LIST_STATUS,
   INCIDENTS_REFRESH_INTERVAL_MS,
+  canMarkOperatorReviewed,
   countIncidents,
   deliveryCopy,
   emptyIncidentCopy,
   incidentLoadErrorCopy,
   incidentStateCopy,
+  isOperatorReviewRecorded,
   isArmedOrPendingRecovery,
   normalizeIncidentList,
   normalizeGlobalIncidentCounters,
@@ -98,6 +100,24 @@ test("normalizeIncidentRow derives action_required from open + action", () => {
     action_required: "human_verification_required",
   });
   assert.equal(row.displayState, "action_required");
+});
+
+test("canonical resolved status overrides a stale action-required display state", () => {
+  const row = normalizeIncidentRow({
+    id: "resolved-with-historical-action",
+    status: "resolved",
+    displayState: "action_required",
+    action_required: "legacy operator action",
+  });
+  assert.equal(row.displayState, "resolved");
+});
+
+test("review acknowledgement is recorded but cannot be submitted twice", () => {
+  assert.equal(isOperatorReviewRecorded("acknowledged"), true);
+  assert.equal(canMarkOperatorReviewed("acknowledged"), false);
+  assert.equal(isOperatorReviewRecorded("pending"), false);
+  assert.equal(canMarkOperatorReviewed("pending"), true);
+  assert.equal(canMarkOperatorReviewed("pending_verification"), true);
 });
 
 test("normalizeIncidentList drops rows without id and never throws", () => {
@@ -315,7 +335,7 @@ test("drawer exposes linked operator review as a separate confirmed workflow", (
   assert.match(drawerSource, /incidents\?\.markReviewed/);
   assert.match(drawerSource, /onProfilesChanged\?\.\(\)/);
   assert.match(drawerSource, /resolveButtonLabel/);
-  assert.match(drawerSource, /operatorReviewStatus === "reviewed" \? "Reviewed"/);
+  assert.match(drawerSource, /operatorReviewRecorded \? "Reviewed — incident resolution still required"/);
   assert.match(drawerSource, /incidentStateCopy\(incident\?\.displayState/);
 });
 
@@ -341,7 +361,10 @@ test("operator review backend errors remain visible without a false resolution",
   assert.match(handler, /setError\(message\)/);
   assert.match(handler, /setActionProof\(\{ action: "mark_reviewed", ok: false, message \}\)/);
   assert.match(handler, /return;/);
-  assert.match(handler, /message: "Operator review recorded\."/);
+  assert.match(handler, /stringField\(result\.data, "status"\) \|\| "acknowledged"/);
+  assert.match(handler, /stringField\(result\.data, "message"\)/);
+  assert.match(handler, /Resolve after verification remains a separate action/);
+  assert.doesNotMatch(handler, /status: "resolved"/);
   assert.match(electronMainSource, /dashboardRequestResult\("POST", "dashboard_action_review"/);
   assert.match(electronMainSource, /errorKind: "already_terminal"/);
   assert.match(electronMainSource, /errorKind: "not_reviewable"/);
@@ -353,6 +376,63 @@ test("operator review backend errors remain visible without a false resolution",
   assert.doesNotMatch(handler, /exc instanceof Error \? exc\.message/);
   assert.match(operatorReviewActionSource, /value\.id/);
   assert.doesNotMatch(operatorReviewActionSource, /JSON\.stringify/);
+});
+
+test("reviewed action stays active without offering a duplicate Mark reviewed transition", () => {
+  assert.match(drawerSource, /operatorReviewRecorded \? \(/);
+  assert.match(drawerSource, /Human review recorded\. The incident remains active until Resolve after verification is confirmed\./);
+  assert.match(drawerSource, /operatorReviewMarkable/);
+  assert.match(drawerSource, /canMarkOperatorReviewed/);
+});
+
+test("OPEN_INCIDENT_VISIBLE", () => {
+  assert.equal(normalizeIncidentRow({ id: "open", status: "open" }).displayState, "open");
+});
+
+test("MARK_REVIEWED_STILL_ACTIVE_IF_NOT_RESOLVED", () => {
+  const row = normalizeIncidentRow({ id: "reviewed", status: "open", displayState: "action_required" });
+  assert.equal(row.displayState, "action_required");
+  assert.equal(isOperatorReviewRecorded("acknowledged"), true);
+});
+
+test("RESOLVE_REMOVES_FROM_OPEN", () => {
+  const counters = countIncidents(normalizeIncidentList([{ id: "resolved", status: "resolved" }]));
+  assert.equal(counters.open, 0);
+});
+
+test("RESOLVE_REMOVES_FROM_ACTION_REQUIRED", () => {
+  const counters = countIncidents(normalizeIncidentList([{ id: "resolved", status: "resolved", displayState: "action_required" }]));
+  assert.equal(counters.actionRequired, 0);
+});
+
+test("RESOLVE_DECREMENTS_BADGES", () => {
+  const before = countIncidents(normalizeIncidentList([{ id: "incident", status: "open", displayState: "action_required" }]));
+  const after = countIncidents(normalizeIncidentList([{ id: "incident", status: "resolved", displayState: "action_required" }]));
+  assert.deepEqual({ open: before.open, actionRequired: before.actionRequired }, { open: 0, actionRequired: 1 });
+  assert.deepEqual({ open: after.open, actionRequired: after.actionRequired }, { open: 0, actionRequired: 0 });
+});
+
+test("RESOLVE_APPEARS_IN_RESOLVED", () => {
+  const counters = countIncidents(normalizeIncidentList([{ id: "resolved", status: "resolved" }]));
+  assert.equal(counters.resolved, 1);
+});
+
+test("HISTORICAL_ACTION_DOES_NOT_RESURRECT_RESOLVED_INCIDENT", () => {
+  const row = normalizeIncidentRow({ id: "resolved", status: "resolved", displayState: "action_required", operator_action_status: "acknowledged" });
+  assert.equal(row.displayState, "resolved");
+});
+
+test("RELOAD_DOES_NOT_RESURRECT_RESOLVED_INCIDENT", () => {
+  const payload = { id: "resolved", status: "resolved", displayState: "action_required" };
+  assert.equal(normalizeIncidentRow(payload).displayState, "resolved");
+  assert.equal(normalizeIncidentRow(payload).displayState, "resolved");
+});
+
+test("BOTAPP_REOPEN_DOES_NOT_RESURRECT_RESOLVED_INCIDENT", () => {
+  const firstWindow = normalizeIncidentList([{ id: "resolved", status: "resolved", displayState: "action_required" }]);
+  const reopenedWindow = normalizeIncidentList([{ id: "resolved", status: "resolved", displayState: "action_required" }]);
+  assert.equal(firstWindow[0].displayState, "resolved");
+  assert.equal(reopenedWindow[0].displayState, "resolved");
 });
 
 test("P3.1: the main process always requests test incidents for the toggle", () => {

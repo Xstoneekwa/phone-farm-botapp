@@ -24,6 +24,17 @@ export interface IncidentGlobalCounters {
   total: number;
 }
 
+const OPERATOR_REVIEW_RECORDED_STATUSES = new Set(["acknowledged", "resolved", "reviewed"]);
+const OPERATOR_REVIEW_MARKABLE_STATUSES = new Set(["pending", "pending_verification", "code_submitted"]);
+
+export function isOperatorReviewRecorded(status: unknown): boolean {
+  return OPERATOR_REVIEW_RECORDED_STATUSES.has(str(status).toLowerCase());
+}
+
+export function canMarkOperatorReviewed(status: unknown): boolean {
+  return OPERATOR_REVIEW_MARKABLE_STATUSES.has(str(status).toLowerCase());
+}
+
 export function incidentLoadErrorCopy(kind: IncidentLoadErrorKind | null | undefined) {
   if (kind === "permission") {
     return { title: "Incident access denied", message: "The relay credential is not authorized to read incidents." };
@@ -102,8 +113,11 @@ export function normalizeIncidentRow(raw: Record<string, unknown>): IncidentRowV
   const incidentType = str(raw.incidentType) || str(raw.incident_type) || "unknown_incident";
   const status = (str(raw.status) || "open").toLowerCase();
   const actionRequired = englishCopy(raw.actionRequired) || englishCopy(raw.action_required) || "";
-  const displayState = str(raw.displayState)
-    || (status === "open" && actionRequired ? "action_required" : status);
+  // Canonical incident status wins over any stale action-derived display state.
+  // Historical dashboard actions must never resurrect a resolved incident.
+  const displayState = status === "resolved" || status === "ignored"
+    ? status
+    : str(raw.displayState) || (status === "open" && actionRequired ? "action_required" : status);
   const occurrenceRaw = Number(raw.occurrenceCount ?? raw.occurrence_count);
   return {
     id,
