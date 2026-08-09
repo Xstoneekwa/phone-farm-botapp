@@ -73,7 +73,8 @@ test("drawer sends id, protects stale responses, cancels close, blocks double ac
   assert.match(drawer, /requestSequence\.current/);
   assert.match(drawer, /cancelDetail/);
   assert.match(drawer, /if \(!incidentId \|\| !detail \|\| acting\) return/);
-  assert.match(drawer, /expected_version: detail\.incident\.version/);
+  assert.match(drawer, /let result = await submit\(detail\.incident\.version\)/);
+  assert.match(drawer, /expected_version: expectedVersion/);
   assert.match(drawer, /await reload\(\)/);
   assert.match(drawer, /Retry detail/);
 });

@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge, Drawer } from "../design/components";
 import { parseIncidentDetail, type IncidentDetail, type IncidentNotification } from "./incident-detail-contract";
 import {
+  classifyResolveConflict,
+  incidentActionErrorMessage,
+  isIncidentVersionConflict,
+  type IncidentActionResult,
+} from "./incident-action-reconciliation";
+import {
   authorizationStatusCopy,
   canMarkOperatorReviewed,
   incidentStateCopy,
@@ -65,13 +71,6 @@ function channelState(row: IncidentNotification | null): { label: string; tone: 
   if (row.status === "sent") return { label: "Delivered", tone: "success" };
   if (row.status === "failed") return { label: "Failed", tone: "error" };
   return { label: row.status || "Pending", tone: "warning" };
-}
-
-function actionErrorMessage(result: { status?: number; error?: string } | undefined): string {
-  if (result?.status === 409) return "Incident changed; reload before retrying.";
-  if (result?.status === 401) return "Relay authentication failed.";
-  if (result?.status === 403) return "Incident action is forbidden.";
-  return result?.error || "Incident action failed.";
 }
 
 function incidentResolutionMessage(data: Record<string, unknown> | undefined): { ok: boolean; message: string } {
@@ -188,15 +187,49 @@ export function IncidentDrawer({
     setActing(action);
     setError(null);
     try {
-      const result = await window.botappDesktop?.incidents?.action?.({
+      const idempotencyKey = `botapp:${action}:${incidentId}:${crypto.randomUUID()}`;
+      const submit = (expectedVersion: number) => window.botappDesktop?.incidents?.action?.({
         incident_id: incidentId,
         action,
-        expected_version: detail.incident.version,
-        idempotency_key: `botapp:${action}:${incidentId}:${crypto.randomUUID()}`,
+        expected_version: expectedVersion,
+        idempotency_key: idempotencyKey,
         ...extra,
-      });
+      }) as Promise<IncidentActionResult | undefined>;
+      let result = await submit(detail.incident.version);
+      if (action === "resolve" && isIncidentVersionConflict(result)) {
+        const refreshRequestId = crypto.randomUUID();
+        const refreshedResult = await window.botappDesktop?.incidents?.detail?.(incidentId, refreshRequestId);
+        if (!refreshedResult?.ok) {
+          const message = "Incident changed, but its canonical detail could not be refreshed. No retry was attempted.";
+          setError(message);
+          setActionProof({ action, ok: false, message });
+          return;
+        }
+        const parsed = parseIncidentDetail(refreshedResult.data);
+        if (!parsed.ok) {
+          setError(parsed.error);
+          setActionProof({ action, ok: false, message: parsed.error });
+          return;
+        }
+        const classification = classifyResolveConflict(detail, parsed.data);
+        setDetail(parsed.data);
+        if (classification === "already_resolved") {
+          const message = "Incident was already resolved by the concurrent canonical transition. No duplicate action was written.";
+          setActionProof({ action, ok: true, message, status: "resolved" });
+          setConfirmingResolve(false);
+          onChanged?.();
+          return;
+        }
+        if (classification !== "retry_once") {
+          const message = "Incident changed materially. The refreshed detail is shown; resolve was not retried.";
+          setError(message);
+          setActionProof({ action, ok: false, message });
+          return;
+        }
+        result = await submit(parsed.data.incident.version);
+      }
       if (!result?.ok) {
-        const message = actionErrorMessage(result);
+        const message = incidentActionErrorMessage(result);
         setError(message);
         setActionProof({ action, ok: false, message });
         return;

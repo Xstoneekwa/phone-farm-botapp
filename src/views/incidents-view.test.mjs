@@ -316,6 +316,8 @@ test("drawer keeps a simple resolve action and drops the dead resume flag", () =
 });
 
 test("BotApp resolution binds corrected runtime identity and reports exact recovery truth", () => {
+  assert.match(electronMainSource, /certifyWorkerRuntimeIdentity\(runtime\)/);
+  assert.match(electronMainSource, /runtimeRootOk: raw\?\.runtimeRootOk === true/);
   assert.match(electronMainSource, /expected_worker_sha: expectedWorkerSha/);
   assert.match(electronMainSource, /cause_fixed_version: causeFixedVersion/);
   assert.match(electronMainSource, /corrected_worker_runtime_not_certified/);
@@ -325,6 +327,34 @@ test("BotApp resolution binds corrected runtime identity and reports exact recov
   assert.match(drawerSource, /next_tick_eligible/);
   assert.match(drawerSource, /blocked_reason/);
   assert.match(drawerSource, /Incident resolved\. The account is eligible for automatic recovery on the next scheduler tick\./);
+});
+
+test("Resolve distinguishes runtime proof failures from typed lifecycle conflicts", () => {
+  assert.match(electronMainSource, /code: typeof errorPayload\.code === "string"/);
+  assert.match(electronMainSource, /reason: typeof errorPayload\.blocked_reason === "string"/);
+  assert.match(drawerSource, /isIncidentVersionConflict\(result\)/);
+  assert.match(drawerSource, /classifyResolveConflict\(detail, parsed\.data\)/);
+  assert.doesNotMatch(drawerSource, /if \(result\?\.status === 409\) return "Incident changed; reload before retrying\."/);
+});
+
+test("Resolve reconciliation reuses one idempotency key and is bounded to one retry", () => {
+  const handler = drawerSource.slice(
+    drawerSource.indexOf("async function runAction"),
+    drawerSource.indexOf("async function markOperatorReviewed"),
+  );
+  assert.match(handler, /const idempotencyKey =/);
+  assert.match(handler, /idempotency_key: idempotencyKey/);
+  assert.match(handler, /let result = await submit\(detail\.incident\.version\)/);
+  assert.match(handler, /result = await submit\(parsed\.data\.incident\.version\)/);
+  assert.equal((handler.match(/await submit\(/g) || []).length, 2);
+  assert.match(handler, /classification === "already_resolved"/);
+  assert.match(handler, /classification !== "retry_once"/);
+});
+
+test("Schedule save explains the unresolved incident blocker without bypassing it", () => {
+  assert.match(electronMainSource, /schedule_operational_projection_blocked:blocking_dashboard_action/);
+  assert.match(electronMainSource, /Schedule save is blocked by an unresolved account incident/);
+  assert.match(electronMainSource, /reason: "blocking_dashboard_action"/);
 });
 
 test("drawer exposes linked operator review as a separate confirmed workflow", () => {

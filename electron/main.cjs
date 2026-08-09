@@ -29,6 +29,7 @@ const {
 const botappSchedulerRuntime = require("./botapp-scheduler-runtime.cjs");
 const { findNonCloneablePath, serializeIpcPayload, toRedactedIpcError } = require("./ipc-structured-clone.cjs");
 const { extractOperatorReviewActionId } = require("./operator-review-action.cjs");
+const { certifyWorkerRuntimeIdentity } = require("./incident-runtime-identity.cjs");
 const {
   runtimeControllerPathFromEnv,
   runtimeControllerCwd,
@@ -3110,19 +3111,17 @@ async function performIncidentAction(input = {}) {
     let causeFixedVersion = null;
     if (action === "resolve") {
       const runtime = await dispatcherStatus();
-      expectedWorkerSha = String(runtime?.runtimeCommit || "").trim().toLowerCase();
-      const runtimeHealthy = runtime?.processRunning === true
-        && !runtime?.duplicateProcess
-        && !["runtime_root_invalid", "runtime_root_mismatch", "stopped", "unhealthy"].includes(String(runtime?.status || ""));
-      if (!runtimeHealthy || !/^[0-9a-f]{40}$/.test(expectedWorkerSha)) {
+      const certification = certifyWorkerRuntimeIdentity(runtime);
+      if (!certification.ok) {
         return {
           ok: false,
           status: 409,
           error: "Incident resolution is blocked because the corrected Worker runtime identity is not certified.",
-          reason: "corrected_worker_runtime_not_certified",
+          reason: certification.reason || "corrected_worker_runtime_not_certified",
         };
       }
-      causeFixedVersion = `worker:${expectedWorkerSha}`;
+      expectedWorkerSha = certification.workerSha;
+      causeFixedVersion = certification.causeFixedVersion;
     }
     const result = await dashboardRequestResult("POST", "incidents_action", {
       incident_id: incidentId,
@@ -3137,7 +3136,18 @@ async function performIncidentAction(input = {}) {
       expected_worker_sha: expectedWorkerSha,
       cause_fixed_version: causeFixedVersion,
     });
-    if (!result.ok) return { ok: false, status: result.status, error: result.error || "Incident action failed." };
+    if (!result.ok) {
+      const errorPayload = result.data && typeof result.data === "object" && !Array.isArray(result.data) ? result.data : {};
+      return {
+        ok: false,
+        status: result.status,
+        error: result.error || "Incident action failed.",
+        code: typeof errorPayload.code === "string" ? errorPayload.code : undefined,
+        reason: typeof errorPayload.blocked_reason === "string"
+          ? errorPayload.blocked_reason
+          : typeof errorPayload.reason === "string" ? errorPayload.reason : undefined,
+      };
+    }
     return { ok: true, status: result.status, data: result.data };
   } catch (error) {
     const message = safeRuntimeError(error, "Incident action failed.");
@@ -3708,7 +3718,15 @@ async function profileScheduleSettingsSave(input) {
     });
     return { ok: true, data };
   } catch (error) {
-    return { ok: false, error: safeRuntimeError(error, "Schedule save failed.") };
+    const message = safeRuntimeError(error, "Schedule save failed.");
+    if (message.includes("schedule_operational_projection_blocked:blocking_dashboard_action")) {
+      return {
+        ok: false,
+        error: "Schedule save is blocked by an unresolved account incident. Resolve it after verification, then retry the schedule save.",
+        reason: "blocking_dashboard_action",
+      };
+    }
+    return { ok: false, error: message };
   }
 }
 
@@ -7532,6 +7550,7 @@ function normalizeDispatcherStatus(raw, action) {
     activeRoot: typeof raw?.activeRoot === "string" ? raw.activeRoot : null,
     resolvedRoot: typeof raw?.resolvedRoot === "string" ? raw.resolvedRoot : null,
     runtimeCommit: typeof raw?.runtimeCommit === "string" ? raw.runtimeCommit : null,
+    runtimeRootOk: raw?.runtimeRootOk === true,
     supabaseRestStatus: raw?.preflightOk ? "ok" : lastError ? "failed" : "unknown",
     deviceCountOnline: Number.isFinite(Number(raw?.deviceCountOnline)) ? Number(raw.deviceCountOnline) : null,
     checkedAt: typeof raw?.checkedAt === "string" && raw.checkedAt ? raw.checkedAt : new Date().toISOString(),
