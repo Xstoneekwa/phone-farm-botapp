@@ -239,10 +239,13 @@ export function IncidentDrawer({
       }
       setConfirmingReview(false);
       const backendStatus = stringField(result.data, "status") || "acknowledged";
-      const backendMessage = stringField(result.data, "message")
-        || result.message
-        || "Human review recorded. Resolve after verification remains a separate action.";
-      setActionProof({ action: "mark_reviewed", ok: true, message: backendMessage, status: backendStatus });
+      const backendMessage = stringField(result.data, "message") || result.message || "Review recorded.";
+      setActionProof({
+        action: "mark_reviewed",
+        ok: true,
+        message: `REVIEW ONLY — incident still open and account still blocked. Complete Resolve after verification separately. ${backendMessage}`,
+        status: backendStatus,
+      });
       await reload();
       onChanged?.();
       onProfilesChanged?.();
@@ -274,6 +277,8 @@ export function IncidentDrawer({
     || incident?.operatorReviewStatus === "reviewed";
   const operatorReviewMarkable = Boolean(operatorReviewAction && canMarkOperatorReviewed(operatorReviewActionStatus));
   const incidentState = incidentStateCopy(incident?.displayState || incident?.status || "open");
+  const resolutionFailsClosed = incident?.severity === "critical"
+    || (stringField(incident, "incidentType") || "").toLowerCase().includes("security");
 
   if (!open) return null;
 
@@ -342,9 +347,9 @@ export function IncidentDrawer({
           {operatorReviewAction ? (
             <section className="incident-drawer-operator-review" data-testid="incident-drawer-operator-review">
               {operatorReviewRecorded ? (
-                <p data-testid="botapp-operator-review-recorded">Human review recorded. The incident remains active until Resolve after verification is confirmed.</p>
+                <p role="alert" data-testid="botapp-operator-review-recorded"><strong>Review only recorded — incident still open and account still blocked.</strong> Resolve after verification is a separate action.</p>
               ) : operatorReviewMarkable ? (
-                confirmingReview ? <div role="group" aria-label="Confirm operator review"><p>Confirm this action has been reviewed by a human operator. This does not resolve the incident.</p><label className="incident-drawer-note">Review note (optional)<textarea data-testid="botapp-operator-review-note" value={reviewNote} maxLength={500} rows={2} disabled={Boolean(acting)} onChange={(event) => setReviewNote(event.target.value)} /></label><div className="incident-drawer-actions"><button type="button" className="btn btn-primary" data-testid="botapp-operator-review-confirm" disabled={Boolean(acting)} onClick={() => void markOperatorReviewed()}>{acting === "mark_reviewed" ? "Marking…" : "Confirm review"}</button><button type="button" className="btn btn-secondary" disabled={Boolean(acting)} onClick={() => setConfirmingReview(false)}>Cancel</button></div></div> : <button type="button" className="btn btn-primary" data-testid="botapp-operator-review-mark" disabled={Boolean(acting)} onClick={() => setConfirmingReview(true)}>Mark reviewed</button>
+                confirmingReview ? <div role="group" aria-label="Confirm operator review only"><p>Record that a human reviewed the action. This does not resolve the incident, remove its blocker, or authorize a retry.</p><label className="incident-drawer-note">Review note (optional)<textarea data-testid="botapp-operator-review-note" value={reviewNote} maxLength={500} rows={2} disabled={Boolean(acting)} onChange={(event) => setReviewNote(event.target.value)} /></label><div className="incident-drawer-actions"><button type="button" className="btn btn-secondary" data-testid="botapp-operator-review-confirm" disabled={Boolean(acting)} onClick={() => void markOperatorReviewed()}>{acting === "mark_reviewed" ? "Recording…" : "Confirm review only"}</button><button type="button" className="btn btn-secondary" disabled={Boolean(acting)} onClick={() => setConfirmingReview(false)}>Cancel</button></div></div> : <button type="button" className="btn btn-secondary" data-testid="botapp-operator-review-mark" disabled={Boolean(acting)} onClick={() => setConfirmingReview(true)}>Record review only</button>
               ) : null}
             </section>
           ) : null}
@@ -353,9 +358,11 @@ export function IncidentDrawer({
             {detail.lifecycle.addNoteSupported ? <button type="button" className="btn btn-secondary" disabled={Boolean(acting) || !resolutionNote.trim()} onClick={() => void runAction("add_note", { note: resolutionNote.trim() })}>Add note</button> : null}
             {showAcknowledge ? <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-acknowledge" disabled={Boolean(acting)} onClick={() => void runAction("acknowledge", { note: resolutionNote.trim() || null })}>Acknowledge / mark investigating</button> : null}
             {showReadyToResume ? <button type="button" className="btn btn-primary" data-testid="botapp-incident-action-ready-to-resume" disabled={Boolean(acting)} onClick={() => void runAction("ready_to_resume", { resolution_note: resolutionNote })}>Ready to resume</button> : null}
-            {showResolve ? <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-resolve" disabled={Boolean(acting)} onClick={() => setConfirmingResolve(true)}>{resolveButtonLabel(recovery)}</button> : null}
+            {showResolve ? <button type="button" className="btn btn-primary" data-testid="botapp-incident-action-resolve" disabled={Boolean(acting)} onClick={() => setConfirmingResolve(true)}>{resolveButtonLabel(recovery)}</button> : null}
             {showKeepPaused ? <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-keep-paused" disabled={Boolean(acting)} onClick={() => void runAction("keep_paused", { resolution_note: resolutionNote })}>Keep paused</button> : null}
           </div>
+          {showResolve ? <p data-testid="botapp-incident-resolve-effect"><strong>Resolve after verification</strong> removes the incident blocker and restores evaluation at the next natural tick; it does not start a run.</p> : null}
+          {showResolve && resolutionFailsClosed ? <p role="alert" data-testid="botapp-incident-resolve-critical"><strong>Critical/security incident:</strong> resolution remains fail-closed until the corrected runtime proof is certified.</p> : null}
           {confirmingResolve ? <section className="incident-drawer-resolve" role="group" aria-label="Confirm resolution"><label className="incident-drawer-note">Resolution reason (required)<input value={resolutionReason} maxLength={160} onChange={(event) => setResolutionReason(event.target.value)} placeholder="verified_and_resolved" /></label><p>Resolving updates the database first. Slack and Discord deliveries are tracked independently.</p><div className="incident-drawer-actions"><button type="button" className="btn btn-primary" disabled={Boolean(acting) || !resolutionReason.trim()} onClick={() => void runAction("resolve", { resolution_reason: resolutionReason.trim(), note: resolutionNote.trim() || null })}>Confirm resolve</button><button type="button" className="btn btn-secondary" disabled={Boolean(acting)} onClick={() => setConfirmingResolve(false)}>Cancel</button></div></section> : null}
           {!detail.lifecycle.reopenSupported && incident.status === "resolved" ? <p>Reopen is not supported by the current incident lifecycle.</p> : null}
         </div>

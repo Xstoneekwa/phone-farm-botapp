@@ -329,8 +329,8 @@ test("BotApp resolution binds corrected runtime identity and reports exact recov
 
 test("drawer exposes linked operator review as a separate confirmed workflow", () => {
   assert.match(drawerSource, /operatorReviewAction/);
-  assert.match(drawerSource, /Mark reviewed/);
-  assert.match(drawerSource, /Confirm review/);
+  assert.match(drawerSource, /Record review only/);
+  assert.match(drawerSource, /Confirm review only/);
   assert.match(drawerSource, /Review note \(optional\)/);
   assert.match(drawerSource, /incidents\?\.markReviewed/);
   assert.match(drawerSource, /onProfilesChanged\?\.\(\)/);
@@ -363,7 +363,7 @@ test("operator review backend errors remain visible without a false resolution",
   assert.match(handler, /return;/);
   assert.match(handler, /stringField\(result\.data, "status"\) \|\| "acknowledged"/);
   assert.match(handler, /stringField\(result\.data, "message"\)/);
-  assert.match(handler, /Resolve after verification remains a separate action/);
+  assert.match(handler, /Complete Resolve after verification separately/);
   assert.doesNotMatch(handler, /status: "resolved"/);
   assert.match(electronMainSource, /dashboardRequestResult\("POST", "dashboard_action_review"/);
   assert.match(electronMainSource, /errorKind: "already_terminal"/);
@@ -380,9 +380,25 @@ test("operator review backend errors remain visible without a false resolution",
 
 test("reviewed action stays active without offering a duplicate Mark reviewed transition", () => {
   assert.match(drawerSource, /operatorReviewRecorded \? \(/);
-  assert.match(drawerSource, /Human review recorded\. The incident remains active until Resolve after verification is confirmed\./);
+  assert.match(drawerSource, /Review only recorded — incident still open and account still blocked\./);
   assert.match(drawerSource, /operatorReviewMarkable/);
   assert.match(drawerSource, /canMarkOperatorReviewed/);
+});
+
+test("review and resolve have unambiguous hierarchy and next-tick semantics", () => {
+  assert.match(drawerSource, /REVIEW ONLY — incident still open and account still blocked/);
+  assert.match(drawerSource, /Record review only/);
+  assert.match(drawerSource, /Confirm review only/);
+  assert.match(drawerSource, /This does not resolve the incident, remove its blocker, or authorize a retry/);
+  assert.match(drawerSource, /data-testid="botapp-incident-action-resolve"[\s\S]*className="btn btn-primary"|className="btn btn-primary"[\s\S]*data-testid="botapp-incident-action-resolve"/);
+  assert.match(drawerSource, /restores evaluation at the next natural tick; it does not start a run/);
+});
+
+test("critical incident resolution copy remains fail closed", () => {
+  assert.match(drawerSource, /resolutionFailsClosed/);
+  assert.match(drawerSource, /incident\?\.severity === "critical"/);
+  assert.match(drawerSource, /Critical\/security incident:/);
+  assert.match(drawerSource, /resolution remains fail-closed until the corrected runtime proof is certified/);
 });
 
 test("OPEN_INCIDENT_VISIBLE", () => {
