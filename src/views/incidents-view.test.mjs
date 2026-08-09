@@ -391,14 +391,21 @@ test("review and resolve have unambiguous hierarchy and next-tick semantics", ()
   assert.match(drawerSource, /Confirm review only/);
   assert.match(drawerSource, /This does not resolve the incident, remove its blocker, or authorize a retry/);
   assert.match(drawerSource, /data-testid="botapp-incident-action-resolve"[\s\S]*className="btn btn-primary"|className="btn btn-primary"[\s\S]*data-testid="botapp-incident-action-resolve"/);
-  assert.match(drawerSource, /restores evaluation at the next natural tick; it does not start a run/);
+  assert.match(drawerSource, /confirms that the operator has handled the incident/);
+  assert.match(drawerSource, /normal eligibility evaluation on the next natural scheduler \/ Auto Restart tick/);
+  assert.match(drawerSource, /Resolve does not immediately start a run/);
+  assert.match(drawerSource, /Normal runtime safety gates remain active/);
+  assert.doesNotMatch(drawerSource, /one[- ]shot retry|one retry only|allows one retry/i);
 });
 
-test("critical incident resolution copy remains fail closed", () => {
-  assert.match(drawerSource, /resolutionFailsClosed/);
-  assert.match(drawerSource, /incident\?\.severity === "critical"/);
-  assert.match(drawerSource, /Critical\/security incident:/);
-  assert.match(drawerSource, /resolution remains fail-closed until the corrected runtime proof is certified/);
+test("review cannot resolve or create a resume authorization", () => {
+  const handler = drawerSource.slice(
+    drawerSource.indexOf("async function markOperatorReviewed"),
+    drawerSource.indexOf("const incident = detail?.incident"),
+  );
+  assert.doesNotMatch(handler, /runAction\("resolve"/);
+  assert.doesNotMatch(handler, /resume_authorization/);
+  assert.doesNotMatch(handler, /status: "resolved"/);
 });
 
 test("OPEN_INCIDENT_VISIBLE", () => {

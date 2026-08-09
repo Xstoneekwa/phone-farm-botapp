@@ -277,8 +277,6 @@ export function IncidentDrawer({
     || incident?.operatorReviewStatus === "reviewed";
   const operatorReviewMarkable = Boolean(operatorReviewAction && canMarkOperatorReviewed(operatorReviewActionStatus));
   const incidentState = incidentStateCopy(incident?.displayState || incident?.status || "open");
-  const resolutionFailsClosed = incident?.severity === "critical"
-    || (stringField(incident, "incidentType") || "").toLowerCase().includes("security");
 
   if (!open) return null;
 
@@ -361,8 +359,7 @@ export function IncidentDrawer({
             {showResolve ? <button type="button" className="btn btn-primary" data-testid="botapp-incident-action-resolve" disabled={Boolean(acting)} onClick={() => setConfirmingResolve(true)}>{resolveButtonLabel(recovery)}</button> : null}
             {showKeepPaused ? <button type="button" className="btn btn-secondary" data-testid="botapp-incident-action-keep-paused" disabled={Boolean(acting)} onClick={() => void runAction("keep_paused", { resolution_note: resolutionNote })}>Keep paused</button> : null}
           </div>
-          {showResolve ? <p data-testid="botapp-incident-resolve-effect"><strong>Resolve after verification</strong> removes the incident blocker and restores evaluation at the next natural tick; it does not start a run.</p> : null}
-          {showResolve && resolutionFailsClosed ? <p role="alert" data-testid="botapp-incident-resolve-critical"><strong>Critical/security incident:</strong> resolution remains fail-closed until the corrected runtime proof is certified.</p> : null}
+          {showResolve ? <p data-testid="botapp-incident-resolve-effect"><strong>Resolve after verification</strong> confirms that the operator has handled the incident. The account returns to normal eligibility evaluation on the next natural scheduler / Auto Restart tick. Resolve does not immediately start a run. Normal runtime safety gates remain active.</p> : null}
           {confirmingResolve ? <section className="incident-drawer-resolve" role="group" aria-label="Confirm resolution"><label className="incident-drawer-note">Resolution reason (required)<input value={resolutionReason} maxLength={160} onChange={(event) => setResolutionReason(event.target.value)} placeholder="verified_and_resolved" /></label><p>Resolving updates the database first. Slack and Discord deliveries are tracked independently.</p><div className="incident-drawer-actions"><button type="button" className="btn btn-primary" disabled={Boolean(acting) || !resolutionReason.trim()} onClick={() => void runAction("resolve", { resolution_reason: resolutionReason.trim(), note: resolutionNote.trim() || null })}>Confirm resolve</button><button type="button" className="btn btn-secondary" disabled={Boolean(acting)} onClick={() => setConfirmingResolve(false)}>Cancel</button></div></section> : null}
           {!detail.lifecycle.reopenSupported && incident.status === "resolved" ? <p>Reopen is not supported by the current incident lifecycle.</p> : null}
         </div>
