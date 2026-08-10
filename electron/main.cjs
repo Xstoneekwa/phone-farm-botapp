@@ -4820,10 +4820,9 @@ function readProfileStatus(account, blocked) {
 }
 
 function readReadiness(account, blocked) {
-  const identity = readCanonicalLoginIdentity(account);
   const loginStatus = readCanonicalLoginStatus(account);
   const raw = readCanonicalReadinessStatus(account);
-  if (!identity.verified || loginStatus !== "connected") return "needs_login";
+  if (loginStatus !== "connected") return "needs_login";
   if (raw === "ready") return "ready";
   if (raw.includes("login")) return "needs_login";
   if (raw.includes("target")) return "needs_targets";
@@ -4833,7 +4832,6 @@ function readReadiness(account, blocked) {
 
 function readEligibility(account, blocked, loginStatus = "") {
   if (readAssignmentHealth(account) === "requires_attention") return "blocked_now";
-  if (!readCanonicalLoginIdentity(account).verified) return "blocked_now";
   if (loginStatus && loginStatus !== "connected") return "blocked_now";
   if (readCanonicalReadinessStatus(account) !== "ready") return "blocked_now";
   const raw = normalizeMatchText(account?.eligibility || account?.eligibilityStatus || account?.eligibility_status);

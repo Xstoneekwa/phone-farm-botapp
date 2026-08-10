@@ -74,7 +74,7 @@ export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTo
     return { label: "login required", tone: "warning" };
   }
 
-  if (profile.eligibility === "can_start") {
+  if (profile.readiness === "ready") {
     return { label: "growth ready", tone: "success" };
   }
 

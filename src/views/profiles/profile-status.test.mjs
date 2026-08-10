@@ -17,7 +17,8 @@ const packageSource = readFileSync(resolve(currentDir, "../../../package.json"),
 const twemojiManifestSource = readFileSync(resolve(currentDir, "../../../src/emoji/twemoji-assets.json"), "utf8");
 
 test("connect badge shows saved credentials as ready to connect", () => {
-  assert.match(profilesViewSource, /profile\.credentialStatus === "saved_pending_verification"[\s\S]*ready to connect/);
+  const growthBadgeSource = readFileSync(resolve(currentDir, "profile-growth-badge.ts"), "utf8");
+  assert.match(growthBadgeSource, /profile\.credentialStatus === "saved_pending_verification"[\s\S]*ready to connect/);
 });
 
 test("Profiles emphasizes only counter numerators", () => {
@@ -45,7 +46,7 @@ test("real zero follower growth uses a neutral tone while losses remain red", ()
 test("social badge separates login and target blocks", async () => {
   const growthBadgeSource = readFileSync(resolve(currentDir, "profile-growth-badge.ts"), "utf8");
   assert.match(growthBadgeSource, /profile\.loginStatus !== "connected"/);
-  assert.match(growthBadgeSource, /social needs login/);
+  assert.match(growthBadgeSource, /login required/);
   assert.match(growthBadgeSource, /code\.includes\("needs_more_targets"\)[\s\S]*code\.includes\("target_accounts_missing"\)[\s\S]*growth needs targets/);
 });
 
@@ -54,7 +55,8 @@ test("social badge explains real blocking reasons and preserves growth-ready sta
   assert.match(growthBadgeSource, /export function socialBlockLabel/);
   assert.match(growthBadgeSource, /review_login_package_mismatch/);
   assert.match(growthBadgeSource, /social review: account mismatch/);
-  assert.match(growthBadgeSource, /profile\.eligibility === "can_start"[\s\S]*growth ready/);
+  assert.match(growthBadgeSource, /profile\.readiness === "ready"[\s\S]*growth ready/);
+  assert.doesNotMatch(growthBadgeSource, /profile\.eligibility === "can_start"[\s\S]*growth ready/);
   assert.match(growthBadgeSource, /return "operator review"/);
   assert.match(growthBadgeSource, /connected · device locked/);
   assert.match(growthBadgeSource, /connected · preflight blocked/);

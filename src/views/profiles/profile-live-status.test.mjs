@@ -8,6 +8,7 @@ function profile(overrides = {}) {
     id: "account-1",
     status: "ready",
     loginStatus: "connected",
+    readiness: "ready",
     eligibility: "can_start",
     eligibilityReason: "ready",
     eligibilityDetail: { status: "can_start", primary_block_reason: "", reason_label: "Ready", reason_description: "Ready" },
@@ -37,28 +38,28 @@ test("active runtime wins over stale login state", () => {
 
 test("unknown non-blocking state never invents social blocked fallback", () => {
   assert.deepEqual(
-    socialBadge(profile({ eligibility: "blocked_now", eligibilityReason: "unknown_projection" })),
+    socialBadge(profile({ readiness: "blocked", eligibility: "blocked_now", eligibilityReason: "unknown_projection" })),
     { label: "growth status unavailable", tone: "info" },
   );
 });
 
 test("real current blocker remains visible when there is no active runtime", () => {
   assert.deepEqual(
-    socialBadge(profile({ eligibility: "blocked_now", eligibilityReason: "blocking_dashboard_action" })),
+    socialBadge(profile({ readiness: "blocked", eligibility: "blocked_now", eligibilityReason: "blocking_dashboard_action" })),
     { label: "social review required", tone: "warning" },
   );
 });
 
 test("structured Welcome failures expose operator review instead of unavailable", () => {
   assert.deepEqual(
-    socialBadge(profile({ eligibility: "blocked_now", eligibilityReason: "recovered_snapshot_rejected" })),
+    socialBadge(profile({ readiness: "blocked", eligibility: "blocked_now", eligibilityReason: "recovered_snapshot_rejected" })),
     { label: "operator review required", tone: "warning" },
   );
 });
 
 test("unstructured worker failure remains an explicit business blocker", () => {
   assert.deepEqual(
-    socialBadge(profile({ eligibility: "blocked_now", eligibilityReason: "worker_exit_nonzero" })),
+    socialBadge(profile({ readiness: "blocked", eligibility: "blocked_now", eligibilityReason: "worker_exit_nonzero" })),
     { label: "growth blocked: worker failure", tone: "warning" },
   );
 });

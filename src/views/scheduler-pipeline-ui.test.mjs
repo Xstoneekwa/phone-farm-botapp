@@ -145,9 +145,10 @@ test("operator review dashboard blocker is not shown as social reason required",
   assert.equal(badge.label, "operator review required");
 });
 
-test("connected account outside window does not show growth ready", () => {
+test("canonical ready remains growth ready outside the current run window", () => {
   const profile = {
     loginStatus: "connected",
+    readiness: "ready",
     eligibility: "blocked_now",
     eligibilityReason: "assignment_window_closed",
     eligibilityDetail: {
@@ -158,7 +159,7 @@ test("connected account outside window does not show growth ready", () => {
     },
   };
   const badge = socialBadge(profile);
-  assert.equal(badge.label, "connected · waiting for slot");
+  assert.equal(badge.label, "growth ready");
 });
 
 test("copy diagnostics includes daily pipeline and auto restart note", async () => {
