@@ -167,6 +167,15 @@ test("BotApp verification code submit uses canonical write-only relay contract",
   assert.equal(credentialsSource.includes("verification_code:"), false);
 });
 
+test("BotApp shows the canonical verification channel without creating channel-specific flows", () => {
+  assert.match(credentialsSource, /verificationChannelLabel/);
+  assert.match(credentialsSource, /Verification channel/);
+  assert.match(credentialsSource, /Authenticator app/);
+  assert.match(electronMainSource, /group\.verificationChannel/);
+  assert.match(electronMainSource, /authenticator_app/);
+  assert.doesNotMatch(credentialsSource, /submitSmsVerificationCode|submitWhatsappVerificationCode|submitAuthenticatorCode/);
+});
+
 test("Auto Login click always produces immediate visible feedback before any request", () => {
   assert.match(toolbarSource, /item\.id !== "auto_login" && requirementBlocked/);
   assert.match(toolbarSource, /onClick=\{\(\) => onAction\(item\.id\)\}/);

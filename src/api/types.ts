@@ -856,6 +856,7 @@ export type BotAppCredentialsActionType =
 export type BotAppCredentialsActionStatus = "pending" | "acknowledged" | "pending_verification" | "code_submitted" | "resolved" | "dismissed";
 export type BotAppCredentialsPriority = "critical" | "warning" | "info";
 export type BotAppCredentialsAudience = "client" | "admin" | "ops";
+export type BotAppVerificationChannel = "email" | "sms" | "whatsapp" | "authenticator_app" | "unknown";
 
 export type BotAppCredentialsAction = {
   id: string;
@@ -881,6 +882,7 @@ export type BotAppCredentialsAction = {
   updatedAtLabel: string;
   ageLabel: string;
   nextAction: string;
+  verificationChannel: BotAppVerificationChannel;
 };
 
 export type BotAppCredentialsFilter = "all" | "password" | "verification_code" | "credentials" | "needs_review" | "completed";

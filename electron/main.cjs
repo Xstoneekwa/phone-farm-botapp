@@ -5373,6 +5373,9 @@ function credentialsFromDashboard(credentials, accountsById) {
       updatedAtLabel: "",
       ageLabel: "",
       nextAction: String(group.recommendedAction || "Review account"),
+      verificationChannel: ["email", "sms", "whatsapp", "authenticator_app"].includes(String(group.verificationChannel || ""))
+        ? String(group.verificationChannel)
+        : "unknown",
     };
   });
   return {

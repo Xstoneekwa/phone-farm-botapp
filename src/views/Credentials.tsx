@@ -46,6 +46,16 @@ function labelize(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function verificationChannelLabel(channel: BotAppCredentialsAction["verificationChannel"]) {
+  return {
+    email: "Email",
+    sms: "SMS",
+    whatsapp: "WhatsApp",
+    authenticator_app: "Authenticator app",
+    unknown: "Unknown",
+  }[channel];
+}
+
 function ownerLabel(action: BotAppCredentialsAction) {
   if (action.requiresClientAction || action.audience === "client") return "Client action";
   if (action.audience === "admin") return "Admin action";
@@ -252,6 +262,9 @@ export function Credentials({ overview, selectedAccountId, onOpenProfile }: Cred
                 <Field label="Age" value={action.ageLabel} />
                 <Field label="Updated" value={action.updatedAtLabel} />
                 <Field label="Source" value={action.sourceLabel} />
+                {action.actionType === "enter_email_verification_code" ? (
+                  <Field label="Verification channel" value={verificationChannelLabel(action.verificationChannel)} />
+                ) : null}
               </div>
 
               <div className="credentials-next-action">
@@ -285,7 +298,7 @@ export function Credentials({ overview, selectedAccountId, onOpenProfile }: Cred
             aria-label="Enter verification code"
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <span>Verification code</span>
+            <span>Verification code · Channel: {verificationChannelLabel(verificationAction.verificationChannel)}</span>
             <h3>Enter verification code for @{verificationAction.username}</h3>
             <p>The code is sent only through the future secure relay. It is not logged, displayed in messages, or stored in the local action payload.</p>
             <input

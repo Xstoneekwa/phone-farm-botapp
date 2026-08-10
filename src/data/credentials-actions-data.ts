@@ -19,6 +19,7 @@ const actionFixtures: Array<{
   updatedAtLabel: string;
   ageLabel: string;
   nextAction: string;
+  verificationChannel?: BotAppCredentialsAction["verificationChannel"];
 }> = [
   {
     username: "liam_bel_epee",
@@ -49,6 +50,7 @@ const actionFixtures: Array<{
     updatedAtLabel: "Jun 11, 2026, 10:02 AM",
     ageLabel: "34m",
     nextAction: "Enter code through the secure verification flow",
+    verificationChannel: "email",
   },
   {
     username: "i_m_your_traker",
@@ -118,6 +120,7 @@ export function buildCredentialsActionsOverview(clientAccounts: BotAppClientAcco
       updatedAtLabel: fixture.updatedAtLabel,
       ageLabel: fixture.ageLabel,
       nextAction: fixture.nextAction,
+      verificationChannel: fixture.verificationChannel ?? "unknown",
     };
   });
 
