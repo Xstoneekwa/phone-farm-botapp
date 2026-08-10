@@ -15,12 +15,15 @@ function readCanonicalLoginIdentity(account) {
   const profileOpened = first(account, ["loginIdentityProfileOpened", "login_identity_profile_opened"]) === true;
   const usernameMatch = first(account, ["loginIdentityUsernameMatch", "login_identity_username_match"]) === true;
   const verifiedAt = String(first(account, ["loginIdentityVerifiedAt", "login_identity_verified_at"]) ?? "").trim();
+  const invalidationReason = normalized(first(account, ["loginStateInvalidationReason", "login_state_invalidation_reason"]));
   return {
     proofStatus: proofStatus || "missing",
     profileOpened,
     usernameMatch,
     verifiedAt: verifiedAt || null,
+    invalidationReason: invalidationReason || null,
     verified: proofStatus === "verified" && profileOpened && usernameMatch && Boolean(verifiedAt),
+    historicalNonBlocking: proofStatus === "historical_model_missing" && !invalidationReason,
   };
 }
 
@@ -43,13 +46,15 @@ function readCanonicalLoginStatus(account) {
   if (raw.includes("password_invalid")) return "password_invalid";
   if (raw.includes("missing")) return "missing_credentials";
   if (raw.includes("logged_out")) return "logged_out";
-  if (!readCanonicalLoginIdentity(account).verified) return "unknown";
+  const identity = readCanonicalLoginIdentity(account);
+  if (!identity.verified && !identity.historicalNonBlocking) return "unknown";
   return raw === "connected" ? "connected" : "unknown";
 }
 
 function canonicalIdentityBlockReason(account) {
   const identity = readCanonicalLoginIdentity(account);
-  if (identity.verified) return "";
+  if (identity.verified || identity.historicalNonBlocking) return "";
+  if (identity.invalidationReason) return `login_state_invalidated_${identity.invalidationReason}`;
   if (identity.proofStatus === "failed" || identity.proofStatus === "proven_false_ready") {
     return "login_identity_mismatch";
   }
