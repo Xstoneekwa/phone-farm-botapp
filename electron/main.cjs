@@ -31,6 +31,12 @@ const { findNonCloneablePath, serializeIpcPayload, toRedactedIpcError } = requir
 const { extractOperatorReviewActionId } = require("./operator-review-action.cjs");
 const { certifyWorkerRuntimeIdentity } = require("./incident-runtime-identity.cjs");
 const {
+  canonicalIdentityBlockReason,
+  readCanonicalLoginIdentity,
+  readCanonicalLoginStatus,
+  readCanonicalReadinessStatus,
+} = require("./profile-canonical-login-projection.cjs");
+const {
   runtimeControllerPathFromEnv,
   runtimeControllerCwd,
   runRuntimeControllerCommand,
@@ -4800,26 +4806,35 @@ function readProfileStatus(account, blocked) {
 }
 
 function readReadiness(account, blocked) {
-  const raw = normalizeMatchText(account?.readiness || account?.readinessStatus || account?.readiness_status);
-  if (raw.includes("ready")) return "ready";
+  const identity = readCanonicalLoginIdentity(account);
+  const loginStatus = readCanonicalLoginStatus(account);
+  const raw = readCanonicalReadinessStatus(account);
+  if (!identity.verified || loginStatus !== "connected") return "needs_login";
+  if (raw === "ready") return "ready";
   if (raw.includes("login")) return "needs_login";
   if (raw.includes("target")) return "needs_targets";
   if (blocked) return "blocked";
-  return "ready";
+  return "blocked";
 }
 
 function readEligibility(account, blocked, loginStatus = "") {
   if (readAssignmentHealth(account) === "requires_attention") return "blocked_now";
+  if (!readCanonicalLoginIdentity(account).verified) return "blocked_now";
+  if (loginStatus && loginStatus !== "connected") return "blocked_now";
+  if (readCanonicalReadinessStatus(account) !== "ready") return "blocked_now";
   const raw = normalizeMatchText(account?.eligibility || account?.eligibilityStatus || account?.eligibility_status);
   if (raw.includes("can_start") || raw === "ready") return "can_start";
   if (raw.includes("blocked")) return "blocked_now";
-  if (loginStatus && loginStatus !== "connected") return "blocked_now";
   return blocked ? "blocked_now" : "can_start";
 }
 
 function readEligibilityReason(account, blocked, loginStatus = "") {
   if (readAssignmentHealth(account) === "requires_attention") return "assignment_requires_attention";
+  const identityReason = canonicalIdentityBlockReason(account);
+  if (identityReason) return identityReason;
   if (loginStatus && loginStatus !== "connected") return "login_not_connected";
+  const readiness = readCanonicalReadinessStatus(account);
+  if (readiness !== "ready") return readiness ? `readiness_${readiness}` : "canonical_readiness_missing";
   return String(account?.eligibilityReason || account?.eligibility_reason || account?.primaryBlockReason || account?.primary_block_reason || (blocked ? "blocked" : "ready"));
 }
 
@@ -4850,12 +4865,7 @@ function readCredentialStatus(account) {
 }
 
 function readLoginStatus(account) {
-  const value = String(account?.loginStatus || account?.login_status || account?.credentialsStatus || "");
-  if (/challenge/i.test(value)) return "challenge_required";
-  if (/2fa/i.test(value)) return "needs_2fa";
-  if (/missing/i.test(value)) return "missing_credentials";
-  if (/connected/i.test(value)) return "connected";
-  return "ready";
+  return readCanonicalLoginStatus(account);
 }
 
 function readRefreshReadinessRequirement({
@@ -5113,6 +5123,7 @@ function profileFromManageAccount(account, index, devices) {
   const scheduleLabelValue = readActiveWindow(account);
   const credentialStatus = readCredentialStatus(account);
   const loginStatus = readLoginStatus(account);
+  const loginIdentity = readCanonicalLoginIdentity(account);
   const eligibilityReason = readEligibilityReason(account, blocked, loginStatus);
   const eligibility = readEligibility(account, blocked, loginStatus);
   const readiness = readReadiness(account, blocked);
@@ -5176,6 +5187,9 @@ function profileFromManageAccount(account, index, devices) {
     twoFactorEnabled: /enabled/i.test(String(account?.twoFactorDisplay || "")),
     credentialStatus,
     loginStatus,
+    identityVerified: loginIdentity.verified,
+    loginIdentityProofStatus: loginIdentity.proofStatus,
+    loginIdentityVerifiedAt: loginIdentity.verifiedAt,
     deviceAvailability,
     assignmentState,
     assignmentHealth,

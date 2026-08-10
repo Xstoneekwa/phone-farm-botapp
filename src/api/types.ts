@@ -651,6 +651,9 @@ export type BotProfile = {
   twoFactorEnabled: boolean;
   credentialStatus: CredentialStatus;
   loginStatus: ProfileLoginStatus;
+  identityVerified?: boolean;
+  loginIdentityProofStatus?: string | null;
+  loginIdentityVerifiedAt?: string | null;
   deviceAvailability: "available" | "reserved" | "offline" | "maintenance" | "unassigned";
   assignmentState: "assigned" | "reserved" | "missing_slot" | "blocked" | "requires_attention";
   assignmentHealth?: "unassigned" | "assigned" | "requires_attention";

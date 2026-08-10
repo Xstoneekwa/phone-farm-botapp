@@ -37,17 +37,18 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
     const active = isActive(patch);
     const blocker = patch.currentBlocker?.blockingCampaign ? String(patch.currentBlocker.actionType || "blocking_dashboard_action") : "";
     const staleDashboardBlocker = isDashboardBlockReason(`${profile.eligibilityReason} ${profile.eligibilityDetail.primary_block_reason}`);
+    const canonicalIdentityReady = profile.identityVerified === true && profile.loginStatus === "connected" && profile.readiness === "ready";
     const countersToday = patch.countersToday ?? {};
     const eligibility = active
       ? profile.eligibility
       : blocker
         ? "blocked_now"
-        : staleDashboardBlocker
+        : staleDashboardBlocker && canonicalIdentityReady
           ? "can_start"
           : profile.eligibility;
     const eligibilityReason = active
       ? profile.eligibilityReason
-      : blocker || (staleDashboardBlocker ? "ready" : profile.eligibilityReason);
+      : blocker || (staleDashboardBlocker && canonicalIdentityReady ? "ready" : profile.eligibilityReason);
     const status: BotProfile["status"] = active
       ? "running"
       : profile.status === "running"

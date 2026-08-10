@@ -9,6 +9,9 @@ function profile(overrides = {}) {
     eligibility: "can_start",
     eligibilityReason: "ready",
     eligibilityDetail: { status: "can_start", primary_block_reason: "", reason_label: "Ready" },
+    identityVerified: true,
+    loginStatus: "connected",
+    readiness: "ready",
     counters: {
       follow: { current: 5, max: 80 }, unfollow: { current: 4, max: 80 }, like: { current: 3, max: 100 },
       comment: { current: 2, max: 0 }, dm: { current: 1, max: 2 },
@@ -41,6 +44,21 @@ test("active becomes idle and an old resolved dashboard blocker is cleared", () 
   assert.equal(result.status, "ready");
   assert.equal(result.eligibility, "can_start");
   assert.equal(result.eligibilityReason, "ready");
+});
+
+test("old can_start or stale blocker cannot override missing canonical identity proof", () => {
+  const result = mergeProfilesLiveProjection([profile({
+    status: "blocked",
+    identityVerified: false,
+    loginStatus: "unknown",
+    readiness: "needs_login",
+    eligibility: "blocked_now",
+    eligibilityReason: "operator_review_required",
+    eligibilityDetail: { status: "blocked_now", primary_block_reason: "operator_review_required", reason_label: "Review" },
+  })], [{ accountId: "account-1", currentBlocker: null }])[0];
+  assert.equal(result.status, "blocked");
+  assert.equal(result.eligibility, "blocked_now");
+  assert.equal(result.eligibilityReason, "operator_review_required");
 });
 
 test("a real current blocking action remains visible after the run", () => {
