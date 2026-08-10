@@ -4959,6 +4959,9 @@ function readAutoLoginRequirement({
   if (lifecycle.includes("cancel") || lifecycle.includes("delete") || lifecycle.includes("trashed") || lifecycle.includes("archived")) {
     return requirementState(false, "status_blocked", "Account unavailable", "Archived, deleted, cancelled, or trashed accounts cannot start Auto Login.");
   }
+  if (loginStatus === "connected") {
+    return requirementState(false, "already_connected", "Connected", "Canonical login and exact identity proof are already verified.");
+  }
   if (assignmentState === "requires_attention") {
     return requirementState(false, "assignment_requires_attention", "Affectation à vérifier", "Assignment/device/app instance state is inconsistent. Review the assigned phone, clone, and timeslot before Auto Login.");
   }

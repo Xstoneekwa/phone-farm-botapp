@@ -36,6 +36,31 @@ export function socialBlockLabel(reason: string): string {
   return "operator review";
 }
 
+export function canonicalConnectBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
+  if (profile.loginStatus === "connected") return { label: "connected", tone: "success" };
+  if (profile.credentialStatus === "missing" || profile.loginStatus === "missing_credentials") {
+    return { label: "missing credentials", tone: "warning" };
+  }
+  if (profile.credentialStatus === "needs_update" || profile.loginStatus === "password_invalid") {
+    return { label: "update password", tone: "error" };
+  }
+  if (["needs_2fa", "challenge_required", "checkpoint"].includes(profile.loginStatus)) {
+    return { label: "action required", tone: "warning" };
+  }
+  const canonicalConnectionRequired = ["unknown", "logged_out"].includes(profile.loginStatus)
+    || profile.readiness === "needs_login";
+  if (
+    canonicalConnectionRequired
+    && (
+      profile.credentialStatus === "saved_pending_verification"
+      || (profile.credentialStatus === "active" && profile.autoLoginRequirement.enabled)
+    )
+  ) {
+    return { label: "ready to connect", tone: "info" };
+  }
+  return { label: "login pending", tone: "neutral" };
+}
+
 export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
   if (hasActiveRuntime(profile)) {
     const staleReason = stableBlockCode(profile);
@@ -46,9 +71,7 @@ export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTo
   }
 
   if (profile.loginStatus !== "connected") {
-    const reason = stableBlockCode(profile);
-    if (reason.includes("login")) return { label: "social needs login", tone: "warning" };
-    return { label: "social needs login", tone: "warning" };
+    return { label: "login required", tone: "warning" };
   }
 
   if (profile.eligibility === "can_start") {
@@ -95,7 +118,7 @@ export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTo
   if (code.includes("account_session_running") || code.includes("active_run_exists")) {
     return { label: "connected · session running", tone: "info" };
   }
-  if (code.includes("login")) return { label: "social needs login", tone: "warning" };
+  if (code.includes("login")) return { label: "connected · status review", tone: "warning" };
   if (
     code.includes("needs_more_targets")
     || code.includes("target_accounts_missing")

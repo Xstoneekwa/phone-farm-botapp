@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import type { BotAppDispatcherHealth, BotProfile, DeviceProfileGroup, ProfileAutoLoginState, ProfileToolbarAction } from "../../api/types";
-import { Badge, Button, Card, Modal, type BadgeTone } from "../../design/components";
+import { Badge, Button, Card, Modal } from "../../design/components";
 import type { DeviceViewState } from "../../desktop/device-views";
 import { focusDeviceView, listOpenDeviceViews, openDeviceView, subscribeDeviceViewState } from "../../desktop/device-views";
 import { ProfileToolbar } from "./ProfileToolbar";
@@ -26,7 +26,7 @@ import {
   unfollowMetricTooltip,
 } from "./profile-metric-contract";
 import { mergeGroupedProfiles } from "./profiles-live-merge";
-import { socialBadge, socialBlockLabel } from "./profile-growth-badge";
+import { canonicalConnectBadge, socialBadge } from "./profile-growth-badge";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
@@ -222,17 +222,6 @@ function CounterMetric({ current, max, label, tooltip }: { current: number; max:
   );
 }
 
-function connectBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
-  if (profile.loginStatus === "connected") return { label: "connected", tone: "success" };
-  if (profile.credentialStatus === "saved_pending_verification") return { label: "ready to connect", tone: "info" };
-  if (profile.credentialStatus === "active" && profile.autoLoginRequirement.enabled) return { label: "ready to connect", tone: "info" };
-  if (profile.credentialStatus === "missing" || profile.loginStatus === "missing_credentials") return { label: "missing credentials", tone: "warning" };
-  if (profile.credentialStatus === "needs_update" || profile.loginStatus === "password_invalid") return { label: "update password", tone: "error" };
-  if (profile.loginStatus === "needs_2fa" || profile.loginStatus === "challenge_required" || profile.loginStatus === "checkpoint") return { label: "action required", tone: "warning" };
-  if (profile.loginStatus === "logged_out" || profile.readiness === "needs_login") return { label: "login pending", tone: "warning" };
-  return { label: "login pending", tone: "neutral" };
-}
-
 export { socialBadge, socialBlockLabel } from "./profile-growth-badge";
 
 function AccountRow({
@@ -247,7 +236,7 @@ function AccountRow({
   const displayCounters = displayRunCounters(profile);
   const counterMetrics = displayCounterMetrics(profile);
   const interactionsToday = displayCounters.total;
-  const loginBadge = connectBadge(profile);
+  const loginBadge = canonicalConnectBadge(profile);
   const growthBadge = socialBadge(profile);
   const instanceTag = appInstanceTag(profile);
   const lifecycle = profileLifecycle(profile);

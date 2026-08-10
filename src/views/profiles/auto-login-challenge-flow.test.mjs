@@ -313,3 +313,10 @@ test("sixty second post-submit window does not alter BotApp Auto Login progressi
   assert.doesNotMatch(modalSource, /post_submit_timeout_ms|post-submit-timeout-ms|10000/);
   assert.match(profilesViewSource, /mergeAutoLoginProgressSnapshot/);
 });
+
+test("canonical connected account cannot be offered Auto Login again", () => {
+  assert.match(
+    electronMainSource,
+    /if \(loginStatus === "connected"\)[\s\S]*already_connected/,
+  );
+});

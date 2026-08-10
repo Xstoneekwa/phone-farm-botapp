@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { socialBadge } from "./profile-growth-badge.ts";
+import { canonicalConnectBadge, socialBadge } from "./profile-growth-badge.ts";
 import { displayRunCounters, runtimeIndicatorState } from "./run-control.ts";
 
 function profile(overrides = {}) {
@@ -66,4 +66,39 @@ test("unstructured worker failure remains an explicit business blocker", () => {
 test("terminal idle preserves canonical counters instead of returning to zero", () => {
   const terminal = profile({ currentRunCounters: { follows: 0, likes: 0, dms: 0, interactionsTotal: 0 } });
   assert.deepEqual(displayRunCounters(terminal), { mode: "today", follow: 10, like: 10, dm: 0, total: 0 });
+});
+
+test("READY_TO_CONNECT_ONLY_WHEN_CANONICAL_LOGIN_REQUIRES_CONNECTION", () => {
+  assert.deepEqual(
+    canonicalConnectBadge(profile({
+      credentialStatus: "active",
+      autoLoginRequirement: { enabled: true },
+      loginStatus: "connected",
+    })),
+    { label: "connected", tone: "success" },
+  );
+  assert.deepEqual(
+    canonicalConnectBadge(profile({
+      credentialStatus: "active",
+      autoLoginRequirement: { enabled: true },
+      loginStatus: "logged_out",
+      readiness: "needs_login",
+    })),
+    { label: "ready to connect", tone: "info" },
+  );
+});
+
+test("social collection state never becomes login truth", () => {
+  for (const dataFreshness of ["failed", "stale", "unavailable"]) {
+    const connected = profile({
+      followerDelta3d: { dataFreshness, windowCoverage: "insufficient_data" },
+    });
+    assert.deepEqual(canonicalConnectBadge(connected), { label: "connected", tone: "success" });
+    assert.deepEqual(socialBadge(connected), { label: "growth ready", tone: "success" });
+  }
+});
+
+test("login-required badge is canonical and is not labelled as social", () => {
+  const disconnected = profile({ loginStatus: "logged_out", readiness: "needs_login" });
+  assert.deepEqual(socialBadge(disconnected), { label: "login required", tone: "warning" });
 });

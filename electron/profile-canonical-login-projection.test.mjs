@@ -42,6 +42,24 @@ test("valid identity permits connected but does not manufacture canonical readin
   assert.equal(readCanonicalReadinessStatus(valid({ readinessProjection: { overall_readiness_status: "blocked" } })), "blocked");
 });
 
+test("SUCCESSFUL_LOGIN_REMAINS_CONNECTED_AFTER_BOTAPP_RESTART", () => {
+  const serialized = JSON.stringify(valid({ followerDelta3d: { dataFreshness: "stale" } }));
+  const afterRestart = JSON.parse(serialized);
+  assert.equal(readCanonicalLoginStatus(afterRestart), "connected");
+  assert.equal(readCanonicalReadinessStatus(afterRestart), "ready");
+});
+
+test("OLD_CAN_START_CANNOT_OVERRIDE_CANONICAL_LOGIN", () => {
+  const stale = valid({
+    eligibility: "can_start",
+    loginIdentityProofStatus: "failed",
+    loginIdentityProfileOpened: false,
+    loginIdentityUsernameMatch: false,
+    loginIdentityVerifiedAt: null,
+  });
+  assert.notEqual(readCanonicalLoginStatus(stale), "connected");
+});
+
 test("snake-case relay payload uses the same fail-closed contract", () => {
   const row = {
     login_status: "connected",
