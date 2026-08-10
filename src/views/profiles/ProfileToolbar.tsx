@@ -8,7 +8,7 @@ const toolbarActions: Array<{ id: ProfileToolbarAction; label: string; danger?: 
   { id: "play", label: "Start run" },
   { id: "auto_login", label: "Auto Login" },
   { id: "restore_login_screen", label: "Restore login screen" },
-  { id: "check_readiness", label: "Refresh readiness" },
+  { id: "check_readiness", label: "Confirm login & refresh readiness" },
   { id: "stop", label: "Stop", danger: true },
   { id: "settings", label: "Settings" },
   { id: "filters", label: "Filters" },

@@ -680,12 +680,12 @@ export function ProfilesView({
   async function checkReadinessNow(profile: BotProfile) {
     const readinessNow = window.botappDesktop?.profiles?.readinessNow;
     if (!readinessNow) {
-      onMockSubmit("Refresh readiness relay unavailable in this runtime.", "error");
+      onMockSubmit("Confirm login & refresh readiness relay unavailable in this runtime.", "error");
       return;
     }
     const result = await readinessNow({ accountId: profile.id });
     if (!result.ok) {
-      onMockSubmit(result.error || "Refresh readiness failed.", "error");
+      onMockSubmit(result.error || "Confirm login & refresh readiness failed.", "error");
       return;
     }
     const data = (result.data ?? {}) as Record<string, unknown>;
@@ -693,7 +693,7 @@ export function ProfilesView({
     const clientStatus = String(data.client_status || "unknown");
     const reason = String(data.reason || "no_reason");
     const nextAction = String(data.next_action || "none");
-    onMockSubmit(`Refresh readiness: ${readinessStatus} · ${clientStatus} · ${reason} · next=${nextAction} · device_run=false.`);
+    onMockSubmit(`Confirm login & refresh readiness: ${readinessStatus} · ${clientStatus} · ${reason} · next=${nextAction} · device_run=false.`);
     onRefresh();
   }
 
@@ -858,7 +858,7 @@ export function ProfilesView({
       play: "Start profile",
       auto_login: "Auto Login",
       restore_login_screen: "Restore login screen",
-      check_readiness: "Refresh readiness",
+      check_readiness: "Confirm login & refresh readiness",
       assign_now: "Assign Now",
       archive: "Archive profile",
       delete: "Delete profile",

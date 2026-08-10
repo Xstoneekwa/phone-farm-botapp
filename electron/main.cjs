@@ -4017,10 +4017,24 @@ async function profileReadinessNow(input) {
   const accountId = String(input?.accountId || input?.account_id || "").trim();
   if (!accountId) return { ok: false, error: "Missing account id." };
   try {
+    const runtime = await dispatcherStatus();
+    const certification = certifyWorkerRuntimeIdentity(runtime);
+    if (!certification.ok) {
+      return {
+        ok: false,
+        error: "Login confirmation is blocked because the active Worker runtime identity is not certified.",
+        reason: certification.reason || "corrected_worker_runtime_not_certified",
+      };
+    }
     const data = await dashboardPost("profiles_readiness_now", {
       account_id: accountId,
       audience: "admin",
       dry_run: true,
+      operator_confirmation: true,
+      operator_id: botappOperatorId(),
+      expected_worker_sha: certification.workerSha,
+      cause_fixed_version: certification.causeFixedVersion,
+      idempotency_key: `confirm-login-readiness:${accountId}`,
     });
     return { ok: true, data };
   } catch (error) {
