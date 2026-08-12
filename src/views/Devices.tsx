@@ -199,12 +199,22 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
     let cancelled = false;
     void listOpenDeviceViews().then((result) => {
       if (!cancelled && result.ok) {
+        console.info("DEVICE_VIEW_TRACE", {
+          stage: "renderer_state_initial",
+          openViewSerials: result.data.map((view) => view.deviceSerial),
+        });
         setOpenViews(result.data);
         if (result.tools) setLocalTools(result.tools);
       }
     });
     const unsubscribe = subscribeDeviceViewState((state) => {
-      if (!cancelled) setOpenViews(state);
+      if (!cancelled) {
+        console.info("DEVICE_VIEW_TRACE", {
+          stage: "renderer_state_received",
+          openViewSerials: state.map((view) => view.deviceSerial),
+        });
+        setOpenViews(state);
+      }
     });
     const unsubscribeRecovery = window.botappDesktop?.devices?.subscribeHeartbeatRecovery?.((result) => {
       if (cancelled) return;
@@ -241,22 +251,54 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
       return;
     }
     const serial = deviceViewSerial(device);
-    if (isViewOpen(openViews, device)) {
-      setMessage(`Focusing ${device.name} phone view...`);
-      const result = await focusDeviceView(serial);
+    const viewIsOpen = isViewOpen(openViews, device);
+    const operation = viewIsOpen ? "close" : "open";
+    console.info("DEVICE_VIEW_TRACE", {
+      stage: "renderer_openPhoneView",
+      deviceSerial: serial,
+      isViewOpen: viewIsOpen,
+      branch: operation,
+    });
+    if (viewIsOpen) {
+      setMessage(`Closing ${device.name} phone view...`);
+      const result = await closeDeviceView(serial);
+      console.info("DEVICE_VIEW_TRACE", {
+        stage: "renderer_ipc_result",
+        deviceSerial: serial,
+        operation,
+        ok: result.ok,
+        reason: result.reason ?? null,
+        returnedState: result.data.map((view) => ({
+          deviceSerial: view.deviceSerial,
+          status: view.status,
+          pid: view.pid,
+        })),
+      });
       if (result.ok) {
         setOpenViews(result.data);
         if (result.tools) setLocalTools(result.tools);
-        setMessage(formatViewFocused(device.name, result));
+        setMessage(`${device.name} phone view closed.`);
         return;
       }
       if (result.tools) setLocalTools(result.tools);
-      setMessage(formatViewFailure(device.name, result));
+      setMessage(result.error || `Failed to close ${device.name} phone view.`);
       return;
     }
 
     setMessage(`Opening ${device.name} phone view...`);
     const result = await openDeviceView({ deviceSerial: serial, deviceLabel: device.name });
+    console.info("DEVICE_VIEW_TRACE", {
+      stage: "renderer_ipc_result",
+      deviceSerial: serial,
+      operation,
+      ok: result.ok,
+      reason: result.reason ?? null,
+      returnedState: result.data.map((view) => ({
+        deviceSerial: view.deviceSerial,
+        status: view.status,
+        pid: view.pid,
+      })),
+    });
     if (result.ok) {
       setOpenViews(result.data);
       if (result.tools) setLocalTools(result.tools);
@@ -265,6 +307,19 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
     }
     if (result.tools) setLocalTools(result.tools);
     setMessage(formatViewFailure(device.name, result));
+  }
+
+  function traceEyeClick(device: Device) {
+    const serial = deviceViewSerial(device);
+    const wasOpen = isViewOpen(openViews, device);
+    console.info("DEVICE_VIEW_TRACE", {
+      stage: "renderer_eye_click",
+      deviceSerial: serial,
+      wasOpen,
+      openViewSerials: openViews.map((view) => view.deviceSerial),
+      requestedOperation: wasOpen ? "close" : "open",
+    });
+    void openPhoneView(device);
   }
 
   async function openAll() {
@@ -330,14 +385,6 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
       return;
     }
     setMessage(result.error || "Could not close phone views.");
-  }
-
-  async function closeOne(device: Device) {
-    const result = await closeDeviceView(deviceViewSerial(device));
-    if (result.ok) {
-      setOpenViews(result.data);
-      setMessage(`${device.name} phone view closed.`);
-    }
   }
 
   function openPanel(nextPanel: DevicePanel, device?: Device) {
@@ -412,8 +459,8 @@ export function Devices({ devices, onAction, onRefresh }: { devices: Device[]; o
                 device={device}
                 heartbeatPending={Boolean(heartbeatRestartStage && HEARTBEAT_RECOVERY_BUSY_STAGES.has(heartbeatRestartStage))}
                 isOpen={isViewOpen(openViews, device)}
-                onOpen={() => void openPhoneView(device)}
-                onClose={() => void closeOne(device)}
+                onOpen={() => traceEyeClick(device)}
+                onClose={() => traceEyeClick(device)}
                 onRestart={() => setConfirmState({ kind: "restart_phone", device })}
               />
             ))}

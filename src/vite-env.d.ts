@@ -55,6 +55,27 @@ type BotAppDeviceViewResult = {
   tools?: BotAppLocalToolDiagnostics;
 };
 
+type BotAppDeviceViewNativeWindowProbeEntry = {
+  deviceSerial: string;
+  childPid: number | null;
+  requestedWindowTitle: string | null;
+  processAlive: boolean;
+  nativeWindowOwnerPid: number | null;
+  nativeWindowId: number | null;
+  nativeWindowTitle: string | null;
+  nativeOwnerName: string | null;
+};
+
+type BotAppDeviceViewNativeWindowProbeResult = {
+  ok: boolean;
+  data: BotAppDeviceViewNativeWindowProbeEntry[];
+  error?: string;
+  reason?: string;
+  permissionRequired?: boolean;
+  method?: string;
+  platform?: string;
+};
+
 type BotAppRuntimeIntegrationStatus = import("./api/types").BotAppRuntimeIntegrationStatus;
 type BotAppDispatcherHealth = import("./api/types").BotAppDispatcherHealth;
 type BotAppDeviceHeartbeatHealth = import("./api/types").BotAppDeviceHeartbeatHealth;
@@ -241,11 +262,12 @@ interface Window {
       notificationOutbox: (input?: { channel?: string; limit?: number; offset?: number }) => Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }>;
     };
     deviceViews?: {
-      list: () => Promise<BotAppDeviceViewResult>;
-      open: (input: { deviceSerial: string; deviceLabel: string; windowIndex?: number }) => Promise<BotAppDeviceViewResult>;
-      focus: (deviceSerial: string) => Promise<BotAppDeviceViewResult>;
-      close: (deviceSerial: string) => Promise<BotAppDeviceViewResult>;
-      subscribe: (callback: (state: BotAppDeviceViewState[]) => void) => () => void;
-    };
+    list: () => Promise<BotAppDeviceViewResult>;
+    open: (input: { deviceSerial: string; deviceLabel: string; windowIndex?: number }) => Promise<BotAppDeviceViewResult>;
+    focus: (deviceSerial: string) => Promise<BotAppDeviceViewResult>;
+    close: (deviceSerial: string) => Promise<BotAppDeviceViewResult>;
+    probeNativeWindowState?: () => Promise<BotAppDeviceViewNativeWindowProbeResult>;
+    subscribe: (callback: (state: BotAppDeviceViewState[]) => void) => () => void;
+  };
   };
 }

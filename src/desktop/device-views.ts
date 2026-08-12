@@ -53,11 +53,33 @@ export type DeviceViewResult = {
   tools?: LocalToolDiagnostics;
 };
 
+export type DeviceViewNativeWindowProbeEntry = {
+  deviceSerial: string;
+  childPid: number | null;
+  requestedWindowTitle: string | null;
+  processAlive: boolean;
+  nativeWindowOwnerPid: number | null;
+  nativeWindowId: number | null;
+  nativeWindowTitle: string | null;
+  nativeOwnerName: string | null;
+};
+
+export type DeviceViewNativeWindowProbeResult = {
+  ok: boolean;
+  data: DeviceViewNativeWindowProbeEntry[];
+  error?: string;
+  reason?: string;
+  permissionRequired?: boolean;
+  method?: string;
+  platform?: string;
+};
+
 type DeviceViewBridge = {
   list: () => Promise<DeviceViewResult>;
   open: (input: { deviceSerial: string; deviceLabel: string; windowIndex?: number }) => Promise<DeviceViewResult>;
   focus: (deviceSerial: string) => Promise<DeviceViewResult>;
   close: (deviceSerial: string) => Promise<DeviceViewResult>;
+  probeNativeWindowState?: () => Promise<DeviceViewNativeWindowProbeResult>;
   subscribe: (callback: (state: DeviceViewState[]) => void) => () => void;
 };
 
@@ -103,6 +125,12 @@ export async function closeDeviceView(deviceSerial: string) {
   const api = bridge();
   if (!api) return { ok: true, data: [] } satisfies DeviceViewResult;
   return api.close(deviceSerial);
+}
+
+export async function probeNativeDeviceViews() {
+  const api = bridge();
+  if (!api?.probeNativeWindowState) return { ok: false, reason: "probe_unavailable", data: [] } satisfies DeviceViewNativeWindowProbeResult;
+  return api.probeNativeWindowState();
 }
 
 export async function closeAllDeviceViews(deviceSerials: string[]) {
