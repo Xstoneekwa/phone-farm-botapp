@@ -43,7 +43,7 @@ function findNonCloneablePath(value, path = "$", seen = new WeakSet()) {
   return null;
 }
 
-function serializeIpcPayload(value, depth = 0, seen = new WeakSet()) {
+function serializeIpcPayload(value, depth = 0, ancestors = new WeakSet()) {
   const kind = kindOf(value);
   if (value === null || kind === "undefined" || kind === "number" || kind === "boolean") return value;
   if (kind === "bigint") return String(value);
@@ -54,19 +54,23 @@ function serializeIpcPayload(value, depth = 0, seen = new WeakSet()) {
   if (kind === "function" || kind === "symbol") return `[${kind}]`;
   if (kind === "error") return toRedactedIpcError(value, "ipc_error");
   if (depth >= MAX_DEPTH) return "[max_depth]";
-  if (seen.has(value)) return "[circular]";
+  if (ancestors.has(value)) return "[circular]";
   if (kind !== "array" && kind !== "object") return String(value);
 
-  seen.add(value);
-  if (Array.isArray(value)) {
-    return value.map((item) => serializeIpcPayload(item, depth + 1, seen));
-  }
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => serializeIpcPayload(item, depth + 1, ancestors));
+    }
 
-  const out = {};
-  for (const [key, child] of Object.entries(value)) {
-    out[key] = serializeIpcPayload(child, depth + 1, seen);
+    const out = {};
+    for (const [key, child] of Object.entries(value)) {
+      out[key] = serializeIpcPayload(child, depth + 1, ancestors);
+    }
+    return out;
+  } finally {
+    ancestors.delete(value);
   }
-  return out;
 }
 
 function redactErrorMessage(message) {
