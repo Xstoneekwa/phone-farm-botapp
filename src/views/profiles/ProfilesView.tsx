@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import type { BotAppDispatcherHealth, BotProfile, DeviceProfileGroup, ProfileAutoLoginState, ProfileToolbarAction } from "../../api/types";
 import { Badge, Button, Card, Modal } from "../../design/components";
 import type { DeviceViewState } from "../../desktop/device-views";
-import { focusDeviceView, listOpenDeviceViews, openDeviceView, subscribeDeviceViewState } from "../../desktop/device-views";
+import { closeDeviceView, focusDeviceView, listOpenDeviceViews, openDeviceView, subscribeDeviceViewState } from "../../desktop/device-views";
 import { ProfileToolbar } from "./ProfileToolbar";
 import { StatsDrawer } from "./drawers/StatsDrawer";
 import { LogsDrawer } from "./drawers/LogsDrawer";
@@ -210,7 +210,7 @@ function AndroidViewIcon() {
 
 function phoneViewTooltip(group: DeviceProfileGroup, isOpen: boolean) {
   if (!group.deviceView.available) return group.deviceView.unavailableReason || "Phone unavailable.";
-  return isOpen ? "Focus phone view" : "Open phone view";
+  return isOpen ? "Close phone view" : "Open phone view";
 }
 
 function CounterMetric({ current, max, label, tooltip }: { current: number; max: number; label: string; tooltip?: string }) {
@@ -560,13 +560,61 @@ export function ProfilesView({
     }
 
     const wasOpen = openDeviceViews.some((view) => view.deviceSerial === group.deviceSerial);
+    console.info("DEVICE_VIEW_TRACE", {
+      stage: "renderer_eye_click",
+      deviceSerial: group.deviceSerial,
+      wasOpen,
+      openViewSerials: openDeviceViews.map((view) => view.deviceSerial),
+      requestedOperation: wasOpen ? "close" : "open",
+    });
+    console.info("DEVICE_VIEW_TRACE", {
+      stage: "renderer_openPhoneView",
+      deviceSerial: group.deviceSerial,
+      isViewOpen: wasOpen,
+      branch: wasOpen ? "close" : "open",
+    });
+    if (wasOpen) {
+      const result = await closeDeviceView(group.deviceSerial);
+      console.info("DEVICE_VIEW_TRACE", {
+        stage: "renderer_ipc_result",
+        deviceSerial: group.deviceSerial,
+        operation: "close",
+        ok: result.ok,
+        reason: result.reason ?? null,
+        returnedState: result.data.map((view) => ({
+          deviceSerial: view.deviceSerial,
+          status: view.status,
+          pid: view.pid,
+        })),
+      });
+      if (result.ok) {
+        setOpenDeviceViews(result.data);
+        onMockSubmit(`Closed ${group.deviceLabel} phone view.`);
+        return;
+      }
+      setPhoneViewMessage(result.error || "Could not close phone view.");
+      return;
+    }
+
     const result = await openDeviceView({
       deviceSerial: group.deviceSerial,
       deviceLabel: group.deviceLabel,
     });
+    console.info("DEVICE_VIEW_TRACE", {
+      stage: "renderer_ipc_result",
+      deviceSerial: group.deviceSerial,
+      operation: "open",
+      ok: result.ok,
+      reason: result.reason ?? null,
+      returnedState: result.data.map((view) => ({
+        deviceSerial: view.deviceSerial,
+        status: view.status,
+        pid: view.pid,
+      })),
+    });
     if (result.ok) {
       setOpenDeviceViews(result.data);
-      onMockSubmit(wasOpen ? `Focused ${group.deviceLabel} phone view.` : `Opened ${group.deviceLabel} phone view.`);
+      onMockSubmit(`Opened ${group.deviceLabel} phone view.`);
       return;
     }
     setPhoneViewMessage(result.error || "Could not open phone view.");
@@ -964,16 +1012,16 @@ export function ProfilesView({
                 {phoneGroupSummaryLabel(group)}
               </div>
               {(() => {
-                const isViewOpen = openDeviceViews.some((view) => view.deviceSerial === group.deviceSerial);
-                return (
-                  <span className="tooltip-wrap" data-tooltip={phoneViewTooltip(group, isViewOpen)}>
-                    <button
-                      type="button"
-                      className={`phone-view-button${isViewOpen ? " is-open" : ""}`}
-                      aria-label={isViewOpen ? "Focus phone view" : "Open phone view"}
-                      disabled={!group.deviceView.available}
-                      onClick={() => void handlePhoneView(group)}
-                    >
+                    const isViewOpen = openDeviceViews.some((view) => view.deviceSerial === group.deviceSerial);
+                    return (
+                      <span className="tooltip-wrap" data-tooltip={phoneViewTooltip(group, isViewOpen)}>
+                        <button
+                          type="button"
+                          className={`phone-view-button${isViewOpen ? " is-open" : ""}`}
+                          aria-label={isViewOpen ? "Close phone view" : "Open phone view"}
+                          disabled={!group.deviceView.available}
+                          onClick={() => void handlePhoneView(group)}
+                        >
                       {isViewOpen ? <AndroidViewIcon /> : <EyeIcon />}
                     </button>
                   </span>
