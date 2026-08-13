@@ -5249,6 +5249,7 @@ function profileFromManageAccount(account, index, devices) {
     readiness,
     eligibility,
     eligibilityReason,
+    accountRuntimeStatus: account?.accountRuntimeStatus || account?.account_runtime_status || null,
     eligibilityDetail: {
       status: eligibility,
       primary_block_reason: eligibility === "blocked_now" ? eligibilityReason : "",

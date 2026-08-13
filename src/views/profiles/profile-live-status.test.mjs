@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { canonicalConnectBadge, socialBadge } from "./profile-growth-badge.ts";
 import { displayRunCounters, runtimeIndicatorState } from "./run-control.ts";
+
+const electronMain = readFileSync(new URL("../../../electron/main.cjs", import.meta.url), "utf8");
 
 function profile(overrides = {}) {
   return {
@@ -46,6 +49,17 @@ test("unknown non-blocking state never invents social blocked fallback", () => {
 test("paused manual review wins over Growth readiness", () => {
   assert.deepEqual(
     socialBadge(profile({ accountRuntimeStatus: "paused_manual_review" })),
+    { label: "operator review required", tone: "warning" },
+  );
+});
+
+test("first overview projection preserves the canonical runtime pause field", () => {
+  assert.match(
+    electronMain,
+    /accountRuntimeStatus:\s*account\?\.accountRuntimeStatus\s*\|\|\s*account\?\.account_runtime_status\s*\|\|\s*null/,
+  );
+  assert.deepEqual(
+    socialBadge(profile({ accountRuntimeStatus: "paused_manual_review", readiness: "ready" })),
     { label: "operator review required", tone: "warning" },
   );
 });
