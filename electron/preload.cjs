@@ -2,6 +2,14 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 const DEVICE_VIEW_STATE = "botapp:device-views:state";
 
+function traceDeviceViewRequest(operation, deviceSerial) {
+  console.info("DEVICE_VIEW_TRACE", {
+    stage: "preload_request",
+    operation,
+    deviceSerial: String(deviceSerial || ""),
+  });
+}
+
 contextBridge.exposeInMainWorld("botappDesktop", {
   platform: process.platform,
   mode: process.env.NODE_ENV === "development" ? "development" : "packaged",
@@ -149,9 +157,19 @@ contextBridge.exposeInMainWorld("botappDesktop", {
   },
   deviceViews: {
     list: () => ipcRenderer.invoke("botapp:device-views:list"),
-    open: (input) => ipcRenderer.invoke("botapp:device-views:open", input),
-    focus: (deviceSerial) => ipcRenderer.invoke("botapp:device-views:focus", deviceSerial),
-    close: (deviceSerial) => ipcRenderer.invoke("botapp:device-views:close", deviceSerial),
+    open: (input) => {
+      traceDeviceViewRequest("open", input?.deviceSerial);
+      return ipcRenderer.invoke("botapp:device-views:open", input);
+    },
+    focus: (deviceSerial) => {
+      traceDeviceViewRequest("focus", deviceSerial);
+      return ipcRenderer.invoke("botapp:device-views:focus", deviceSerial);
+    },
+    close: (deviceSerial) => {
+      traceDeviceViewRequest("close", deviceSerial);
+      return ipcRenderer.invoke("botapp:device-views:close", deviceSerial);
+    },
+    probeNativeWindowState: () => ipcRenderer.invoke("botapp:device-views:probe"),
     subscribe: (callback) => {
       const handler = (_event, state) => callback(state);
       ipcRenderer.on(DEVICE_VIEW_STATE, handler);
