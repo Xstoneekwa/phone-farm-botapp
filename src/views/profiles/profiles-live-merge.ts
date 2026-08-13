@@ -2,6 +2,7 @@ import type { BotProfile, DeviceProfileGroup, ProfileRunCounters } from "../../a
 
 export type ProfilesLivePatch = {
   accountId: string;
+  canonicalProfile?: BotProfile;
   activeRunRequestId?: string | null;
   activeRunRequestStatus?: string | null;
   activeRunId?: string | null;
@@ -30,10 +31,14 @@ function isDashboardBlockReason(reason: string) {
 }
 
 export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: ProfilesLivePatch[]): BotProfile[] {
-  const byId = new Map(patches.map((patch) => [patch.accountId, patch]));
-  return profiles.map((profile) => {
-    const patch = byId.get(profile.id);
-    if (!patch) return profile;
+  const existingById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const authoritativePatches = new Map(patches.map((patch) => [patch.accountId, patch]));
+  return [...authoritativePatches.values()].flatMap((patch) => {
+    const existing = existingById.get(patch.accountId);
+    const profile = patch.canonicalProfile
+      ? { ...existing, ...patch.canonicalProfile, id: patch.accountId }
+      : existing;
+    if (!profile) return [];
     const active = isActive(patch);
     const blocker = patch.currentBlocker?.blockingCampaign ? String(patch.currentBlocker.actionType || "blocking_dashboard_action") : "";
     const staleDashboardBlocker = isDashboardBlockReason(`${profile.eligibilityReason} ${profile.eligibilityDetail.primary_block_reason}`);
@@ -55,7 +60,7 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
         ? (eligibility === "can_start" ? "ready" : "blocked")
         : profile.status;
 
-    return {
+    return [{
       ...profile,
       status,
       activeRunRequestId: patch.activeRunRequestId ?? null,
@@ -84,7 +89,7 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
         reason_label: eligibilityReason === "ready" ? "Ready" : profile.eligibilityDetail.reason_label,
       },
       liveSupportedKinds: patch.liveSupportedKinds ?? ["follow", "like", "dm"],
-    };
+    }];
   });
 }
 
@@ -95,6 +100,9 @@ export function mergeGroupedProfiles(
   const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
   return groups.map((group) => ({
     ...group,
-    profiles: group.profiles.map((profile) => profilesById.get(profile.id) ?? profile),
+    profiles: group.profiles.flatMap((profile) => {
+      const authoritative = profilesById.get(profile.id);
+      return authoritative ? [authoritative] : [];
+    }),
   }));
 }

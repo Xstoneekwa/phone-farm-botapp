@@ -433,3 +433,49 @@ separate from effective day/session limits; the latter are display-only.
 Polling may update package, warmup, consumption and effective values, but it
 must not replace the configured draft. Save serializes configured fields only;
 the backend and Worker remain final enforcement boundaries.
+
+## App instance reprovision/rebind contract
+
+BotApp may display and prepare this workflow, but must never infer a DB identity from a friendly phone label or a local serial alias. The canonical tuple is `phone_devices.id + adb_serial + phone_app_instances.id + instance_index + package_name + account_id`.
+
+Any future destructive action must call a server-side preflight that proves zero active work, captures the immutable old mapping, creates a new app-instance lineage, and requires Identity Guard plus app-version compatibility before scheduler rearm. Local device mappings remain convenience-only. Canonical protocol: `/Users/admin/Projects/boost-ai-frontend/docs/PHONE_FARM_APP_INSTANCE_REPROVISION_AND_REBIND_PROTOCOL.md`.
+
+## Phone View - certified state August 2026
+
+### Architecture
+
+- Electron owns one `scrcpy` process per device.
+- The registry is isolated by `deviceSerial`, allowing several Phone Views to remain open simultaneously.
+- Focus and close operations address the expected PID and device rather than searching globally by window name.
+- Native window probing is asynchronous and bounded.
+- Close reconciliation waits asynchronously for bounded PID disappearance after the initial close decision.
+- The implementation does not use a fragile global window-title lookup and does not use `focusScrcpyProcessFrontmost`.
+- Phone View code must remain isolated from startup, relay, dispatcher, heartbeat, serializer, and Profiles projection paths.
+
+### Certified behavior
+
+- Opening Phone View A and Phone View B is certified.
+- Multiple device views operate simultaneously.
+- Each view closes independently without closing the other device view.
+- No residual `scrcpy` process remains after both views close.
+- Bounded PID reconciliation removes the false `close_timeout` previously caused by delayed process disappearance.
+- The asynchronous native probe removes the macOS beachball previously caused by synchronous work on the close path.
+
+### Known limitation
+
+When a second Phone View is opened, macOS/scrcpy may keep or return the first Phone View to the foreground. Both views remain open and operational. This does not affect isolated close behavior or per-device integrity.
+
+Status: `KNOWN_LIMITATION`, `NON_BLOCKING`, `BACKLOG`.
+
+Do not report `SECOND_PHONE_VIEW_FRONTMOST` as deterministic or certified.
+
+### Backlog
+
+- Make the newly opened Phone View deterministically frontmost.
+- Add Phone View Hover Assist so BotApp tooltips remain visible on hover while `scrcpy` is active.
+
+Neither backlog item is implemented in the August 2026 certified release.
+
+### Incident history
+
+Earlier promotion attempts exposed interactions between unrelated Git lineages. A clean Golden baseline was identified and the Phone View work was reintegrated from that baseline. The false `close_timeout` came from checking the PID before its delayed disappearance; synchronous native probing also blocked the close path and caused a macOS beachball. The certified design uses an asynchronous native probe plus bounded PID reconciliation.

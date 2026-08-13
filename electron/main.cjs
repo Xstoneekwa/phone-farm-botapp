@@ -36,6 +36,7 @@ const {
   readCanonicalLoginStatus,
   readCanonicalReadinessStatus,
 } = require("./profile-canonical-login-projection.cjs");
+const { isVisibleProfileAccount } = require("./profile-lifecycle-projection.cjs");
 const {
   runtimeControllerPathFromEnv,
   runtimeControllerCwd,
@@ -4615,7 +4616,7 @@ function extractManageAccounts(profilesPayload, clientAccountsPayload, overviewP
     clientAccountsPayload?.accounts,
     manage?.allAccounts,
     combinedLifecycle,
-  ]);
+  ]).filter(isVisibleProfileAccount);
   const counts = {
     profiles_endpoint_count: Array.isArray(profilesPayload?.profiles) ? profilesPayload.profiles.length : 0,
     manage_all_accounts_count: Array.isArray(manage?.allAccounts) ? manage.allAccounts.length : 0,
@@ -5868,10 +5869,15 @@ async function botappProfilesLiveData(input) {
     : [];
   try {
     const payload = await dashboardGetWithQuery("profiles_live", { account_ids: accountIds.join(",") });
+    const liveAccounts = Array.isArray(payload?.profiles) ? payload.profiles : [];
     return serializeIpcPayload({
       ok: true,
       data: {
-        profiles: Array.isArray(payload?.profiles) ? payload.profiles : [],
+        profiles: liveAccounts.map((account, index) => ({
+          ...account,
+          accountId: accountRowId(account, index),
+          canonicalProfile: profileFromManageAccount(account, index, []),
+        })),
         generatedAt: payload?.generated_at || new Date().toISOString(),
         source: String(payload?.source || "profiles_live_batched_v1"),
         queryCount: Number(payload?.query_count || 0),

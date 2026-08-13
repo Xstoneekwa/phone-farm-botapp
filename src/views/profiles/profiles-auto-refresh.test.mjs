@@ -129,3 +129,9 @@ test("Profiles polling uses the light relay path and manual Refresh uses the sam
   assert.match(mainSource, /path:\s*"\/api\/instagram-dashboard\/profiles\/live"/);
   assert.match(mainSource, /dashboardGetWithQuery\("profiles_live"/);
 });
+
+test("profiles_live failure preserves the current full projection", () => {
+  const appSource = readFileSync(new URL("../../app/App.tsx", import.meta.url), "utf8");
+  assert.match(appSource, /if \(!result\.ok\) \{\s*setSyncError\([\s\S]*?\);\s*return;\s*\}/);
+  assert.match(appSource, /profiles: mergeProfilesLiveProjection\(dataRef\.current\.profiles, result\.data\.profiles\)/);
+});

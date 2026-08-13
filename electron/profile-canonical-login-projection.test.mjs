@@ -23,14 +23,19 @@ function valid(overrides = {}) {
   };
 }
 
-test("missing, pending, mismatched, and unknown identity never project connected", () => {
+test("canonical connected survives missing or review-pending identity metadata while Identity Guard stays closed", () => {
+  for (const row of [{ loginStatus: "connected" }, valid({ loginIdentityProofStatus: "required_unverified", loginIdentityVerifiedAt: null })]) {
+    assert.equal(readCanonicalLoginIdentity(row).verified, false);
+    assert.equal(readCanonicalLoginStatus(row), "connected");
+    assert.notEqual(canonicalIdentityBlockReason(row), "");
+  }
+});
+
+test("identity mismatch still overrides a stale connected status", () => {
   for (const row of [
-    { loginStatus: "connected" },
-    valid({ loginIdentityProofStatus: "required_unverified", loginIdentityVerifiedAt: null }),
     valid({ loginIdentityProofStatus: "failed", loginIdentityUsernameMatch: false }),
     valid({ loginIdentityProofStatus: "proven_false_ready", loginIdentityProfileOpened: false }),
   ]) {
-    assert.equal(readCanonicalLoginIdentity(row).verified, false);
     assert.notEqual(readCanonicalLoginStatus(row), "connected");
     assert.notEqual(canonicalIdentityBlockReason(row), "");
   }

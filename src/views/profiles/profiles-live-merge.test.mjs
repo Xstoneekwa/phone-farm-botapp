@@ -123,3 +123,54 @@ test("stopping remains active in grouped profiles until the terminal patch arriv
   assert.equal(projected.status, "running");
   assert.equal(projected.runControlPhase, "stopping");
 });
+
+test("successful live snapshot reconciles legacy ten profiles to exactly eight visible profiles", () => {
+  const legacy = Array.from({ length: 10 }, (_, index) => profile({ id: `account-${index + 1}`, username: `legacy-${index + 1}` }));
+  const live = legacy.slice(0, 8).map((item) => ({
+    accountId: item.id,
+    canonicalProfile: { ...item, loginStatus: "connected", readiness: "ready" },
+  }));
+  const result = mergeProfilesLiveProjection(legacy, live);
+  assert.equal(result.length, 8);
+  assert.deepEqual(result.map((item) => item.id), legacy.slice(0, 8).map((item) => item.id));
+});
+
+test("legacy row absent from a successful live snapshot is removed from profiles and groups", () => {
+  const active = profile({ id: "active", username: "active" });
+  const tombstone = profile({ id: "rolled-back", username: "rolled-back" });
+  const visible = mergeProfilesLiveProjection([active, tombstone], [{ accountId: active.id, canonicalProfile: active }]);
+  const group = {
+    deviceId: "phone-1", deviceLabel: "Samsung A16-01", deviceSerial: "RFGL145VCKE", deviceSerialLabel: "RFGL…VCKE",
+    deviceStatus: "online", phoneStatus: "idle", deviceView: { available: true, unavailableReason: null },
+    summary: { total: 2, normal: 2, dual: 0, other: 0 }, profiles: [active, tombstone],
+  };
+  const grouped = mergeGroupedProfiles([group], visible);
+  assert.deepEqual(visible.map((item) => item.id), ["active"]);
+  assert.deepEqual(grouped[0].profiles.map((item) => item.id), ["active"]);
+});
+
+test("canonical live status replaces legacy status without manufacturing login required", () => {
+  const legacy = profile({ id: "account-1", loginStatus: "unknown", readiness: "needs_login", status: "blocked" });
+  const canonical = profile({ id: "account-1", loginStatus: "connected", readiness: "ready", status: "ready" });
+  const [result] = mergeProfilesLiveProjection([legacy], [{ accountId: legacy.id, canonicalProfile: canonical }]);
+  assert.equal(result.loginStatus, "connected");
+  assert.equal(result.readiness, "ready");
+  assert.equal(result.status, "ready");
+});
+
+test("pre-login canonical profile remains pre-login", () => {
+  const legacy = profile({ id: "account-1", loginStatus: "connected", readiness: "ready" });
+  const canonical = profile({ id: "account-1", loginStatus: "unknown", readiness: "needs_login" });
+  const [result] = mergeProfilesLiveProjection([legacy], [{ accountId: legacy.id, canonicalProfile: canonical }]);
+  assert.equal(result.loginStatus, "unknown");
+  assert.equal(result.readiness, "needs_login");
+});
+
+test("live snapshot after fallback reconciles once and repeated refresh stays duplicate-free", () => {
+  const fallback = [profile({ id: "active" }), profile({ id: "stale" })];
+  const live = [{ accountId: "active", canonicalProfile: profile({ id: "active", loginStatus: "connected" }) }];
+  const first = mergeProfilesLiveProjection(fallback, live);
+  const second = mergeProfilesLiveProjection(first, live);
+  assert.deepEqual(first.map((item) => item.id), ["active"]);
+  assert.deepEqual(second.map((item) => item.id), ["active"]);
+});

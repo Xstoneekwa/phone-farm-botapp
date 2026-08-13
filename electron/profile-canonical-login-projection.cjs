@@ -47,6 +47,8 @@ function readCanonicalLoginStatus(account) {
   if (raw.includes("missing")) return "missing_credentials";
   if (raw.includes("logged_out")) return "logged_out";
   const identity = readCanonicalLoginIdentity(account);
+  if (identity.invalidationReason || ["failed", "proven_false_ready"].includes(identity.proofStatus)) return "unknown";
+  if (raw === "connected") return "connected";
   if (!identity.verified && !identity.historicalNonBlocking) return "unknown";
   return raw === "connected" ? "connected" : "unknown";
 }
