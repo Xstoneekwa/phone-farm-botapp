@@ -43,10 +43,24 @@ test("unknown non-blocking state never invents social blocked fallback", () => {
   );
 });
 
+test("paused manual review wins over Growth readiness", () => {
+  assert.deepEqual(
+    socialBadge(profile({ accountRuntimeStatus: "paused_manual_review" })),
+    { label: "operator review required", tone: "warning" },
+  );
+});
+
+test("known operator review wins when readiness projection is missing", () => {
+  assert.deepEqual(
+    socialBadge(profile({ readiness: "blocked", eligibility: "blocked_now", eligibilityReason: "operator_review_required" })),
+    { label: "operator review required", tone: "warning" },
+  );
+});
+
 test("real current blocker remains visible when there is no active runtime", () => {
   assert.deepEqual(
     socialBadge(profile({ readiness: "blocked", eligibility: "blocked_now", eligibilityReason: "blocking_dashboard_action" })),
-    { label: "social review required", tone: "warning" },
+    { label: "operator review required", tone: "warning" },
   );
 });
 

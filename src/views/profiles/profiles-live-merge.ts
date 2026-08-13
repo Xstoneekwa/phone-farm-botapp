@@ -8,6 +8,7 @@ export type ProfilesLivePatch = {
   activeRunId?: string | null;
   activeRunStatus?: string | null;
   runtimeIndicator?: BotProfile["runtimeIndicator"];
+  accountRuntimeStatus?: string | null;
   currentRunCounters?: ProfileRunCounters;
   countersToday?: Partial<Record<"follows" | "unfollows" | "likes" | "comments" | "dms", number>>;
   interactionsToday?: number;
@@ -70,6 +71,7 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
       runControlPhase: patch.runControlPhase ?? null,
       runControlLabel: patch.runControlLabel ?? null,
       runtimeIndicator: patch.runtimeIndicator ?? profile.runtimeIndicator,
+      accountRuntimeStatus: patch.accountRuntimeStatus ?? profile.accountRuntimeStatus,
       currentRunCounters: patch.currentRunCounters ?? profile.currentRunCounters,
       followerDelta3d: patch.followerDelta3d ?? profile.followerDelta3d,
       interactionsToday: Number.isFinite(patch.interactionsToday) ? Number(patch.interactionsToday) : profile.interactionsToday,

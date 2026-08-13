@@ -677,6 +677,7 @@ export type BotProfile = {
   activeRunId?: string | null;
   activeRunStatus?: string | null;
   runtimeIndicator?: ProfileRuntimeIndicator;
+  accountRuntimeStatus?: string | null;
   runControlPhase?: "idle" | "stopping" | "cleanup_in_progress" | "stop_requires_attention" | "manual_restart_required" | null;
   runControlLabel?: string | null;
   operatorStopSuppressed?: boolean;

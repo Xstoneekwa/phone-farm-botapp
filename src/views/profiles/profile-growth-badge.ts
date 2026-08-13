@@ -29,7 +29,7 @@ export function socialBlockLabel(reason: string): string {
     return "social review: account mismatch";
   }
   if (normalized.includes("operator_review_required")) return "operator review required";
-  if (normalized.includes("blocking_dashboard_action")) return "social review required";
+  if (normalized.includes("blocking_dashboard_action")) return "operator review required";
   if (normalized.includes("welcome_real_send_disabled")) return "growth blocked: Welcome DM disabled";
   if (normalized.includes("outreach_real_send_disabled")) return "growth blocked: Outreach DM disabled";
   if (normalized.includes("quota") || normalized.includes("cap")) return "growth blocked: quota";
@@ -74,11 +74,20 @@ export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTo
     return { label: "login required", tone: "warning" };
   }
 
+  const code = stableBlockCode(profile);
+  const runtimeStatus = String(profile.accountRuntimeStatus || "").trim().toLowerCase();
+  if (
+    runtimeStatus === "paused_manual_review"
+    || code.includes("operator_review_required")
+    || code.includes("blocking_dashboard_action")
+  ) {
+    return { label: "operator review required", tone: "warning" };
+  }
+
   if (profile.readiness === "ready") {
     return { label: "growth ready", tone: "success" };
   }
 
-  const code = stableBlockCode(profile);
   if (code.includes("device_locked_requires_operator") || code.includes("device_locked")) {
     return { label: "connected · device locked", tone: "warning" };
   }
@@ -101,9 +110,6 @@ export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTo
   }
   if (code.includes("scheduler_launch_blocked")) {
     return { label: "connected · scheduler blocked", tone: "warning" };
-  }
-  if (code.includes("operator_review_required") || code.includes("blocking_dashboard_action")) {
-    return { label: socialBlockLabel(code), tone: "warning" };
   }
   if (
     code.includes("welcome_surface_unstable")
