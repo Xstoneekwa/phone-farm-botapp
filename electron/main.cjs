@@ -5149,6 +5149,13 @@ function profileFromManageAccount(account, index, devices) {
   const assignmentHealthReason = readAssignmentHealthReason(account);
   const appInstanceId = String(account?.appInstanceId || account?.app_instance_id || account?.assignment?.appInstanceId || account?.assignment?.app_instance_id || "");
   const lifecycleStatus = readProfileLifecycleStatus(account);
+  const commercialLifecycleStatus = accountStatus(
+    account?.adminLifecycleStatus
+    || account?.admin_lifecycle_status
+    || account?.adminStatus
+    || account?.customerStatus
+    || account?.subscriptionStatus,
+  );
   const appInstanceIndex = readNullableProfileNumber(account, ["appInstanceIndex", "app_instance_index", "cloneIndex", "clone_index"]);
   const profileStatus = lifecycleStatus === "archived" ? "archived" : lifecycleStatus === "trashed" ? "trashed" : readProfileStatus(account, blocked);
   const runtimeLock = String(account?.runtimeLock || account?.runtime_lock || "none");
@@ -5184,6 +5191,7 @@ function profileFromManageAccount(account, index, devices) {
     appInstanceIndex,
     cloneIndex: appInstanceIndex,
     lifecycleStatus,
+    commercialLifecycleStatus,
     archivedAt: account?.archivedAt || account?.archived_at || null,
     trashedAt: account?.trashedAt || account?.trashed_at || null,
     scheduledTrashAt: account?.scheduledTrashAt || account?.scheduled_trash_at || null,
@@ -5286,7 +5294,13 @@ function overlayClientAccountNeedsMoreTargets(items, clientAccountsPayload) {
 
 function clientAccountFromManage(account, profile, devices) {
   const device = devices.find((item) => item.id === profile.deviceId);
-  const status = accountStatus(account?.adminStatus || account?.customerStatus || account?.subscriptionStatus);
+  const status = accountStatus(
+    account?.adminLifecycleStatus
+    || account?.admin_lifecycle_status
+    || account?.adminStatus
+    || account?.customerStatus
+    || account?.subscriptionStatus,
+  );
   const actionsNeeded = [];
   if (account?.pendingActionsCount) actionsNeeded.push(`${account.pendingActionsCount} pending action(s)`);
   if (account?.blockingCampaign) actionsNeeded.push("campaign blocked");

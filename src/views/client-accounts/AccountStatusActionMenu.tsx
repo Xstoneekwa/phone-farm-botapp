@@ -3,7 +3,7 @@ import type { BotAppClientAccount, BotAppRelayHealth, BotAppRuntimeIntegrationSt
 import {
   applyClientAccountLifecycleAction,
   buildLifecycleAvailability,
-  lifecycleActionLabel,
+  lifecycleActionCopy,
   relayActionsAvailable,
   type ClientAccountLifecycleAction,
   type ClientAccountLifecycleAvailability,
@@ -22,13 +22,6 @@ type AccountStatusActionMenuProps = {
   onClose: () => void;
   onMessage: (message: string, tone?: "success" | "error") => void;
   onRefresh: () => Promise<void> | void;
-};
-
-const lifecycleDescriptions: Record<ClientAccountLifecycleAction, string> = {
-  pause: "Suspends billing and campaign activity. Slot and clone stay reserved.",
-  cancel: "Cancels Stripe billing and releases slot when runtime is terminal.",
-  mark_needs_assistance: "Blocks runs but keeps assignment for support review.",
-  reactivate: "Resumes Stripe billing and campaign eligibility before pause expiry.",
 };
 
 export function AccountStatusActionMenu({
@@ -160,7 +153,8 @@ export function AccountStatusActionMenu({
           </small>
         ) : null}
         {availability.map((item: ClientAccountLifecycleAvailability) => {
-          const description = item.disabledReason || lifecycleDescriptions[item.action];
+          const actionCopy = lifecycleActionCopy(item.action, "en");
+          const description = item.disabledReason || actionCopy.description;
           const danger = item.action === "cancel";
           return (
             <button
@@ -170,12 +164,12 @@ export function AccountStatusActionMenu({
               className={danger ? "danger" : ""}
               disabled={isSaving || item.disabled}
               title={description}
-              aria-label={`${lifecycleActionLabel(item.action)}: ${description}`}
+              aria-label={`${actionCopy.label}: ${description}`}
               onClick={() => void runAction(item.action)}
             >
               {lifecycleIcon(item.action)}
               <span>
-                <strong>{lifecycleActionLabel(item.action)}</strong>
+                <strong>{actionCopy.label}</strong>
                 <small>{description}</small>
               </span>
             </button>

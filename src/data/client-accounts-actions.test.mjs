@@ -3,6 +3,9 @@ import test from "node:test";
 import {
   applyClientAccountLifecycleAction,
   buildLifecycleAvailability,
+  clientAccountPrimaryStatus,
+  clientAccountStatusCopy,
+  lifecycleActionCopy,
   lifecycleActionAvailability,
   relayActionsAvailable,
 } from "./client-accounts-actions.ts";
@@ -92,6 +95,41 @@ test("relayActionsAvailable requires configured relay health", () => {
 
 test("buildLifecycleAvailability returns four lifecycle actions", () => {
   assert.equal(buildLifecycleAvailability(account(), false).length, 4);
+});
+
+test("commercial pause outranks assistance and exposes the paused action matrix", () => {
+  const paused = account({ accountStatus: "paused", actionsNeeded: ["identity review"] });
+  assert.equal(clientAccountPrimaryStatus(paused), "paused");
+  const matrix = Object.fromEntries(buildLifecycleAvailability(paused, true).map((item) => [item.action, item.disabled]));
+  assert.deepEqual(matrix, {
+    pause: true,
+    cancel: false,
+    mark_needs_assistance: true,
+    reactivate: false,
+  });
+});
+
+test("active and cancelled lifecycle action matrices are deterministic", () => {
+  const active = Object.fromEntries(buildLifecycleAvailability(account(), true).map((item) => [item.action, item.disabled]));
+  assert.equal(active.pause, false);
+  assert.equal(active.reactivate, true);
+  assert.equal(active.cancel, false);
+
+  const cancelled = Object.fromEntries(buildLifecycleAvailability(account({ accountStatus: "cancelled" }), true).map((item) => [item.action, item.disabled]));
+  assert.equal(cancelled.pause, true);
+  assert.equal(cancelled.reactivate, true);
+  assert.equal(cancelled.cancel, true);
+});
+
+test("lifecycle action copy is complete and never mixes French and English", () => {
+  assert.equal(lifecycleActionCopy("pause", "en").label, "Suspend campaign");
+  assert.match(lifecycleActionCopy("pause", "en").description, /^Suspends billing/);
+  assert.equal(lifecycleActionCopy("pause", "fr").label, "Suspendre la campagne");
+  assert.match(lifecycleActionCopy("pause", "fr").description, /^Suspend la facturation/);
+  assert.equal(clientAccountStatusCopy("paused", "en"), "paused");
+  assert.equal(clientAccountStatusCopy("paused", "fr"), "en pause");
+  assert.equal(clientAccountStatusCopy("operator_review_required", "en"), "operator review required");
+  assert.equal(clientAccountStatusCopy("operator_review_required", "fr"), "revue opérateur requise");
 });
 
 test("applyClientAccountLifecycleAction blocks when relay unavailable", async () => {

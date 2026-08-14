@@ -62,6 +62,13 @@ export function canonicalConnectBadge(profile: BotProfile): { label: string; ton
 }
 
 export function socialBadge(profile: BotProfile): { label: string; tone: BadgeTone } {
+  if (profile.commercialLifecycleStatus === "cancelled") {
+    return { label: "cancelled", tone: "error" };
+  }
+  if (profile.commercialLifecycleStatus === "paused") {
+    return { label: "paused", tone: "warning" };
+  }
+
   if (hasActiveRuntime(profile)) {
     const staleReason = stableBlockCode(profile);
     if (staleReason && !staleReason.includes("already_running") && !staleReason.includes("active_run")) {

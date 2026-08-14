@@ -8,6 +8,7 @@ import type {
   ClientAccountPasswordUpdatePayload,
 } from "../api/types";
 import { AccountStatusActionMenu } from "./client-accounts/AccountStatusActionMenu";
+import { clientAccountPrimaryStatus, clientAccountStatusCopy } from "../data/client-accounts-actions";
 import "./client-accounts.css";
 
 type ClientAccountsProps = {
@@ -217,7 +218,7 @@ export function ClientAccounts({ overview, onOpenProfile, onOpenCredentials, onR
                   <td>
                     <div className="client-accounts-status-cell">
                       <span>Status</span>
-                      <Badge value={item.actionsNeeded.length ? "needs assistance" : item.accountStatus} tone={item.actionsNeeded.length ? "danger" : statusTone(item.accountStatus)} />
+                      <Badge value={clientAccountStatusCopy(clientAccountPrimaryStatus(item), "en")} tone={statusTone(clientAccountPrimaryStatus(item))} />
                       <small className={statusTone(item.accountStatus)}>{item.adminStatus} · {item.customerStatus} · {item.subscriptionStatus}</small>
                     </div>
                   </td>

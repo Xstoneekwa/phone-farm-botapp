@@ -58,3 +58,18 @@ test("BOTAPP_RESTART_PRESERVES_READY", () => {
   const rehydrated = JSON.parse(JSON.stringify(profile()));
   assert.equal(socialBadge(rehydrated).label, "growth ready");
 });
+
+test("commercial lifecycle outranks readiness and operator-review projections", () => {
+  assert.deepEqual(
+    socialBadge(profile({
+      commercialLifecycleStatus: "paused",
+      readiness: "blocked",
+      eligibilityReason: "operator_review_required",
+    })),
+    { label: "paused", tone: "warning" },
+  );
+  assert.deepEqual(
+    socialBadge(profile({ commercialLifecycleStatus: "cancelled" })),
+    { label: "cancelled", tone: "error" },
+  );
+});

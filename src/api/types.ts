@@ -620,6 +620,7 @@ export type BotProfile = {
   appInstanceIndex?: number | null;
   cloneIndex?: number | null;
   lifecycleStatus?: ProfileLifecycleStatus;
+  commercialLifecycleStatus?: BotAppClientAccountStatus;
   archivedAt?: string | null;
   trashedAt?: string | null;
   scheduledTrashAt?: string | null;
