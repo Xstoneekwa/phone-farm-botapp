@@ -53,7 +53,7 @@ export function canonicalConnectBadge(profile: BotProfile): { label: string; ton
     canonicalConnectionRequired
     && (
       profile.credentialStatus === "saved_pending_verification"
-      || (profile.credentialStatus === "active" && profile.autoLoginRequirement.enabled)
+      || profile.credentialStatus === "active"
     )
   ) {
     return { label: "ready to connect", tone: "info" };

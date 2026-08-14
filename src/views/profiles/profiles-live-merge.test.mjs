@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { canonicalConnectBadge, socialBadge } from "./profile-growth-badge.ts";
 import { mergeGroupedProfiles, mergeProfilesLiveProjection } from "./profiles-live-merge.ts";
 
 function profile(overrides = {}) {
@@ -173,4 +174,27 @@ test("live snapshot after fallback reconciles once and repeated refresh stays du
   const second = mergeProfilesLiveProjection(first, live);
   assert.deepEqual(first.map((item) => item.id), ["active"]);
   assert.deepEqual(second.map((item) => item.id), ["active"]);
+});
+
+test("ten authoritative refreshes keep paused pre-login badges order-invariant", () => {
+  let profiles = [profile({
+    commercialLifecycleStatus: "paused",
+    credentialStatus: "active",
+    autoLoginRequirement: { enabled: true, reason: "ready" },
+    loginStatus: "unknown",
+    readiness: "needs_login",
+  })];
+  const sequence = [];
+  for (let index = 0; index < 10; index += 1) {
+    const canonicalProfile = profile({
+      commercialLifecycleStatus: "paused",
+      credentialStatus: "active",
+      autoLoginRequirement: { enabled: index % 2 === 0, reason: index % 2 === 0 ? "ready" : "assignment_missing" },
+      loginStatus: "unknown",
+      readiness: "needs_login",
+    });
+    profiles = mergeProfilesLiveProjection(profiles, [{ accountId: "account-1", canonicalProfile }]);
+    sequence.push(`${canonicalConnectBadge(profiles[0]).label} / ${socialBadge(profiles[0]).label}`);
+  }
+  assert.deepEqual(sequence, Array.from({ length: 10 }, () => "ready to connect / paused"));
 });

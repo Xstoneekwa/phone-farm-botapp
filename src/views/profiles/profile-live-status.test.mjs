@@ -117,6 +117,21 @@ test("READY_TO_CONNECT_ONLY_WHEN_CANONICAL_LOGIN_REQUIRES_CONNECTION", () => {
   );
 });
 
+test("canonical pre-login badge does not depend on transient auto-login capability", () => {
+  for (const enabled of [true, false]) {
+    assert.deepEqual(
+      canonicalConnectBadge(profile({
+        commercialLifecycleStatus: "paused",
+        credentialStatus: "active",
+        autoLoginRequirement: { enabled, reason: enabled ? "ready" : "assignment_missing" },
+        loginStatus: "unknown",
+        readiness: "needs_login",
+      })),
+      { label: "ready to connect", tone: "info" },
+    );
+  }
+});
+
 test("social collection state never becomes login truth", () => {
   for (const dataFreshness of ["failed", "stale", "unavailable"]) {
     const connected = profile({
