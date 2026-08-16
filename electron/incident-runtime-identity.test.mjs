@@ -36,8 +36,32 @@ test("certifies the full immutable HEAD when runtimectl reports a matching short
   });
   assert.deepEqual(calls, [{
     command: "/usr/bin/git",
-    args: ["-C", healthy.resolvedRoot, "rev-parse", "--verify", "HEAD"],
+    args: [
+      "-c",
+      `safe.directory=${healthy.resolvedRoot}`,
+      "-C",
+      healthy.resolvedRoot,
+      "rev-parse",
+      "--verify",
+      "HEAD",
+    ],
   }]);
+});
+
+test("scopes the Git ownership exception to the exact certified immutable root", () => {
+  let observedArgs;
+  const result = certifyWorkerRuntimeIdentity(healthy, {
+    fsImpl,
+    spawnSyncImpl(_command, args) {
+      observedArgs = args;
+      return { status: 0, stdout: `${fullSha}\n` };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(observedArgs[0], "-c");
+  assert.equal(observedArgs[1], `safe.directory=${healthy.resolvedRoot}`);
+  assert.equal(observedArgs.includes("safe.directory=*"), false);
 });
 
 test("fails closed on unhealthy runtime, root mismatch, or SHA mismatch", () => {

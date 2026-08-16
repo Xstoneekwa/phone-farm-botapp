@@ -36,7 +36,15 @@ function certifyWorkerRuntimeIdentity(runtime, options = {}) {
 
   const spawnSyncImpl = options.spawnSyncImpl || spawnSync;
   const gitPath = options.gitPath || "/usr/bin/git";
-  const result = spawnSyncImpl(gitPath, ["-C", resolvedRealPath, "rev-parse", "--verify", "HEAD"], {
+  const result = spawnSyncImpl(gitPath, [
+    "-c",
+    `safe.directory=${resolvedRealPath}`,
+    "-C",
+    resolvedRealPath,
+    "rev-parse",
+    "--verify",
+    "HEAD",
+  ], {
     encoding: "utf8",
     shell: false,
     timeout: 5000,
