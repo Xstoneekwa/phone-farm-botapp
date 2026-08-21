@@ -94,7 +94,7 @@ async function tickSchedulerRuntime(deps) {
       : null;
     if (relay?.ok && relay?.relay_authenticated && typeof deps.ensureDispatcher === "function") {
       const dispatcher = await deps.getDispatcherStatus().catch(() => null);
-      if (!dispatcher?.processRunning || dispatcher?.status !== "running") {
+      if (dispatcher?.service_state === "stopped" && dispatcher?.processRunning === false) {
         await deps.ensureDispatcher().catch(() => undefined);
       }
     }

@@ -7555,17 +7555,21 @@ function dispatcherFallbackStatus(status, message, extra = {}) {
     dispatcher_id: "",
     worker_id: "",
     paused: false,
-    processRunning: false,
+    service_state: "unknown",
+    service_health: "degraded",
+    preflight_state: "unknown",
+    preflight_reason: message,
+    processRunning: null,
     pid: null,
-    processCount: 0,
+    processCount: null,
     duplicateProcess: false,
-    launchdLoaded: false,
-    launchEnabled: false,
+    launchdLoaded: null,
+    launchEnabled: null,
     healthOnly: false,
     allowExistingQueue: false,
     heartbeatAge: null,
     lastSeenAt: null,
-    preflightOk: false,
+    preflightOk: null,
     preflight: null,
     queueActiveCount: null,
     lastError: message,
@@ -7585,20 +7589,31 @@ function normalizeDispatcherStatus(raw, action) {
   return {
     ok: Boolean(raw?.ok),
     status,
+    service_state: ["running", "stopped", "starting", "paused", "unknown"].includes(raw?.service_state)
+      ? raw.service_state
+      : status === "running" || status === "unhealthy" ? "running"
+        : status === "stopped" ? "stopped"
+          : status === "paused" ? "paused"
+            : status === "starting" ? "starting" : "unknown",
+    service_health: ["healthy", "degraded", "unknown"].includes(raw?.service_health)
+      ? raw.service_health
+      : status === "unhealthy" || status === "degraded" ? "degraded" : "unknown",
+    preflight_state: typeof raw?.preflight_state === "string" ? raw.preflight_state : "not_checked",
+    preflight_reason: typeof raw?.preflight_reason === "string" ? raw.preflight_reason : null,
     dispatcher_id: String(raw?.dispatcher_id || raw?.worker_id || ""),
     worker_id: String(raw?.worker_id || raw?.dispatcher_id || ""),
     paused: Boolean(raw?.paused),
-    processRunning: Boolean(raw?.processRunning),
+    processRunning: typeof raw?.processRunning === "boolean" ? raw.processRunning : null,
     pid: Number.isFinite(Number(raw?.pid)) ? Number(raw.pid) : null,
-    processCount: Number.isFinite(Number(raw?.processCount)) ? Number(raw.processCount) : 0,
+    processCount: raw?.processCount !== null && raw?.processCount !== undefined && Number.isFinite(Number(raw.processCount)) ? Number(raw.processCount) : null,
     duplicateProcess: Boolean(raw?.duplicateProcess),
-    launchdLoaded: Boolean(raw?.launchdLoaded),
-    launchEnabled: Boolean(raw?.launchEnabled),
+    launchdLoaded: typeof raw?.launchdLoaded === "boolean" ? raw.launchdLoaded : null,
+    launchEnabled: typeof raw?.launchEnabled === "boolean" ? raw.launchEnabled : null,
     healthOnly: Boolean(raw?.healthOnly),
     allowExistingQueue: Boolean(raw?.allowExistingQueue),
     heartbeatAge: Number.isFinite(Number(raw?.heartbeatAge)) ? Number(raw.heartbeatAge) : null,
     lastSeenAt: typeof raw?.lastSeenAt === "string" && raw.lastSeenAt ? raw.lastSeenAt : null,
-    preflightOk: Boolean(raw?.preflightOk),
+    preflightOk: typeof raw?.preflightOk === "boolean" ? raw.preflightOk : null,
     preflight,
     queueActiveCount: Number.isFinite(Number(raw?.queueActiveCount)) ? Number(raw.queueActiveCount) : null,
     lastError: lastError || null,
@@ -7618,19 +7633,20 @@ function normalizeDispatcherStatus(raw, action) {
 function mergeRunControlProjection(localStatus, projection) {
   if (!projection || typeof projection !== "object") return localStatus;
   const heartbeatAge = Number.isFinite(Number(projection.heartbeatAgeSeconds)) ? Number(projection.heartbeatAgeSeconds) : null;
-  const remoteStatus = typeof projection.dispatcherStatus === "string" && projection.dispatcherStatus ? projection.dispatcherStatus : null;
-  const remoteWorkerId = typeof projection.dispatcherWorkerId === "string" && projection.dispatcherWorkerId ? projection.dispatcherWorkerId : "";
-  const remoteLaunchEnabled = typeof projection.dispatcherLaunchEnabled === "boolean" ? projection.dispatcherLaunchEnabled : localStatus.launchEnabled;
   return {
     ...localStatus,
-    dispatcher_id: localStatus.dispatcher_id || remoteWorkerId,
-    worker_id: localStatus.worker_id || remoteWorkerId,
-    launchEnabled: remoteLaunchEnabled,
+    // Remote heartbeat/business data may inform health, never local liveness,
+    // launchability, or the authoritative runtime identity.
+    dispatcher_id: localStatus.dispatcher_id,
+    worker_id: localStatus.worker_id,
+    launchEnabled: localStatus.launchEnabled,
     heartbeatAge,
     lastSeenAt: typeof projection.lastSeenAt === "string" && projection.lastSeenAt ? projection.lastSeenAt : localStatus.lastSeenAt,
     supabaseRestStatus: "ok",
-    message: localStatus.status === "unknown" && typeof projection.message === "string" ? projection.message : localStatus.message,
-    lastError: localStatus.lastError || (projection.healthy === false ? String(projection.reason || remoteStatus || "dispatcher_unhealthy") : null),
+    preflight_state: projection.healthy === false ? "degraded" : projection.healthy === true ? "healthy" : localStatus.preflight_state,
+    preflight_reason: projection.healthy === false ? String(projection.reason || "business_preflight_degraded") : localStatus.preflight_reason,
+    service_health: projection.healthy === false && localStatus.service_state === "running" ? "degraded" : localStatus.service_health,
+    lastError: localStatus.lastError || (projection.healthy === false ? String(projection.reason || "business_preflight_degraded") : null),
   };
 }
 
@@ -7760,68 +7776,69 @@ function attachSchedulerRuntimeResilienceHooks() {
 async function dispatcherStatus() {
   const result = await runDispatcherWrapperAsync("status", ["--json"]);
   if (!result.ok && !result.stdout) {
-    const projection = await readRunControlProjection();
-    return mergeRunControlProjection(dispatcherFallbackStatus("unknown", result.error || "Dispatcher status unavailable."), projection);
+    return dispatcherFallbackStatus("unknown", result.error || "Dispatcher status unavailable.");
   }
   const parsed = parseDispatcherJson(result.stdout);
   if (!parsed) {
-    const projection = await readRunControlProjection();
-    return mergeRunControlProjection(dispatcherFallbackStatus("unknown", "Dispatcher status output was not valid JSON.", {
+    return dispatcherFallbackStatus("unknown", "Dispatcher status output was not valid JSON.", {
       lastError: result.error || result.stderr || "dispatcher_status_json_invalid",
-    }), projection);
+    });
   }
-  return mergeRunControlProjection(normalizeDispatcherStatus(parsed, "status"), await readRunControlProjection());
+  return normalizeDispatcherStatus(parsed, "status");
 }
 
+async function dispatcherStatusWithBusinessPreflight() {
+  const localStatus = await dispatcherStatus();
+  const projection = await readRunControlProjection();
+  if (!projection) {
+    return {
+      ...localStatus,
+      service_health: localStatus.service_state === "running" ? "degraded" : localStatus.service_health,
+      preflight_state: "unknown",
+      preflight_reason: "business_preflight_unavailable",
+    };
+  }
+  return mergeRunControlProjection(localStatus, projection);
+}
+
+let dispatcherAutoHealPromise = null;
+
 async function ensureDispatcherAutostart() {
+  if (dispatcherAutoHealPromise) return dispatcherAutoHealPromise;
+  dispatcherAutoHealPromise = (async () => {
   if (shouldSkipIntegrationAutostart()) {
     return dispatcherFallbackStatus("deferred", "Integration autostart skipped.");
   }
-  const relay = await botappRelayHealth();
-  if (!relay.ok || !relay.relay_authenticated) {
-    const current = await dispatcherStatus();
-    return {
-      ...current,
-      ok: false,
-      status: current.status === "unknown" ? "stopped" : current.status,
-      message: "Dispatcher autostart deferred until relay is healthy.",
-    };
-  }
-
   let status = await dispatcherStatus();
-  const queueActiveCount = Number.isFinite(Number(status.queueActiveCount)) ? Number(status.queueActiveCount) : 0;
-  if (queueActiveCount > 0) {
-    return {
-      ...status,
-      ok: false,
-      message: "Dispatcher autostart deferred while queue activity is present.",
-    };
+  if (status.service_state === "running" && status.processRunning === true) return status;
+  if (status.service_state !== "stopped" || status.processRunning !== false) {
+    return { ...status, ok: false, autoHealAction: "none", message: "Dispatcher auto-heal deferred: local absence is not proven." };
   }
 
-  if (status.status === "running" && status.processRunning) return status;
-
-  if (!status.launchdLoaded) {
-    const install = await runDispatcherWrapperAsync("install", [], 30000);
-    if (!install.ok) {
-      return {
-        ...status,
-        message: "Dispatcher LaunchAgent install failed. Open Runtime Health to retry.",
-        lastError: install.error || install.stderr || status.lastError,
-      };
-    }
-  }
-
-  const resume = await runDispatcherWrapperAsync("resume", [], 45000);
+  const recovery = await runRuntimeControllerCommand({
+    controllerPath: dispatcherWrapperPath,
+    component: "dispatcher",
+    command: "start",
+    args: [],
+    cwd: runtimeControllerWorkingDirectory,
+    timeoutMs: 45000,
+  });
   status = await dispatcherStatus();
-  if (status.status === "running" && status.processRunning) return status;
+  if (status.service_state === "running" && status.processRunning === true) return status;
 
   return {
     ...status,
-    ok: status.status === "running" && status.processRunning,
-    message: resume.ok
+    ok: status.service_state === "running" && status.processRunning === true,
+    message: recovery.ok
       ? (status.message || "Dispatcher is starting.")
-      : `Dispatcher autostart attempted: ${safeDispatcherText(resume.error || resume.stderr || status.lastError || "unknown")}`,
+      : `Dispatcher safe recovery deferred: ${safeDispatcherText(recovery.error || recovery.stderr || status.lastError || "unknown")}`,
   };
+  })();
+  try {
+    return await dispatcherAutoHealPromise;
+  } finally {
+    dispatcherAutoHealPromise = null;
+  }
 }
 
 async function dispatcherAction(action) {
@@ -7932,7 +7949,7 @@ async function botappDiagnosticsProvenance() {
 function registerRuntimeIpc() {
   ipcMain.handle("botapp:runtime:status", () => runtimeIntegrationStatus());
   ipcMain.handle("botapp:diagnostics:provenance", () => botappDiagnosticsProvenance());
-  ipcMain.handle("botapp:dispatcher:status", () => dispatcherStatus());
+  ipcMain.handle("botapp:dispatcher:status", () => dispatcherStatusWithBusinessPreflight());
   ipcMain.handle("botapp:dispatcher:action", (_event, action) => dispatcherAction(action).catch((error) => dispatcherFallbackStatus("unknown", safeRuntimeError(error, "Dispatcher action crashed safely."))));
   ipcMain.handle("botapp:compass:ai-status", () => compassHealth());
   ipcMain.handle("botapp:compass:save-relay-config", (_event, input) => saveCompassRelayConfig(input));
