@@ -603,6 +603,27 @@ export type ProfileRuntimeIndicator = {
   lastRunFinishedAt?: string | null;
 };
 
+export type ProfileBusinessTransition = {
+  id: string;
+  accountId: string;
+  runId: string;
+  transitionKey: string;
+  state: "initiated" | "no_work" | "blocked" | "partial" | "completed";
+  context: "business_deadline";
+  type: "follow_to_unfollow";
+  followsCompleted: number | null;
+  followsRemaining: number | null;
+  safeBoundary: boolean | null;
+  unfollowEligible: boolean | null;
+  unfollowStarted: boolean;
+  unfollowState: string | null;
+  backlogRemaining: number | null;
+  nextStep: string | null;
+  exactStableReason: string;
+  actionableReason: string | null;
+  updatedAt: string;
+};
+
 export type BotProfile = {
   id: string;
   username: string;
@@ -678,6 +699,7 @@ export type BotProfile = {
   activeRunId?: string | null;
   activeRunStatus?: string | null;
   runtimeIndicator?: ProfileRuntimeIndicator;
+  latestBusinessTransition?: ProfileBusinessTransition | null;
   accountRuntimeStatus?: string | null;
   runControlPhase?: "idle" | "stopping" | "cleanup_in_progress" | "stop_requires_attention" | "manual_restart_required" | null;
   runControlLabel?: string | null;

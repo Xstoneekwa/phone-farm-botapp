@@ -5270,6 +5270,7 @@ function profileFromManageAccount(account, index, devices) {
     activeRunId: account?.activeRunId || account?.active_run_id || null,
     activeRunStatus: account?.activeRunStatus || account?.active_run_status || null,
     runtimeIndicator: readRuntimeIndicator(account),
+    latestBusinessTransition: account?.latestBusinessTransition || account?.latest_business_transition || null,
   };
 }
 

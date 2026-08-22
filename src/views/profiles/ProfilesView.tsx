@@ -250,6 +250,10 @@ function AccountRow({
     : runtimeState === "error"
       ? `Last run abnormal: ${profile.runtimeIndicator?.reason || "abnormal_run"}`
       : "Runtime idle: no active run and last run normal.";
+  const transition = profile.latestBusinessTransition;
+  const transitionTitle = transition
+    ? `Business deadline · ${transition.state} · Follow ${transition.followsCompleted ?? "—"} completed / ${transition.followsRemaining ?? "—"} remaining · safe boundary ${transition.safeBoundary === null ? "unknown" : transition.safeBoundary ? "yes" : "no"} · Unfollow ${transition.unfollowState || (transition.unfollowStarted ? "started" : "not started")} · next ${transition.nextStep || "unknown"} · reason ${transition.exactStableReason}${transition.actionableReason ? ` · blocker ${transition.actionableReason}` : ""}`
+    : "";
   return (
     <div className="profile-account-row">
       <span className={`profile-dot runtime-${runtimeState}`} title={runtimeTitle} aria-label={runtimeTitle} />
@@ -259,6 +263,11 @@ function AccountRow({
         <div className="profile-badges">
           <Badge tone={loginBadge.tone}>{loginBadge.label}</Badge>
           <Badge tone={growthBadge.tone}>{growthBadge.label}</Badge>
+          {transition ? (
+            <span title={transitionTitle}>
+              <Badge tone={transition.state === "blocked" ? "warning" : "neutral"}>Transition {transition.state}</Badge>
+            </span>
+          ) : null}
           {lifecycle === "archived" ? <Badge tone="warning">Archived</Badge> : null}
           {lifecycle === "bin" ? <Badge tone="error">In Bin</Badge> : null}
           {restoreDate ? <Badge tone="neutral">Restore until {restoreDate}</Badge> : null}
