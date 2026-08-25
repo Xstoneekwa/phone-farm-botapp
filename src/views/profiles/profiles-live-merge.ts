@@ -15,7 +15,7 @@ export type ProfilesLivePatch = {
   interactionsToday?: number;
   currentBlocker?: { actionType?: string; status?: string; blockingCampaign?: boolean } | null;
   followerDelta3d?: BotProfile["followerDelta3d"];
-  liveSupportedKinds?: Array<"follow" | "like" | "dm">;
+  liveSupportedKinds?: Array<"follow" | "unfollow" | "like" | "dm">;
   runControlPhase?: BotProfile["runControlPhase"];
   runControlLabel?: string | null;
 };
@@ -30,6 +30,47 @@ function isActive(patch: ProfilesLivePatch) {
 
 function isDashboardBlockReason(reason: string) {
   return /operator_review_required|blocking_dashboard_action|scheduler_launch_blocked/.test(reason.toLowerCase());
+}
+
+function compareProjectionRevision(current: BotProfile, incoming: BotProfile) {
+  const currentProjection = current.counterProjection;
+  const incomingProjection = incoming.counterProjection;
+  const currentDate = currentProjection?.businessDate || "";
+  const incomingDate = incomingProjection?.businessDate || "";
+  if (currentDate && incomingDate && currentDate !== incomingDate) {
+    return incomingDate.localeCompare(currentDate);
+  }
+  const currentRevision = currentProjection?.revision || currentProjection?.generatedAt || currentProjection?.computedAt || "";
+  const incomingRevision = incomingProjection?.revision || incomingProjection?.generatedAt || incomingProjection?.computedAt || "";
+  if (currentRevision && !incomingRevision) return -1;
+  if (!currentRevision && incomingRevision) return 1;
+  return incomingRevision.localeCompare(currentRevision);
+}
+
+function sameBusinessDate(current: BotProfile, incoming: BotProfile) {
+  const currentDate = current.counterProjection?.businessDate || "";
+  const incomingDate = incoming.counterProjection?.businessDate || "";
+  return !currentDate || !incomingDate || currentDate === incomingDate;
+}
+
+export function mergeCanonicalProfileSnapshot(current: BotProfile | undefined, incoming: BotProfile): BotProfile {
+  if (!current) return incoming;
+  const ordering = compareProjectionRevision(current, incoming);
+  if (ordering < 0) return current;
+  if (!sameBusinessDate(current, incoming)) return incoming;
+  const unfollows = Math.max(current.counters.unfollow.current, incoming.counters.unfollow.current);
+  return {
+    ...incoming,
+    counters: {
+      ...incoming.counters,
+      unfollow: { ...incoming.counters.unfollow, current: unfollows },
+    },
+  };
+}
+
+export function mergeCanonicalProfiles(current: BotProfile[], incoming: BotProfile[]): BotProfile[] {
+  const currentById = new Map(current.map((profile) => [profile.id, profile]));
+  return incoming.map((profile) => mergeCanonicalProfileSnapshot(currentById.get(profile.id), profile));
 }
 
 export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: ProfilesLivePatch[]): BotProfile[] {
@@ -62,7 +103,7 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
         ? (eligibility === "can_start" ? "ready" : "blocked")
         : profile.status;
 
-    return [{
+    const projected: BotProfile = {
       ...profile,
       status,
       activeRunRequestId: patch.activeRunRequestId ?? null,
@@ -93,7 +134,8 @@ export function mergeProfilesLiveProjection(profiles: BotProfile[], patches: Pro
         reason_label: eligibilityReason === "ready" ? "Ready" : profile.eligibilityDetail.reason_label,
       },
       liveSupportedKinds: patch.liveSupportedKinds ?? ["follow", "like", "dm"],
-    }];
+    };
+    return [mergeCanonicalProfileSnapshot(existing, projected)];
   });
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { canonicalConnectBadge, socialBadge } from "./profile-growth-badge.ts";
-import { mergeGroupedProfiles, mergeProfilesLiveProjection } from "./profiles-live-merge.ts";
+import { mergeCanonicalProfiles, mergeGroupedProfiles, mergeProfilesLiveProjection } from "./profiles-live-merge.ts";
 
 function profile(overrides = {}) {
   return {
@@ -19,6 +19,23 @@ function profile(overrides = {}) {
     },
     ...overrides,
   };
+}
+
+function revisionProfile(unfollows, revision, businessDate = "2026-08-25") {
+  return profile({
+    counters: {
+      follow: { current: 80, max: 80 }, unfollow: { current: unfollows, max: 80 }, like: { current: 70, max: 100 },
+      comment: { current: 0, max: 0 }, dm: { current: 0, max: 2 },
+    },
+    counterProjection: {
+      businessDate,
+      businessTimezone: "Africa/Johannesburg",
+      computedAt: revision,
+      generatedAt: revision,
+      revision,
+      source: "canonical_persisted_actions_sast_v1",
+    },
+  });
 }
 
 test("idle becomes active and all displayed canonical counters remain stable", () => {
@@ -197,4 +214,49 @@ test("ten authoritative refreshes keep paused pre-login badges order-invariant",
     sequence.push(`${canonicalConnectBadge(profiles[0]).label} / ${socialBadge(profiles[0]).label}`);
   }
   assert.deepEqual(sequence, Array.from({ length: 10 }, () => "ready to connect / paused"));
+});
+
+test("stale Live arriving after newer Overview cannot regress canonical Unfollow", () => {
+  const newerOverview = revisionProfile(80, "2026-08-25T14:00:00.000Z");
+  const staleLive = revisionProfile(146, "2026-08-25T13:00:00.000Z");
+  const [result] = mergeProfilesLiveProjection([newerOverview], [{ accountId: "account-1", canonicalProfile: staleLive }]);
+  assert.equal(result.counters.unfollow.current, 80);
+  assert.equal(result.counterProjection.revision, newerOverview.counterProjection.revision);
+});
+
+test("stale Overview arriving after newer Live cannot regress canonical Unfollow", () => {
+  const newerLive = revisionProfile(80, "2026-08-25T14:00:00.000Z");
+  const staleOverview = revisionProfile(146, "2026-08-25T13:00:00.000Z");
+  const [result] = mergeCanonicalProfiles([newerLive], [staleOverview]);
+  assert.equal(result.counters.unfollow.current, 80);
+  assert.equal(result.counterProjection.revision, newerLive.counterProjection.revision);
+});
+
+test("same snapshot is idempotent and a newer real canonical action increases 80 to 81", () => {
+  const current = revisionProfile(80, "2026-08-25T14:00:00.000Z");
+  const [same] = mergeCanonicalProfiles([current], [revisionProfile(80, "2026-08-25T14:00:00.000Z")]);
+  assert.equal(same.counters.unfollow.current, 80);
+  const [next] = mergeCanonicalProfiles([same], [revisionProfile(81, "2026-08-25T14:01:00.000Z")]);
+  assert.equal(next.counters.unfollow.current, 81);
+});
+
+test("Unfollow may decrease only after canonical business-date changes", () => {
+  const previousDay = revisionProfile(80, "2026-08-25T23:59:00.000Z", "2026-08-25");
+  const nextDay = revisionProfile(0, "2026-08-26T00:00:01.000Z", "2026-08-26");
+  const [result] = mergeCanonicalProfiles([previousDay], [nextDay]);
+  assert.equal(result.counters.unfollow.current, 0);
+  assert.equal(result.counterProjection.businessDate, "2026-08-26");
+});
+
+test("focus, reconnect and manual-refresh response races preserve the newest canonical snapshot", () => {
+  const responses = [
+    revisionProfile(42, "2026-08-25T14:00:00.000Z"),
+    revisionProfile(73, "2026-08-25T13:00:00.000Z"),
+    revisionProfile(84, "2026-08-25T13:30:00.000Z"),
+    revisionProfile(42, "2026-08-25T14:00:00.000Z"),
+  ];
+  let displayed = [];
+  for (const response of responses) displayed = mergeCanonicalProfiles(displayed, [response]);
+  assert.equal(displayed[0].counters.unfollow.current, 42);
+  assert.equal(displayed[0].counterProjection.revision, "2026-08-25T14:00:00.000Z");
 });

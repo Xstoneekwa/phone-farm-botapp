@@ -23,7 +23,7 @@ import { routes, type RouteId } from "./routes";
 import { shouldPollProfilesLiveCounters } from "../views/profiles/run-control";
 import { createProfilesAutoRefreshController, shouldPollProfiles } from "../views/profiles/profiles-auto-refresh";
 import type { ProfilesRefreshContext } from "../views/profiles/profiles-auto-refresh";
-import { mergeProfilesLiveProjection } from "../views/profiles/profiles-live-merge";
+import { mergeCanonicalProfiles, mergeGroupedProfiles, mergeProfilesLiveProjection } from "../views/profiles/profiles-live-merge";
 import { createDevicesAutoRefreshController, shouldPollDevices } from "../views/devices-auto-refresh";
 import "./app.css";
 
@@ -67,8 +67,14 @@ export function App() {
   const relayWasOperationalRef = useRef(false);
 
   function applyOverviewData(nextData: AppData) {
+    const profiles = mergeCanonicalProfiles(dataRef.current.profiles, nextData.profiles);
+    const canonicalNextData = {
+      ...nextData,
+      profiles,
+      profileGroups: mergeGroupedProfiles(nextData.profileGroups, profiles),
+    };
     const previousById = new Map(dataRef.current.profiles.map((profile) => [profile.id, profile]));
-    for (const profile of nextData.profiles) {
+    for (const profile of canonicalNextData.profiles) {
       const previous = previousById.get(profile.id);
       const wasActive = previous ? shouldPollProfilesLiveCounters(previous) : false;
       const isActive = shouldPollProfilesLiveCounters(profile);
@@ -94,9 +100,9 @@ export function App() {
         });
       }
     }
-    profilesRuntimeActiveRef.current = nextData.profiles.some(shouldPollProfilesLiveCounters);
-    dataRef.current = nextData;
-    setData(nextData);
+    profilesRuntimeActiveRef.current = canonicalNextData.profiles.some(shouldPollProfilesLiveCounters);
+    dataRef.current = canonicalNextData;
+    setData(canonicalNextData);
   }
 
   async function loadOverviewData(reason = "manual", isLatest = () => true) {

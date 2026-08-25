@@ -654,7 +654,15 @@ export type BotProfile = {
   unfollowTruthfulness?: ProfileUnfollowTruthfulness;
   interactionsToday?: number;
   currentRunCounters?: ProfileRunCounters;
-  liveSupportedKinds?: Array<"follow" | "like" | "dm">;
+  liveSupportedKinds?: Array<"follow" | "unfollow" | "like" | "dm">;
+  counterProjection?: {
+    businessDate: string;
+    businessTimezone: string;
+    computedAt: string;
+    generatedAt: string;
+    revision: string;
+    source: string;
+  };
   followsToday: number;
   dmsToday: number;
   counters: ProfileCounters;

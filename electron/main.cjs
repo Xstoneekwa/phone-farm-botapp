@@ -5106,6 +5106,23 @@ function readCurrentRunCounters(account) {
   };
 }
 
+function readCounterProjection(account) {
+  const source = account?.counterProjection && typeof account.counterProjection === "object"
+    ? account.counterProjection
+    : account?.counter_projection && typeof account.counter_projection === "object"
+      ? account.counter_projection
+      : {};
+  const generatedAt = String(source?.generatedAt || source?.generated_at || source?.computedAt || source?.computed_at || "");
+  return {
+    businessDate: String(source?.businessDate || source?.business_date || ""),
+    businessTimezone: String(source?.businessTimezone || source?.business_timezone || ""),
+    computedAt: String(source?.computedAt || source?.computed_at || generatedAt),
+    generatedAt,
+    revision: String(source?.revision || source?.projection_revision || generatedAt),
+    source: String(source?.source || ""),
+  };
+}
+
 function readRuntimeIndicator(account) {
   const source = account?.runtimeIndicator && typeof account.runtimeIndicator === "object"
     ? account.runtimeIndicator
@@ -5203,6 +5220,7 @@ function profileFromManageAccount(account, index, devices) {
     followerDelta3d: readFollowerDelta3d(account),
     unfollowTruthfulness: readUnfollowTruthfulness(account) || undefined,
     interactionsToday: readInteractionsToday(account),
+    counterProjection: readCounterProjection(account),
     currentRunCounters: readCurrentRunCounters(account),
     followsToday: Number(account?.followsToday || account?.follows_today || 0),
     dmsToday: Number(account?.dmsToday || account?.dms_today || 0),
