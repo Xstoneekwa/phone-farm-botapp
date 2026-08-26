@@ -11,6 +11,7 @@ const {
 } = require("./relay-credential-store.cjs");
 
 const CANONICAL_USER_DATA_NAME = "BotApp";
+const INTEGRATION_LOCAL_USER_DATA_NAME = "BotApp-Integration-Local";
 const LEGACY_USER_DATA_DIR_NAMES = [
   "botapp-mac-foundation",
   "com.boostmybusinesses.botapp",
@@ -21,6 +22,11 @@ function applicationSupportRoot() {
 }
 
 function canonicalUserDataDir() {
+  if (process.env.BOTAPP_INTEGRATION_LOCAL === "1") {
+    const overrideDir = String(process.env.BOTAPP_INTEGRATION_USER_DATA_DIR || "").trim();
+    if (overrideDir) return overrideDir;
+    return path.join(applicationSupportRoot(), "BotApp-Integration-Local");
+  }
   return path.join(applicationSupportRoot(), CANONICAL_USER_DATA_NAME);
 }
 
@@ -47,10 +53,14 @@ function readRuntimeConfigFile(userDataDir) {
 function isLocalRelayHost(urlValue) {
   try {
     const hostname = new URL(String(urlValue || "").trim()).hostname.toLowerCase();
-    return hostname === "localhost" || hostname === "127.0.0.1";
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
   } catch {
     return false;
   }
+}
+
+function isIntegrationLocalMode() {
+  return process.env.BOTAPP_INTEGRATION_LOCAL === "1";
 }
 
 function relayUrlScore(urlValue) {
@@ -174,10 +184,14 @@ function bootstrapRelayRuntime(options = {}) {
     save: (dir, key) => saveRelayKeyToSecureStore(dir, key),
   };
 
-  const searchDirs = [
-    userDataDir,
-    ...(Array.isArray(options.legacyDirs) ? options.legacyDirs : legacyUserDataDirs(userDataDir)),
-  ].filter((dir, index, all) => dir && all.indexOf(dir) === index);
+  const searchDirs = (
+    isIntegrationLocalMode()
+      ? [userDataDir]
+      : [
+        userDataDir,
+        ...(Array.isArray(options.legacyDirs) ? options.legacyDirs : legacyUserDataDirs(userDataDir)),
+      ]
+  ).filter((dir, index, all) => dir && all.indexOf(dir) === index);
   const readCandidate = (dir) => {
     const config = readRuntimeConfigFile(dir);
     const disabled = readDisabledRuntimeConfigBackup(dir);
@@ -198,11 +212,16 @@ function bootstrapRelayRuntime(options = {}) {
       hasDisabledBackup: Boolean(disabled),
     };
   };
-  const candidates = searchDirs.map((dir) => readCandidate(dir));
+  const candidates = searchDirs
+    .map((dir) => readCandidate(dir))
+    .filter((candidate) => !isIntegrationLocalMode() || !candidate.relayUrl || isLocalRelayHost(candidate.relayUrl));
   let current = readCandidate(userDataDir);
   let importedFrom = null;
 
-  if (forceRestore || !current.relayUrl || !current.relayKey || isLocalRelayHost(current.relayUrl)) {
+  if (
+    !isIntegrationLocalMode()
+    && (forceRestore || !current.relayUrl || !current.relayKey || isLocalRelayHost(current.relayUrl))
+  ) {
     const best = pickBestRelayCandidate(candidates);
     if (best && (best.relayUrlScore > current.relayUrlScore || !current.relayKey || !current.relayUrl || forceRestore)) {
       if (best.sourceDir !== userDataDir) {

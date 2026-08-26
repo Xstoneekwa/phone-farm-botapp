@@ -47,14 +47,17 @@ test("Live profile counters poll while runtime is active", () => {
   assert.equal(shouldPollProfilesLiveCounters(profile({ runtimeLock: "device_level_lock" })), true);
 });
 
-test("Device status is active when any profile has an active runtime state", () => {
-  assert.equal(resolveDeviceRuntimeStatus([profile(), profile({ activeRunRequestStatus: "queued" })], "inactive"), "active");
-  assert.equal(resolveDeviceRuntimeStatus([profile(), profile({ activeRunStatus: "running" })], "inactive"), "active");
+test("Device status is active only after authoritative end-to-end proof", () => {
+  assert.equal(resolveDeviceRuntimeStatus([profile(), profile({ activeRunRequestStatus: "queued", executionPhase: "QUEUED" })], "inactive"), "inactive");
+  assert.equal(resolveDeviceRuntimeStatus([profile(), profile({ activeRunStatus: "running", executionPhase: "PREPARING" })], "inactive"), "inactive");
+  assert.equal(resolveDeviceRuntimeStatus([profile(), profile({ activeRunStatus: "running", executionPhase: "ACTIVE" })], "inactive"), "active");
   assert.equal(resolveDeviceRuntimeStatus([profile(), profile()], "inactive"), "inactive");
 });
 
 test("Runtime indicator maps active, abnormal, and normal idle states", () => {
-  assert.equal(runtimeIndicatorState(profile({ activeRunRequestStatus: "claimed" })), "active");
+  assert.equal(runtimeIndicatorState(profile({ activeRunRequestStatus: "claimed", executionPhase: "PREPARING" })), "idle");
+  assert.equal(runtimeIndicatorState(profile({ activeRunStatus: "running", executionPhase: "STARTING_INSTAGRAM" })), "idle");
+  assert.equal(runtimeIndicatorState(profile({ activeRunStatus: "running", executionPhase: "ACTIVE" })), "active");
   assert.equal(runtimeIndicatorState(profile({ runtimeIndicator: { state: "error", reason: "partial_safe_stopped" } })), "error");
   assert.equal(runtimeIndicatorState(profile({ runtimeIndicator: { state: "idle", reason: "last_run_normal" } })), "idle");
 });
@@ -65,6 +68,7 @@ test("Displayed counters switch to current run counters while runtime is active"
 
   const active = displayRunCounters(profile({
     activeRunRequestStatus: "queued",
+    executionPhase: "ACTIVE",
     currentRunCounters: {
       follows: 1,
       unfollows: 0,
@@ -81,6 +85,7 @@ test("Displayed counters switch to current run counters while runtime is active"
 test("Counter metrics use live numerators and product caps during runs", () => {
   const active = displayCounterMetrics(profile({
     activeRunStatus: "running",
+    executionPhase: "ACTIVE",
     currentRunCounters: {
       follows: 1,
       unfollows: 0,
@@ -97,6 +102,17 @@ test("Counter metrics use live numerators and product caps during runs", () => {
     { key: "like", current: 1, max: 100, label: "L", live: true },
     { key: "dm", current: 0, max: 1, label: "DM", live: true },
   ]);
+});
+
+test("queued through foreground-not-verified phases never display active", () => {
+  for (const executionPhase of ["QUEUED", "PREPARING", "RECOVERING", "STARTING_DEVICE", "STARTING_INSTAGRAM"]) {
+    assert.equal(runtimeIndicatorState(profile({
+      status: "running",
+      activeRunRequestStatus: "running",
+      activeRunStatus: "running",
+      executionPhase,
+    })), "idle", executionPhase);
+  }
 });
 
 test("Counter metrics return daily totals outside active runs", () => {

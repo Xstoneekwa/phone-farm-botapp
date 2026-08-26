@@ -535,13 +535,35 @@ export type ProfileCounters = {
 };
 
 export type ProfileFollowerDelta3d = {
+  window?: "rolling_72h" | string;
+  periodHours?: number;
   value: number | null;
   currentFollowers: number | null;
   previousFollowers: number | null;
   from: string | null;
   to: string | null;
   source: string;
-  freshness: string;
+  windowCoverage: "complete" | "partial" | "insufficient_data";
+  dataFreshness: "fresh" | "stale" | "unknown";
+  latestSnapshotAt: string | null;
+  baselineSnapshotAt: string | null;
+  deltaFrom: string | null;
+  deltaTo: string | null;
+  staleAfterHours: number;
+};
+
+export type ProfileUnfollowTruthfulness = {
+  unfollowDoneToday: number;
+  unfollowDailyCap: number;
+  unfollowEffectiveLimit: number | null;
+  lastRunEligibleAtStart: number | null;
+  lastRunAttempted: number | null;
+  lastRunVerified: number | null;
+  lastRunRemainingEligible: number | null;
+  lastRunCoverageStatus: string | null;
+  lastRunStopReason: string | null;
+  metricsAsOf: string | null;
+  source: string;
 };
 
 export type ProfileRunCounters = {
@@ -591,6 +613,7 @@ export type BotProfile = {
   followers: number;
   followerDelta: number;
   followerDelta3d?: ProfileFollowerDelta3d;
+  unfollowTruthfulness?: ProfileUnfollowTruthfulness;
   interactionsToday?: number;
   currentRunCounters?: ProfileRunCounters;
   followsToday: number;
@@ -621,6 +644,7 @@ export type BotProfile = {
   activeRunRequestStatus?: string | null;
   activeRunId?: string | null;
   activeRunStatus?: string | null;
+  executionPhase?: "QUEUED" | "PREPARING" | "RECOVERING" | "STARTING_DEVICE" | "STARTING_INSTAGRAM" | "ACTIVE" | "TERMINAL";
   runtimeIndicator?: ProfileRuntimeIndicator;
 };
 

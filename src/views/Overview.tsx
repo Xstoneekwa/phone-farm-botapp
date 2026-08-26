@@ -6,7 +6,7 @@ export function Overview({ profiles, devices, notifications, logs, onAction }: {
   const running = profiles.filter((profile) => profile.status === "running").length;
   const online = devices.filter((device) => device.status === "connected" || device.status === "online" || device.status === "reserved").length;
   const blocked = profiles.filter((profile) => profile.eligibility === "blocked_now").length;
-  return <div className="grid" style={{ gap: 16 }}>
+  return <div className="grid overview-view" data-testid="overview-view" style={{ gap: 16 }}>
     <div className="grid metrics">
       <Card><span className="subtle">Active profiles</span><div className="metric-value">{running}</div><span className="subtle">{profiles.length} loaded locally</span></Card>
       <Card><span className="subtle">Devices online</span><div className="metric-value">{online}</div><span className="subtle">{devices.length} registered phones</span></Card>

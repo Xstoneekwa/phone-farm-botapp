@@ -9,7 +9,6 @@ const START_PENDING_REASONS = new Set(["already_requested"]);
 const STOPPABLE_REASONS = new Set(["already_running", "already_requested"]);
 const ACTIVE_RUN_REQUEST_STATUSES = new Set(["pending", "queued", "claimed", "running", "starting", "stopping", "canceling"]);
 const ACTIVE_RUN_STATUSES = new Set(["pending", "running", "stopping"]);
-const ACTIVE_DEVICE_STATUSES = new Set(["pending", "queued", "claimed", "running", "starting", "stopping", "canceling"]);
 
 export function projectRunEligibility(profile: BotProfile): RunControlEligibilityProjection {
   if (profile.assignmentState === "requires_attention" || profile.assignmentHealth === "requires_attention") {
@@ -87,13 +86,7 @@ export function isStopEnabled(profile: BotProfile) {
 }
 
 export function isRuntimeActive(profile: BotProfile) {
-  const activeRequestStatus = readActiveRunRequestStatus(profile);
-  const activeRunStatus = readActiveRunStatus(profile);
-  return (
-    profile.status === "running"
-    || ACTIVE_RUN_REQUEST_STATUSES.has(activeRequestStatus)
-    || ACTIVE_RUN_STATUSES.has(activeRunStatus)
-  );
+  return String(profile.executionPhase || "").trim().toUpperCase() === "ACTIVE";
 }
 
 export function shouldPollProfilesLiveCounters(profile: BotProfile) {
@@ -155,14 +148,12 @@ export function displayCounterMetrics(profile: BotProfile) {
   ];
 }
 
-export function resolveDeviceRuntimeStatus<T extends Pick<BotProfile, "activeRunRequestStatus" | "activeRunStatus" | "status">>(
+export function resolveDeviceRuntimeStatus<T extends Pick<BotProfile, "executionPhase">>(
   profiles: T[],
   fallbackStatus: string,
 ) {
   const active = profiles.some((profile) => {
-    const request = String(profile.activeRunRequestStatus || "").trim().toLowerCase();
-    const run = String(profile.activeRunStatus || "").trim().toLowerCase();
-    return profile.status === "running" || ACTIVE_DEVICE_STATUSES.has(request) || ACTIVE_DEVICE_STATUSES.has(run);
+    return String(profile.executionPhase || "").trim().toUpperCase() === "ACTIVE";
   });
   return active ? "active" : fallbackStatus;
 }

@@ -8,6 +8,7 @@ export function Drawer({
   onClose,
   wide = false,
   panelClassName = "",
+  "data-testid": dataTestId,
 }: {
   title: string;
   subtitle?: string;
@@ -16,9 +17,10 @@ export function Drawer({
   onClose: () => void;
   wide?: boolean;
   panelClassName?: string;
+  "data-testid"?: string;
 }) {
   return (
-    <div className="drawer-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="drawer-backdrop" role="dialog" aria-modal="true" onClick={onClose} data-testid={dataTestId}>
       <div className={`drawer-panel${wide ? " drawer-panel-wide" : ""}${panelClassName ? ` ${panelClassName}` : ""}`} onClick={(event) => event.stopPropagation()}>
         <header className="drawer-header">
           <div>

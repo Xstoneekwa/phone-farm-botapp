@@ -1727,8 +1727,8 @@ function LegacySettingsDrawer({
         </Section>
         <Section title="Source policy" badge={sources.saveReady ? "Save ready" : "Schema pending"} tone={sources.saveReady ? "success" : "warning"}>
           <p className="muted">Per-run controls only. Global Follow caps still apply.</p>
-          <NumberField label="Max follows per target per run" value={sources.maxFollowsPerTargetPerRun} min={sources.bounds.maxFollowsPerTargetPerRun.min} max={sources.bounds.maxFollowsPerTargetPerRun.max} disabled={!sources.saveReady} onChange={(value) => setSourcesDraft({ ...sources, maxFollowsPerTargetPerRun: value })} />
-          <NumberField label="Max targets per run" value={sources.maxTargetsPerRun} min={sources.bounds.maxTargetsPerRun.min} max={sources.bounds.maxTargetsPerRun.max} disabled={!sources.saveReady} onChange={(value) => setSourcesDraft({ ...sources, maxTargetsPerRun: value })} />
+          <NumberField label="Max follows per target per run" value={sources.maxFollowsPerTargetPerRun} min={sources.bounds.maxFollowsPerTargetPerRun.min} max={sources.bounds.maxFollowsPerTargetPerRun.max} disabled={!sources.saveReady} onChange={(value) => setSourcesDraft((current) => ({ ...(current ?? settings.sources), maxFollowsPerTargetPerRun: value }))} />
+          <NumberField label="Max targets per run" value={sources.maxTargetsPerRun} min={sources.bounds.maxTargetsPerRun.min} max={sources.bounds.maxTargetsPerRun.max} disabled={!sources.saveReady} onChange={(value) => setSourcesDraft((current) => ({ ...(current ?? settings.sources), maxTargetsPerRun: value }))} />
           <Field label="Rotation settings source" value={sources.sourceStatus.replaceAll("_", " ")} />
           <Field label="Runtime status" value={sources.runtimeStatus} />
         </Section>

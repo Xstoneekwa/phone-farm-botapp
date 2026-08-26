@@ -94,3 +94,9 @@ Future write/action implementation rules remain:
 - No secrets or raw artifacts in desktop bundles
 - Multi-device and multi-clone readiness
 - Clear offline and error states
+
+## Safety gate added 2026-08-12
+
+Before any Device UI gains uninstall, reprovision or clone replacement authority, implement the canonical app-instance lifecycle: immutable pre-migration registry, exact device/app/account tuple confirmation, runtime freeze preflight, server-side rebind with old/new lineage, Identity Guard certification and a central app-version compatibility gate. Local labels and serial mappings must remain non-authoritative.
+
+Current state is documentation only and `NO_GO_SAFETY_GAP`; no destructive BotApp control is approved.

@@ -406,3 +406,9 @@ Check Login / Readiness mirrors the admin dashboard's `readiness/now` contract a
 - `docs/security.md` — no-leak rules
 - `docs/roadmap.md` — checkpoint history and next steps
 - `src/desktop/README.md` — packaging notes
+
+## App instance reprovision/rebind contract
+
+BotApp may display and prepare this workflow, but must never infer a DB identity from a friendly phone label or a local serial alias. The canonical tuple is `phone_devices.id + adb_serial + phone_app_instances.id + instance_index + package_name + account_id`.
+
+Any future destructive action must call a server-side preflight that proves zero active work, captures the immutable old mapping, creates a new app-instance lineage, and requires Identity Guard plus app-version compatibility before scheduler rearm. Local device mappings remain convenience-only. Canonical protocol: `/Users/admin/Projects/boost-ai-frontend/docs/PHONE_FARM_APP_INSTANCE_REPROVISION_AND_REBIND_PROTOCOL.md`.

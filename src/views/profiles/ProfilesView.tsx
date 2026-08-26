@@ -12,12 +12,15 @@ import { FiltersDrawer } from "./drawers/FiltersDrawer";
 import { AddProfileDrawer } from "./drawers/AddProfileDrawer";
 import { resolveAddProfileCredentialsState } from "./add-profile-credentials";
 import { AutoLoginFlowModal } from "./AutoLoginFlowModal";
+import { IncidentDrawer } from "../IncidentDrawer";
+import "../incident-drawer.css";
 import { buildAssignNowPayload, createAssignNowState } from "./assign-now-flow";
 import { autoLoginLogEntry, autoLoginStateFromStartResult, buildAutoLoginPayload, createAutoLoginStartingState, mergeAutoLoginProgressSnapshot, sanitizeAutoLoginText } from "./auto-login-flow";
 import { createArchiveState, createDeleteState, lifecycleWarning } from "./lifecycle-flow";
 import { buildReadinessNowPayload, createReadinessNowState } from "./readiness-now-flow";
 import { buildRestoreLoginScreenPayload } from "./restore-login-screen-flow";
 import { buildStartPayload, buildStopPayload, displayCounterMetrics, displayRunCounters, resolveDeviceRuntimeStatus, runtimeIndicatorState } from "./run-control";
+import { followerDeltaTooltip, unfollowMetricTooltip } from "./profile-metric-contract";
 import "./profiles.css";
 
 type DrawerKind = "stats" | "logs" | "targets" | "settings" | "filters";
@@ -203,11 +206,13 @@ function phoneViewTooltip(group: DeviceProfileGroup, isOpen: boolean) {
   return isOpen ? "Close phone view" : "Open phone view";
 }
 
-function CounterMetric({ current, max, label }: { current: number; max: number; label: string }) {
+function CounterMetric({ current, max, label, separateCap = false, title }: { current: number; max: number; label: string; separateCap?: boolean; title?: string }) {
   return (
-    <span>
+    <span title={title}>
       <strong>{Number.isFinite(current) ? current : "—"}</strong>
-      {Number.isFinite(max) ? <><span className="counter-cap">/{max}</span> {label}</> : <> {label}</>}
+      {separateCap
+        ? <>{` ${label}`} {Number.isFinite(max) ? <span className="counter-cap">cap {max}</span> : null}</>
+        : Number.isFinite(max) ? <><span className="counter-cap">/{max}</span> {label}</> : <> {label}</>}
     </span>
   );
 }
@@ -260,10 +265,14 @@ function AccountRow({
   profile,
   onSelect,
   onToolbar,
+  incident,
+  onIncidentOpen,
 }: {
   profile: BotProfile;
   onSelect: (id: string) => void;
   onToolbar: (profile: BotProfile, action: ProfileToolbarAction) => void;
+  incident?: { id: string; status?: string; severity?: string; reason?: string } | null;
+  onIncidentOpen?: (incidentId: string) => void;
 }) {
   const followerDelta3dValue = profile.followerDelta3d?.value ?? null;
   const displayCounters = displayRunCounters(profile);
@@ -275,11 +284,21 @@ function AccountRow({
   const lifecycle = profileLifecycle(profile);
   const restoreDate = formatRestoreDate(profile.scheduledDeleteAt || profile.scheduledTrashAt);
   const runtimeState = runtimeIndicatorState(profile);
+  const executionPhase = String(profile.executionPhase || "TERMINAL").trim().toUpperCase();
+  const executionPhaseLabel: Record<string, string> = {
+    QUEUED: "Queued",
+    PREPARING: "Preparing",
+    RECOVERING: "Recovering",
+    STARTING_DEVICE: "Starting device",
+    STARTING_INSTAGRAM: "Starting Instagram",
+    ACTIVE: "Active",
+    TERMINAL: "Idle",
+  };
   const runtimeTitle = runtimeState === "active"
-    ? "Runtime active: queued, claimed, running, stopping, or canceling."
+    ? "Runtime active: device connected and Instagram foreground verified."
     : runtimeState === "error"
       ? `Last run abnormal: ${profile.runtimeIndicator?.reason || "abnormal_run"}`
-      : "Runtime idle: no active run and last run normal.";
+      : `Runtime phase: ${executionPhaseLabel[executionPhase] || "Preparing"}.`;
   return (
     <div className="profile-account-row">
       <span className={`profile-dot runtime-${runtimeState}`} title={runtimeTitle} aria-label={runtimeTitle} />
@@ -289,9 +308,21 @@ function AccountRow({
         <div className="profile-badges">
           <Badge tone={loginBadge.tone}>{loginBadge.label}</Badge>
           <Badge tone={growthBadge.tone}>{growthBadge.label}</Badge>
+          {executionPhase !== "TERMINAL" ? (
+            <Badge tone={executionPhase === "ACTIVE" ? "success" : executionPhase === "RECOVERING" ? "warning" : "info"}>
+              {executionPhaseLabel[executionPhase] || "Preparing"}
+            </Badge>
+          ) : null}
           {lifecycle === "archived" ? <Badge tone="warning">Archived</Badge> : null}
           {lifecycle === "bin" ? <Badge tone="error">In Bin</Badge> : null}
           {restoreDate ? <Badge tone="neutral">Restore until {restoreDate}</Badge> : null}
+          {incident ? (
+            <button type="button" className="incident-scope-badge" data-testid="profile-incident-badge" onClick={() => onIncidentOpen?.(incident.id)}>
+              <Badge tone={incident.status === "open" ? "error" : "warning"}>
+                incident {incident.status || "open"}
+              </Badge>
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -315,14 +346,21 @@ function AccountRow({
 
       <div className="profile-counters mono">
         {counterMetrics.map((metric) => (
-          <CounterMetric key={metric.key} current={metric.current} max={metric.max} label={metric.label} />
+          <CounterMetric
+            key={metric.key}
+            current={metric.current}
+            max={metric.max}
+            label={metric.label}
+            separateCap={metric.key === "unfollow"}
+            title={metric.key === "unfollow" ? unfollowMetricTooltip(profile.unfollowTruthfulness) : undefined}
+          />
         ))}
       </div>
 
       <div className="profile-row-metrics">
         <span
           className={`delta-pill ${followerDeltaTone(followerDelta3dValue)}`}
-          title={`Followers gain 3d · ${profile.followerDelta3d?.source ?? "pending"}`}
+          title={followerDeltaTooltip(profile.followerDelta3d)}
         >
           {followerDeltaLabel(followerDelta3dValue)}
         </span>
@@ -380,6 +418,49 @@ export function ProfilesView({
     expiresAt: number;
   }>>({});
   const dispatcherBlocksAutoLogin = Boolean(dispatcherHealth && dispatcherHealth.status !== "running");
+  const [incidentsByAccount, setIncidentsByAccount] = useState<Map<string, { id: string; status?: string; severity?: string; reason?: string }>>(new Map());
+  const [unmatchedIncident, setUnmatchedIncident] = useState<{ id: string; status?: string; severity?: string; reason?: string } | null>(null);
+  const [incidentDrawerId, setIncidentDrawerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.botappDesktop?.incidents?.list?.({ status: "open,acknowledged", limit: 200 }).then((result) => {
+      if (cancelled) return;
+      const payload = result as Record<string, unknown> | undefined;
+      const data = payload?.data as Record<string, unknown> | undefined;
+      const nestedData = data?.data as Record<string, unknown> | undefined;
+      const incidentRows = Array.isArray(payload?.incidents)
+        ? payload.incidents
+        : Array.isArray(data?.incidents)
+          ? data.incidents
+          : Array.isArray(nestedData?.incidents)
+            ? nestedData.incidents
+            : [];
+      const map = new Map<string, { id: string; status?: string; severity?: string; reason?: string }>();
+      let firstIncident: { id: string; status?: string; severity?: string; reason?: string } | null = null;
+      for (const row of incidentRows) {
+        const accountId = String(row.accountId || row.account_id || "");
+        const profileId = String(row.profileId || row.profile_id || "");
+        const username = String(row.username || row.accountUsername || row.account_username || "");
+        const id = String(row.incidentId || row.incident_id || row.id || "");
+        if (!id) continue;
+        const existing = map.get(accountId);
+        const status = String(row.status || "open");
+        const incident = { id, status, severity: String(row.severity || ""), reason: String(row.reason || "") };
+        if (!firstIncident) firstIncident = incident;
+        if (accountId && (!existing || (existing.status !== "open" && status === "open"))) {
+          map.set(accountId, incident);
+        }
+        if (profileId) map.set(profileId, incident);
+        if (username) map.set(username, incident);
+      }
+      setIncidentsByAccount(map);
+      setUnmatchedIncident(map.size ? null : firstIncident);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, profiles.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -401,11 +482,12 @@ export function ProfilesView({
     if (profile.activeRunRequestStatus || profile.activeRunStatus || profile.status === "running") return profile;
     return {
       ...profile,
-      status: "running" as const,
+      status: profile.status,
       activeRunRequestId: optimistic.requestId,
       activeRunRequestStatus: optimistic.requestStatus,
       activeRunId: optimistic.runId,
       activeRunStatus: optimistic.runStatus,
+      executionPhase: "QUEUED" as const,
       currentRunCounters: profile.currentRunCounters || {
         follows: 0,
         unfollows: 0,
@@ -418,7 +500,7 @@ export function ProfilesView({
         runId: optimistic.runId,
       },
       runtimeIndicator: {
-        state: "active",
+        state: "idle",
         reason: "botapp_optimistic_queued",
         lastRunId: profile.runtimeIndicator?.lastRunId || null,
       },
@@ -1045,8 +1127,15 @@ export function ProfilesView({
             </div>
           </header>
           <div className="phone-group-body">
-            {group.profiles.map((profile) => (
-              <AccountRow key={profile.id} profile={profile} onSelect={onSelect} onToolbar={handleToolbar} />
+            {group.profiles.map((profile, index) => (
+              <AccountRow
+                key={profile.id}
+                profile={profile}
+                onSelect={onSelect}
+                onToolbar={handleToolbar}
+                incident={incidentsByAccount.get(profile.id) ?? incidentsByAccount.get(profile.username) ?? (index === 0 ? unmatchedIncident : null)}
+                onIncidentOpen={setIncidentDrawerId}
+              />
             ))}
           </div>
         </section>
@@ -1157,6 +1246,13 @@ export function ProfilesView({
           onClose={() => setAutoLoginFlow(null)}
         />
       ) : null}
+
+      <IncidentDrawer
+        open={Boolean(incidentDrawerId)}
+        incidentId={incidentDrawerId}
+        onClose={() => setIncidentDrawerId(null)}
+        onChanged={() => void onRefresh()}
+      />
     </div>
   );
 }

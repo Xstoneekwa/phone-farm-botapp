@@ -8,6 +8,7 @@
   "files": [
     "dist/**/*",
     "electron/**/*",
+    "package-provenance.json",
     "package.json",
     "!**/.env",
     "!**/.env.*",

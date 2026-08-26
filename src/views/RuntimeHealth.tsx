@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Card, type BadgeTone } from "../design/components";
 import type { BotAppDeviceHeartbeatHealth, BotAppDeviceHeartbeatOperatorStatus, BotAppDispatcherHealth, BotAppDispatcherStatus, BotAppRelayHealth, BotAppSchedulerRuntimeHealth } from "../api/types";
+import { IncidentDrawer } from "./IncidentDrawer";
 import "./runtime-health.css";
+import "./incident-drawer.css";
 
 const fallbackDeviceHeartbeatHealth: BotAppDeviceHeartbeatHealth = {
   ok: false,
@@ -72,7 +74,7 @@ const fallbackRelayHealth: BotAppRelayHealth = {
 
 const statusCopy: Record<BotAppDispatcherStatus, { label: string; detail: string; tone: BadgeTone }> = {
   running: { label: "Running", detail: "Dispatcher is healthy and ready.", tone: "success" },
-  paused: { label: "Paused", detail: "Dispatcher is paused. Resume it before starting Auto Login or runs.", tone: "warning" },
+  paused: { label: "Paused", detail: "Local dispatcher is paused. Resume it before starting Auto Login or runs. This does not pause client billing.", tone: "warning" },
   stopped: { label: "Stopped", detail: "Dispatcher is stopped.", tone: "error" },
   degraded: { label: "Degraded", detail: "Dispatcher is active but one runtime check is degraded.", tone: "warning" },
   unhealthy: { label: "Unhealthy", detail: "Dispatcher is running but cannot process jobs.", tone: "error" },
@@ -127,6 +129,18 @@ export function RuntimeHealth() {
   const [health, setHealth] = useState<BotAppDispatcherHealth>(fallbackDispatcherHealth);
   const [deviceHeartbeatHealth, setDeviceHeartbeatHealth] = useState<BotAppDeviceHeartbeatHealth>(fallbackDeviceHeartbeatHealth);
   const [relayHealth, setRelayHealth] = useState<BotAppRelayHealth>(fallbackRelayHealth);
+  const [incidentsOverview, setIncidentsOverview] = useState<{
+    ok: boolean;
+    openCount: number;
+    incidents: Array<Record<string, unknown>>;
+    message?: string;
+    authorizedHostMachine?: string | null;
+    scopeMode?: string | null;
+  }>({
+    ok: false,
+    openCount: 0,
+    incidents: [],
+  });
   const [schedulerRuntimeHealth, setSchedulerRuntimeHealth] = useState<BotAppSchedulerRuntimeHealth>({
     ok: false,
     status: "unknown",
@@ -144,18 +158,34 @@ export function RuntimeHealth() {
   const [deviceHeartbeatLoading, setDeviceHeartbeatLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<DispatcherAction | DeviceHeartbeatAction | "refresh" | null>(null);
   const [message, setMessage] = useState("");
+  const [integrationBanner, setIntegrationBanner] = useState<string | null>(null);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
 
   async function refresh() {
     setBusyAction("refresh");
     try {
-      const [result, relayResult, heartbeatResult, schedulerResult] = await Promise.all([
+      const [result, relayResult, heartbeatResult, schedulerResult, incidentsResult, runtimeStatus] = await Promise.all([
         window.botappDesktop?.dispatcher?.status?.(),
         window.botappDesktop?.relay?.health?.(),
         window.botappDesktop?.deviceHeartbeat?.status?.(),
         window.botappDesktop?.schedulerRuntime?.status?.(),
+        window.botappDesktop?.incidents?.list?.({ status: "open,acknowledged", limit: 20 }),
+        window.botappDesktop?.runtime?.status?.(),
       ]);
       setHealth(result ?? fallbackDispatcherHealth);
       setRelayHealth(relayResult ?? fallbackRelayHealth);
+      setIncidentsOverview({
+        ok: incidentsResult?.ok ?? false,
+        openCount: Number(incidentsResult?.openCount ?? 0),
+        incidents: Array.isArray(incidentsResult?.incidents) ? incidentsResult.incidents : [],
+        message: incidentsResult?.message,
+        authorizedHostMachine: incidentsResult?.authorizedHostMachine ?? null,
+        scopeMode: incidentsResult?.scopeMode ?? null,
+      });
+      setIntegrationBanner(
+        runtimeStatus?.integrationLocalBanner
+          || (runtimeStatus?.integrationLocal ? "MODE TEST LOCAL — aucune activité téléphone ni production" : null),
+      );
       setDeviceHeartbeatHealth(heartbeatResult ?? fallbackDeviceHeartbeatHealth);
       if (schedulerResult) setSchedulerRuntimeHealth(schedulerResult);
       setMessage(result?.message ?? fallbackDispatcherHealth.message);
@@ -214,8 +244,36 @@ export function RuntimeHealth() {
     return typeof reason === "string" && reason.trim() ? reason : "none";
   }, [health.preflight]);
 
+  const scopeLabel = incidentsOverview.authorizedHostMachine
+    ? `My Mac (${incidentsOverview.authorizedHostMachine})`
+    : incidentsOverview.scopeMode === "global_admin"
+      ? "All Macs"
+      : "My Mac";
+
   return (
-    <div className="runtime-health-screen">
+    <div className="runtime-health-screen" data-testid="runtime-health-view">
+      {integrationBanner ? (
+        <div className="integration-local-banner" data-testid="integration-local-banner">
+          {integrationBanner}
+        </div>
+      ) : null}
+      <div className="runtime-scope-banner" data-testid="incident-scope-host">
+        {scopeLabel}
+      </div>
+      <div className="runtime-scope-selector" data-testid="runtime-scope-selector" aria-label="Incident scope selector">
+        <span
+          className={incidentsOverview.scopeMode === "global_admin" ? "available" : "active"}
+          data-testid="runtime-scope-option-my-mac"
+          data-active={incidentsOverview.scopeMode === "global_admin" ? "false" : "true"}
+        >
+          My Mac
+        </span>
+        {incidentsOverview.scopeMode === "global_admin" ? (
+          <span className="active" data-testid="runtime-scope-option-all-macs" data-active="true">
+            All Macs
+          </span>
+        ) : null}
+      </div>
       <section className={`runtime-health-hero ${health.status}`}>
         <div>
           <span>Runtime / Dispatcher Health</span>
@@ -238,7 +296,7 @@ export function RuntimeHealth() {
           <div className="runtime-actions">
             <Button variant="ghost" onClick={() => void refresh()} disabled={Boolean(busyAction)}>{busyAction === "refresh" ? "Refreshing..." : "Refresh"}</Button>
             <Button variant="primary" onClick={() => void runAction("resume")} disabled={Boolean(busyAction)}>{health.status === "paused" || health.status === "stopped" ? "Start / Resume" : "Resume"}</Button>
-            <Button variant="secondary" onClick={() => void runAction("pause")} disabled={Boolean(busyAction) || health.status === "paused"}>Pause</Button>
+            <Button variant="secondary" onClick={() => void runAction("pause")} disabled={Boolean(busyAction) || health.status === "paused"}>Pause local dispatcher</Button>
             <Button variant="secondary" onClick={() => void runAction("restart")} disabled={Boolean(busyAction)}>Restart</Button>
             {health.duplicateProcess ? <Button variant="primary" onClick={() => void runAction("fix-duplicate")} disabled={Boolean(busyAction)}>Fix duplicate</Button> : null}
             <Button variant="danger" onClick={() => void runAction("stop")} disabled={Boolean(busyAction)}>Stop</Button>
@@ -395,6 +453,47 @@ export function RuntimeHealth() {
           </div>
         ) : null}
       </Card>
+
+      <div data-testid="runtime-incidents-panel">
+      <Card
+        title="Needs human review"
+        subtitle="Incidents are the source of truth. Slack/Discord only alert and link back to the dashboard."
+      >
+        <div className="runtime-incidents-banner">
+          <Badge tone={incidentsOverview.openCount > 0 ? "warning" : "success"} dot>
+            <span data-testid="needs-human-review-count">{incidentsOverview.openCount} open</span>
+          </Badge>
+          <span>{incidentsOverview.ok ? "Relay incidents projection loaded for this Mac scope." : incidentsOverview.message || "Incidents unavailable."}</span>
+        </div>
+        <div className="runtime-incidents-list">
+          {incidentsOverview.incidents.slice(0, 8).map((incident) => {
+            const incidentDetailId = String(incident.incidentId || incident.incident_id || incident.id);
+            return (
+            <button
+              key={incidentDetailId}
+              type="button"
+              className="runtime-incident-row incident-scope-badge"
+              data-testid="runtime-health-incident-row"
+              onClick={() => setSelectedIncidentId(incidentDetailId)}
+            >
+              <strong>{String(incident.reason || incident.incidentType || "incident")}</strong>
+              <span>{String(incident.accountUsername || incident.accountId || "account unknown")}</span>
+              <span data-testid="runtime-health-incident-host">{String(incident.hostMachine || incident.host_machine || "host unknown")}</span>
+              <span>{String(incident.status || "open")} · {String(incident.severity || "warning")}</span>
+            </button>
+            );
+          })}
+          {!incidentsOverview.incidents.length ? <span>No open incidents for this Mac scope.</span> : null}
+        </div>
+      </Card>
+      </div>
+
+      <IncidentDrawer
+        open={Boolean(selectedIncidentId)}
+        incidentId={selectedIncidentId}
+        onClose={() => setSelectedIncidentId(null)}
+        onChanged={() => void refresh()}
+      />
 
       <Card title="Operational guardrails" subtitle="BotApp is a local control panel. Dashboard Admin remains the remote read-only ops view.">
         <div className="runtime-guardrails">
